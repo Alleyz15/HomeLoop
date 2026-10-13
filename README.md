@@ -75,5 +75,22 @@ The supplied transaction CSV has no stable row identifier. To prevent silent dup
 | `SUPABASE_SERVICE_ROLE_KEY` | Valuation service, importer | Server-only key for reference-data access |
 | `ALLOWED_ORIGINS` | Valuation service | Comma-separated browser origins; defaults to `http://localhost:3000` |
 
+## Verify setup
+
+Use Node.js 22 or newer. The installed Supabase JavaScript client requires it.
+
+After filling `apps/web/.env.local` with the project URL and a publishable/anon
+key, run the read-only reference-data check from the repository root:
+
+```bash
+node scripts/check_supabase_read.mjs
+```
+
+The script prints a row count and PASS/FAIL result for each reference table. It
+also confirms that anonymous inserts into `cost_assumptions` are rejected. The
+probe reuses an existing primary key and assumes reference data is stable, so a
+permissions regression produces a duplicate-key error instead of adding a row.
+It never prints the key or any row data.
+
 > HomeLoop prices are preliminary estimates based on public NAPIC transaction data, not a formal valuation. Formal valuations are performed by a registered valuer (Act 242).
 
