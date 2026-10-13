@@ -1,0 +1,176 @@
+import csv
+import tempfile
+import unittest
+from collections import defaultdict
+from pathlib import Path
+from types import SimpleNamespace
+
+from scripts.import_csv import FILE_SPECS, batched, import_directory, load_records
+
+
+class InMemoryQuery:
+    def __init__(self, client: "InMemorySupabase", table: str) -> None:
+        self.client = client
+        self.table = table
+        self.operation = ""
+
+    def upsert(self, rows: list[dict[str, object]]) -> "InMemoryQuery":
+        self.operation = "upsert"
+        self.client.rows[self.table].extend(rows)
+        self.client.batch_sizes[self.table].append(len(rows))
+        return self
+
+    def select(self, _columns: str) -> "InMemoryQuery":
+        self.operation = "select"
+        return self
+
+    def limit(self, _count: int) -> "InMemoryQuery":
+        return self
+
+    def execute(self) -> SimpleNamespace | None:
+        if self.operation == "select":
+            return SimpleNamespace(data=self.client.rows[self.table][:1])
+        return None
+
+
+class InMemorySupabase:
+    def __init__(self) -> None:
+        self.rows: defaultdict[str, list[dict[str, object]]] = defaultdict(list)
+        self.batch_sizes: defaultdict[str, list[int]] = defaultdict(list)
+
+    def table(self, table: str) -> InMemoryQuery:
+        return InMemoryQuery(self, table)
+
+
+class ImportCsvTests(unittest.TestCase):
+    def test_every_expected_file_maps_to_its_target_table(self) -> None:
+        self.assertEqual(
+            {name: spec.table for name, spec in FILE_SPECS.items()},
+            {
+                "out_transactions_clean.csv": "transactions",
+                "out_sdp_schemes.csv": "sdp_schemes",
+                "mhpi_quarterly.csv": "mhpi_quarterly",
+                "cost_assumptions.csv": "cost_assumptions",
+                "out_fairness.csv": "fairness_curve",
+                "out_backtest.csv": "backtest_results",
+            },
+        )
+
+    def test_transaction_columns_are_renamed_dropped_and_null_normalized(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "out_transactions_clean.csv"
+            self._write_csv(
+                path,
+                [
+                    {
+                        "ptype": "Terrace",
+                        "district": "District",
+                        "mukim": "Mukim",
+                        "scheme": "Scheme",
+                        "road": "Road",
+                        "tenure": "Freehold",
+                        "land": "",
+                        "floor": "120",
+                        "level": "",
+                        "price": "",
+                        "ym": "2021.58",
+                        "area": "100",
+                        "file": "source.xlsx",
+                        "y": "ignored",
+                        "yr": "2021",
+                        "township": "Township",
+                        "is_sdp": "True",
+                        "likely_primary": "False",
+                    }
+                ],
+            )
+
+            record = load_records(path, FILE_SPECS[path.name])[0]
+
+        self.assertIsNone(record["land_sqm"])
+        self.assertEqual(record["floor_sqm"], 120)
+        self.assertEqual(record["area_sqm"], 100)
+        self.assertNotIn("land", record)
+        self.assertNotIn("floor", record)
+        self.assertNotIn("area", record)
+        self.assertNotIn("file", record)
+        self.assertNotIn("y", record)
+
+    def test_scheme_and_mhpi_columns_are_renamed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            scheme_path = directory / "out_sdp_schemes.csv"
+            mhpi_path = directory / "mhpi_quarterly.csv"
+            self._write_csv(
+                scheme_path,
+                [{"township": "Township", "file": "District", "scheme": "Scheme", "n": "1"}],
+            )
+            self._write_csv(
+                mhpi_path,
+                [{"table": "Source", "series": "Series", "quarter": "2021.25", "index": "100"}],
+            )
+
+            scheme = load_records(scheme_path, FILE_SPECS[scheme_path.name])[0]
+            mhpi = load_records(mhpi_path, FILE_SPECS[mhpi_path.name])[0]
+
+        self.assertEqual(scheme["district"], "District")
+        self.assertNotIn("file", scheme)
+        self.assertEqual(mhpi["source_table"], "Source")
+        self.assertEqual(mhpi["index_value"], 100)
+        self.assertNotIn("table", mhpi)
+        self.assertNotIn("index", mhpi)
+
+    def test_batches_are_limited_to_one_thousand_records(self) -> None:
+        self.assertEqual(
+            [len(batch) for batch in batched(list(range(2001)))],
+            [1000, 1000, 1],
+        )
+
+    def test_present_files_are_upserted_and_missing_files_are_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            path = directory / "cost_assumptions.csv"
+            self._write_csv(
+                path,
+                [
+                    {
+                        "item": f"item-{index}",
+                        "pct_low": "0",
+                        "pct_high": "0",
+                        "source": "Source",
+                    }
+                    for index in range(1001)
+                ],
+            )
+            client = InMemorySupabase()
+
+            counts = import_directory(directory, client)
+
+        self.assertEqual(counts, {"cost_assumptions": 1001})
+        self.assertEqual(len(client.rows["cost_assumptions"]), 1001)
+        self.assertEqual(client.batch_sizes["cost_assumptions"], [1000, 1])
+
+    def test_transaction_import_rejects_a_nonempty_table_before_upsert(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            path = directory / "out_transactions_clean.csv"
+            self._write_csv(path, [{"price": "500000"}])
+            client = InMemorySupabase()
+            client.rows["transactions"].append({"id": 1})
+
+            with self.assertRaisesRegex(RuntimeError, "transactions table is not empty"):
+                import_directory(directory, client)
+
+        self.assertEqual(client.batch_sizes["transactions"], [])
+
+    @staticmethod
+    def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
+        with path.open("w", encoding="utf-8", newline="") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
