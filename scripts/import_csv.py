@@ -16,6 +16,7 @@ class ImportSpec:
     table: str
     rename: dict[str, str] = field(default_factory=dict)
     drop: tuple[str, ...] = ()
+    primary_key: tuple[str, ...] = ()
 
 
 FILE_SPECS = {
@@ -27,15 +28,48 @@ FILE_SPECS = {
     "out_sdp_schemes.csv": ImportSpec(
         table="sdp_schemes",
         rename={"file": "district"},
+        primary_key=("township", "scheme"),
     ),
     "mhpi_quarterly.csv": ImportSpec(
         table="mhpi_quarterly",
         rename={"table": "source_table", "index": "index_value"},
+        primary_key=("source_table", "series", "quarter"),
     ),
-    "cost_assumptions.csv": ImportSpec(table="cost_assumptions"),
-    "out_fairness.csv": ImportSpec(table="fairness_curve"),
-    "out_backtest.csv": ImportSpec(table="backtest_results"),
+    "cost_assumptions.csv": ImportSpec(
+        table="cost_assumptions",
+        primary_key=("item",),
+    ),
+    "out_fairness.csv": ImportSpec(
+        table="fairness_curve",
+        primary_key=("plan", "cost", "buffer"),
+    ),
+    "out_backtest.csv": ImportSpec(
+        table="backtest_results",
+        primary_key=("variant", "scope"),
+    ),
 }
+
+
+def validate_primary_keys(frame: pd.DataFrame, spec: ImportSpec) -> None:
+    if not spec.primary_key:
+        return
+
+    key_columns = list(spec.primary_key)
+    duplicate_rows = frame.loc[
+        frame.duplicated(subset=key_columns, keep=False),
+        key_columns,
+    ].drop_duplicates()
+    if duplicate_rows.empty:
+        return
+
+    duplicate_keys = ", ".join(
+        f"({', '.join(repr(value) for value in row)})"
+        for row in duplicate_rows.head(5).itertuples(index=False, name=None)
+    )
+    raise SystemExit(
+        f"{spec.table}: duplicate primary-key values for "
+        f"({', '.join(spec.primary_key)}): {duplicate_keys}"
+    )
 
 
 def load_records(path: Path, spec: ImportSpec) -> list[dict[str, object]]:
@@ -44,6 +78,7 @@ def load_records(path: Path, spec: ImportSpec) -> list[dict[str, object]]:
         columns=list(spec.drop),
         errors="ignore",
     )
+    validate_primary_keys(frame, spec)
     normalized = frame.astype(object).where(pd.notna(frame), None)
     return normalized.to_dict(orient="records")
 
@@ -77,8 +112,13 @@ def import_directory(directory: Path, client: Any) -> dict[str, int]:
         if spec.table == "transactions" and records:
             ensure_transactions_empty(client)
 
+        completed = 0
+        if not records:
+            print(f"{spec.table}: 0/0")
         for batch in batched(records):
             client.table(spec.table).upsert(batch).execute()
+            completed += len(batch)
+            print(f"{spec.table}: {completed}/{len(records)}")
 
         counts[spec.table] = len(records)
 
@@ -107,8 +147,7 @@ def main() -> None:
         required_env("SUPABASE_SERVICE_ROLE_KEY"),
     )
 
-    for table, count in import_directory(args.dir, client).items():
-        print(f"{table}: {count} rows")
+    import_directory(args.dir, client)
 
 
 if __name__ == "__main__":

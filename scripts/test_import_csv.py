@@ -1,7 +1,9 @@
 import csv
+import io
 import tempfile
 import unittest
 from collections import defaultdict
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -143,12 +145,78 @@ class ImportCsvTests(unittest.TestCase):
                 ],
             )
             client = InMemorySupabase()
+            output = io.StringIO()
 
-            counts = import_directory(directory, client)
+            with redirect_stdout(output):
+                counts = import_directory(directory, client)
 
         self.assertEqual(counts, {"cost_assumptions": 1001})
         self.assertEqual(len(client.rows["cost_assumptions"]), 1001)
         self.assertEqual(client.batch_sizes["cost_assumptions"], [1000, 1])
+        self.assertEqual(
+            output.getvalue().splitlines(),
+            ["cost_assumptions: 1000/1001", "cost_assumptions: 1001/1001"],
+        )
+
+    def test_each_reference_table_rejects_duplicate_primary_keys_before_upsert(self) -> None:
+        fixtures = {
+            "out_sdp_schemes.csv": [
+                {"township": "Township", "file": "District A", "scheme": "Scheme", "n": "1"},
+                {"township": "Township", "file": "District B", "scheme": "Scheme", "n": "2"},
+            ],
+            "mhpi_quarterly.csv": [
+                {"table": "Table 1.1", "series": "All House", "quarter": "2021.25", "index": "100"},
+                {"table": "Table 1.1", "series": "All House", "quarter": "2021.25", "index": "101"},
+            ],
+            "cost_assumptions.csv": [
+                {"item": "legal", "pct_low": "1", "pct_high": "2", "source": "A"},
+                {"item": "legal", "pct_low": "2", "pct_high": "3", "source": "B"},
+            ],
+            "out_fairness.csv": [
+                {"plan": "A", "cost": "1", "buffer": "2", "sdp_loss_share": "3", "owner_pct_market": "4"},
+                {"plan": "A", "cost": "1", "buffer": "2", "sdp_loss_share": "5", "owner_pct_market": "6"},
+            ],
+            "out_backtest.csv": [
+                {"variant": "base", "scope": "all", "n": "1", "mdape": "2", "within10": "3", "within20": "4"},
+                {"variant": "base", "scope": "all", "n": "5", "mdape": "6", "within10": "7", "within20": "8"},
+            ],
+        }
+
+        for filename, rows in fixtures.items():
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as temporary_directory:
+                directory = Path(temporary_directory)
+                self._write_csv(directory / filename, rows)
+                client = InMemorySupabase()
+
+                with self.assertRaisesRegex(SystemExit, "duplicate primary-key values"):
+                    import_directory(directory, client)
+
+                self.assertEqual(client.batch_sizes[FILE_SPECS[filename].table], [])
+
+    def test_duplicate_error_lists_only_the_first_five_keys(self) -> None:
+        rows: list[dict[str, str]] = []
+        for index in range(1, 7):
+            for index_value in ("100", "101"):
+                rows.append(
+                    {
+                        "table": f"Table {index}",
+                        "series": "All House",
+                        "quarter": "2021.25",
+                        "index": index_value,
+                    }
+                )
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            self._write_csv(directory / "mhpi_quarterly.csv", rows)
+
+            with self.assertRaises(SystemExit) as raised:
+                import_directory(directory, InMemorySupabase())
+
+        message = str(raised.exception)
+        for index in range(1, 6):
+            self.assertIn(f"Table {index}", message)
+        self.assertNotIn("Table 6", message)
 
     def test_transaction_import_rejects_a_nonempty_table_before_upsert(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
