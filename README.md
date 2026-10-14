@@ -129,5 +129,28 @@ probe reuses an existing primary key and assumes reference data is stable, so a
 permissions regression produces a duplicate-key error instead of adding a row.
 It never prints the key or any row data.
 
+## Verify the signed-in paths
+
+The offline suites cannot reach the authenticated parts of the web app: the role
+lookup, the `valuation_requests` insert, and the row-level security around them.
+After creating the demo users, check those against the live project:
+
+```bash
+export SUPABASE_URL=... SUPABASE_ANON_KEY=...
+export DEMO_OWNER_PASSWORD=... DEMO_ADMIN_PASSWORD=...
+python scripts/verify_auth.py
+```
+
+It confirms both accounts sign in and carry the right role, that a homeowner
+cannot promote themselves, that the valuation insert the web app performs is
+accepted with every column and constraint, that one owner cannot read or create
+another owner's rows, and that an admin can read them. It creates one row and
+deletes it again, prints no credentials, and exits non-zero on any failure, so
+it can gate a deploy.
+
+Note that `scripts/create_demo_users.py` does not check that its role update
+matched a row. If the admin account is missing its profile, that script still
+reports success while the account stays an owner; this check catches it.
+
 > HomeLoop prices are preliminary estimates based on public NAPIC transaction data, not a formal valuation. Formal valuations are performed by a registered valuer (Act 242).
 

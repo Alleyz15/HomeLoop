@@ -2,9 +2,20 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.plans.constants import (
+    PLAN_A_COST_RATE,
+    PLAN_A_RISK_BUFFER_RATE,
+    PLAN_B_FLOOR_RATE,
+    REFERENCE_VALUATION_RM,
+    SELLER_AGENT_FEE_RATE,
+    SELLER_LEGAL_FEE_RATE,
+)
+
 
 UnitPosition = Literal["intermediate", "corner_end", "custom"]
-ValuationStatus = Literal["ok", "insufficient_data", "not_found"]
+ValuationStatus = Literal[
+    "ok", "insufficient_data", "not_found", "unsupported_property_type"
+]
 Confidence = Literal["high", "medium", "low"]
 PlanPriceSource = Literal["from_price", "sales_quote"]
 
@@ -174,3 +185,81 @@ class PlanQuoteResponse(BaseModel):
     disclaimer: str
     model_version: str
 
+
+
+class SimulatorRequest(BaseModel):
+    """A3 risk-simulator inputs. Every default comes from the B3 constants."""
+
+    plan_b_floor_ratio: float = Field(
+        default=float(PLAN_B_FLOOR_RATE), ge=0.50, le=0.95
+    )
+    plan_a_cost_pct: float = Field(default=float(PLAN_A_COST_RATE), ge=0.0, le=0.50)
+    plan_a_buffer_pct: float = Field(
+        default=float(PLAN_A_RISK_BUFFER_RATE), ge=0.0, le=0.50
+    )
+    seller_agent_pct: float = Field(
+        default=float(SELLER_AGENT_FEE_RATE), ge=0.0, le=0.20
+    )
+    seller_legal_pct: float = Field(
+        default=float(SELLER_LEGAL_FEE_RATE), ge=0.0, le=0.20
+    )
+    price_drop_pct: float = Field(default=0.0, ge=0.0, le=0.40)
+    reference_valuation_rm: float = Field(
+        default=float(REFERENCE_VALUATION_RM), gt=0, allow_inf_nan=False
+    )
+    township: str | None = None
+
+    @model_validator(mode="after")
+    def validate_rates(self) -> "SimulatorRequest":
+        if self.plan_a_cost_pct + self.plan_a_buffer_pct >= 1:
+            raise ValueError("plan_a_cost_pct plus plan_a_buffer_pct must be below 1")
+        if self.seller_agent_pct + self.seller_legal_pct >= 1:
+            raise ValueError("seller_agent_pct plus seller_legal_pct must be below 1")
+        return self
+
+
+class SimulatorInputs(BaseModel):
+    plan_b_floor_ratio: float
+    plan_a_cost_pct: float
+    plan_a_buffer_pct: float
+    plan_a_offer_rate: float
+    seller_agent_pct: float
+    seller_legal_pct: float
+    plan_b_net_rate: float
+    price_drop_pct: float
+    reference_valuation_rm: int
+    township: str | None
+
+
+class SimulatorPlanB(BaseModel):
+    share_needing_topup: float
+    avg_topup_per_deal: int
+    avg_topup_when_triggered: int
+    p90_topup: int
+    max_topup: int
+    avg_topup_pct_of_valuation: float
+    avg_topup_per_deal_sample_weighted: int
+
+
+class SimulatorPlanA(BaseModel):
+    share_loss_making: float
+    avg_profit_per_deal: int
+    avg_profit_pct: float
+    p10_profit_pct: float
+    avg_profit_per_deal_sample_weighted: int
+
+
+class SimulatorHistogramBin(BaseModel):
+    lower: float
+    upper: float
+    count: int
+
+
+class SimulatorResponse(BaseModel):
+    n_cases: int
+    plan_b: SimulatorPlanB
+    plan_a: SimulatorPlanA
+    ratio_histogram: list[SimulatorHistogramBin]
+    inputs: SimulatorInputs
+    model_version: str
+    note: str

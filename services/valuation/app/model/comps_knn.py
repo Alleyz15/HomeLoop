@@ -100,9 +100,15 @@ def confidence_for_range(width_ratio: float) -> Confidence:
 
 
 def _ym_to_month(value: object) -> str:
+    """Decode the NAPIC ``ym`` column, which stores year + (month - 1) / 12.
+
+    January is the whole year value and December is year + 11/12, so the
+    fractional part is one less than the calendar month.
+    """
+
     ym = float(value)
     year = math.floor(ym)
-    month = min(12, max(1, round((ym - year) * 12)))
+    month = min(12, max(1, round((ym - year) * 12) + 1))
     return f"{year:04d}-{month:02d}"
 
 

@@ -16,6 +16,20 @@ OLD_HOME_DEPOSIT_RATE: Final = Decimal("0.10")
 RPGT_RETENTION_RATE: Final = Decimal("0.03")
 
 MODEL_VERSION: Final = "homeloop-plan-quote-v1"
+SIMULATOR_MODEL_VERSION: Final = "homeloop-risk-simulator-v1"
+
+# The stress test in HomeLoop_更新_商业模式.md works in percentages of the
+# valuation and only converts to ringgit through its worked example, whose
+# valuation is RM786,000. Percentages are the primitive result; this reference
+# valuation exists solely to express them in ringgit, and callers can override
+# it. It is not a demo scenario and must never be pre-filled into the UI.
+REFERENCE_VALUATION_RM: Final = Decimal("786000")
+
+SIMULATOR_NOTE: Final = (
+    "Simulation based on the 187 historical backtest errors in SDP townships, "
+    "not a forecast. Ringgit amounts restate percentages of the valuation at "
+    "the reference valuation; the sample's own mean valuation differs."
+)
 DISCLAIMER: Final = (
     "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, "
     "Estate Agents and Property Managers Act 1981 (Act 242)."
