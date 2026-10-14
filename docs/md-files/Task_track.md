@@ -134,6 +134,19 @@
 
 **金额基准（重要，给 A3 前端）：** 文件第 5 节的原生结果是**占估价的百分比**，RM3,500 / RM26,000 是把百分比套在文件示例的 RM786,000 估价上得出的，不是 187 笔的 RM 平均。所以回传三种基准：`avg_topup_pct_of_valuation`（原生，完全吻合文件）、`avg_topup_per_deal`（按 `reference_valuation_rm` 换算，预设 786,000，得 RM3,549 / RM25,863，与文件差 1.4% / 0.5%）、`avg_topup_per_deal_sample_weighted`（按每笔自己的估价平均，得 RM7,354 / RM36,953 —— 因为 187 笔的平均估价是 RM944,511，远高于 786,000）。A3 页面要显示百分比，或显示 RM 时必须标明用的是哪个估价。
 
+### 1.9 前端 F1 共用版面与登入
+
+完成日期：2026-10-15
+
+- [x] `src/lib/auth.ts`：server-only `getSessionUser()`，角色一律从 `profiles.role` 读（JWT 不带角色），读不到或不认识的值一律降级为 `owner`
+- [x] `src/app/auth/actions.ts`：`signIn` / `register` / `signOut` Server Actions。登入失败只回「details do not match an account」，不说是哪个栏位错；`?next=` 只接受站内相对路径，避免被导去外部网站
+- [x] `src/app/auth/state.ts`：表单状态单独放一个档，因为 `"use server"` 的档案只能 export async function（build 会直接失败）
+- [x] `src/app/login/`：Sign in / Create account 两个分页、`useActionState` 处理错误与提示；注册要求至少 8 码；邮件验证关闭时直接发 session，若专案开着验证则显示「去信箱确认」
+- [x] `src/middleware.ts`：受保护前缀改为整条屋主流程 + `/admin`，并带上 `?next=`。中介层只检查有没有登入，**不查资料库**；角色检查放在 `/admin/layout.tsx`（每次请求从资料库读角色，屋主猜 URL 会被送回 `/dashboard`）
+- [x] `src/app/layout.tsx`：导航按角色切换、显示邮箱与登出；Act 242 免责声明原文保持不变
+- [x] `npm run build` 通过（11 条路由）、`tsc --noEmit` 与 `eslint` 乾净
+- [x] 实机验证（本机 dev + 线上 Supabase）：7 条受保护路由全部 307 导向 `/login?next=…`；`/`、`/login`、`/guide` 保持 200；未登入的导航只有 `HomeLoop｜Home｜Sign in`，没有漏出屋主或 admin 选单
+
 ---
 
 ## 2. 待做：后端
@@ -169,9 +182,10 @@
 
 ### F1. 共用
 
-- [ ] 版面：顶部导航（屋主 / admin 显示不同选单）、底部免责声明（Act 242）
-- [ ] 登录 / 注册（邮箱 + 密码）；登录后按角色导向 Dashboard 或 admin 面板
-- [ ] 未登录访问受保护页面时导向 `/login`
+- [x] 2026-10-15 版面：顶部导航按角色切换（未登录 Home｜屋主 Dashboard/Valuation/New home/Plans｜admin Applications/Risk simulator）、显示登入的邮箱与登出按钮、底部 Act 242 免责声明原文不变
+- [x] 2026-10-15 登录 / 注册（邮箱 + 密码，Server Actions）；登录后按 `profiles.role` 导向 `/dashboard` 或 `/admin`；支援 `?next=` 回到原本要去的页面（只允许站内相对路径）
+- [x] 2026-10-15 未登录访问受保护页面时导向 `/login?next=…`；受保护前缀为 `/dashboard`、`/valuation`、`/new-home`、`/plans`、`/apply`、`/admin`（原则 2：要登录才能估价）
+- [ ] **待验证**：登入后的角色导向与 admin 守卫还没跑过真实帐号，因为 demo 帐号还没建立（见 B1）。建完帐号后要验证：屋主登入 → `/dashboard`、admin 登入 → `/admin`、屋主手动输入 `/admin` → 被送回 `/dashboard`
 
 ### F2. 屋主端
 
