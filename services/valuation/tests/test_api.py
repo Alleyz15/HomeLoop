@@ -69,6 +69,14 @@ class ValuationApiSecurityTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 503)
 
+    def test_plan_quote_route_uses_internal_key_dependency(self) -> None:
+        route = next(route for route in main.app.routes if route.path == "/plans/quote")
+        dependency_calls = {
+            dependency.call for dependency in route.dependant.dependencies  # type: ignore[attr-defined]
+        }
+
+        self.assertIn(main.require_internal_key, dependency_calls)
+
     def test_cors_middleware_is_not_installed(self) -> None:
         self.assertFalse(
             any(middleware.cls is CORSMiddleware for middleware in main.app.user_middleware)

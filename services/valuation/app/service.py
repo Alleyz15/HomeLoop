@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from app.model.comps_knn import estimate_from_transactions, resolve_subject_sizes
+from app.plans.calc import calculate_plan_quote
 from app.repository import normalize_road
-from app.schemas import ValuationRequest
+from app.schemas import PlanQuoteRequest, ValuationRequest
 
 
 DISCLAIMER = (
@@ -34,6 +35,10 @@ class Repository(Protocol):
     ) -> list[dict[str, Any]]: ...
 
 
+class PlanRepository(Protocol):
+    def launch_by_id(self, launch_id: int) -> dict[str, Any] | None: ...
+
+
 def _empty_response(status: str) -> dict[str, Any]:
     return {
         "status": status,
@@ -45,6 +50,7 @@ def _empty_response(status: str) -> dict[str, Any]:
         "scheme": None,
         "is_sdp": None,
         "district": None,
+        "tenure": None,
         "sizes_used": None,
         "comparables": [],
         "disclaimer": DISCLAIMER,
@@ -92,6 +98,7 @@ def perform_valuation(
             "scheme": scheme,
             "is_sdp": is_sdp,
             "district": catalog.get("district"),
+            "tenure": request.tenure,
             "sizes_used": sizes,
             "disclaimer": DISCLAIMER,
             "model_version": MODEL_VERSION,
@@ -99,3 +106,32 @@ def perform_valuation(
         }
     )
     return result
+
+
+def perform_plan_quote(
+    request: PlanQuoteRequest, repository: PlanRepository
+) -> dict[str, Any]:
+    launch = repository.launch_by_id(request.new_home.launch_id)
+    if launch is None:
+        raise ValueError("SDP launch was not found")
+    if launch.get("tier") != "selling":
+        raise ValueError("Selected SDP launch is not currently on sale")
+
+    if request.new_home.sales_quote_rm is not None:
+        new_home_price = request.new_home.sales_quote_rm
+        price_source = "sales_quote"
+    else:
+        published_price = launch.get("price_from_rm")
+        if published_price is None:
+            raise ValueError(
+                "Selected SDP launch does not have a published from price; provide a sales quote"
+            )
+        new_home_price = float(published_price)
+        price_source = "from_price"
+
+    return calculate_plan_quote(
+        valuation=request.valuation.model_dump(),
+        new_home_name=str(launch["project"]),
+        new_home_price=new_home_price,
+        price_source=price_source,
+    )

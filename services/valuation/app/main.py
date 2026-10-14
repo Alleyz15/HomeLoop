@@ -5,8 +5,14 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 
 from app.config import Settings, get_settings
 from app.repository import ValuationRepository, get_repository
-from app.schemas import RoadResult, ValuationRequest, ValuationResponse
-from app.service import perform_valuation
+from app.schemas import (
+    PlanQuoteRequest,
+    PlanQuoteResponse,
+    RoadResult,
+    ValuationRequest,
+    ValuationResponse,
+)
+from app.service import perform_plan_quote, perform_valuation
 
 app = FastAPI(
     title="HomeLoop Valuation Service",
@@ -64,6 +70,21 @@ def valuate(
 ) -> dict[str, object]:
     try:
         return perform_valuation(request, repository)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post(
+    "/plans/quote",
+    response_model=PlanQuoteResponse,
+    dependencies=[Depends(require_internal_key)],
+)
+def quote_plans(
+    request: PlanQuoteRequest,
+    repository: Annotated[ValuationRepository, Depends(get_repository)],
+) -> dict[str, object]:
+    try:
+        return perform_plan_quote(request, repository)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
