@@ -1,8 +1,9 @@
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
-from app.plans.calc import calculate_plan_quote
+from app.plans.calc import calculate_plan_quote, round_rm
 from app.schemas import PlanQuoteRequest
 from app.service import perform_plan_quote
 
@@ -62,7 +63,13 @@ def test_golden_plan_formulas_and_ranges() -> None:
     assert result["plan_b"]["floor_low"] == 556_595
     assert result["plan_b"]["floor_high"] == 658_304
     assert result["plan_b"]["expected_net"] == 751_067
+    assert result["plan_b"]["expected_net_low"] == 709_473
+    assert result["plan_b"]["expected_net_high"] == 839_118
     assert result["plan_b"]["net_at_floor"] == 563_300
+
+
+def test_money_rounding_uses_conventional_half_up() -> None:
+    assert round_rm(100.5) == 101
 
 
 def test_deposits_price_gaps_and_rpgt_retention_use_the_correct_bases() -> None:
@@ -151,6 +158,25 @@ def test_leasehold_adds_state_consent_to_both_timelines() -> None:
         ]
 
 
+def test_plan_a_timeline_only_routes_the_new_home_espa_through_hims() -> None:
+    result = calculate_plan_quote(
+        valuation=GOLDEN_VALUATION,
+        new_home_name="Serenia Baleria 1 & 2",
+        new_home_price=809_888,
+        price_source="from_price",
+    )
+
+    signing_step = next(
+        step
+        for step in result["plan_a"]["timeline"]
+        if step["title"] == "Sign both agreements"
+    )
+    assert signing_step["detail"] == (
+        "Sign the old-home SPA separately and the new-home e-SPA through KPKT "
+        "HIMS with iDsaya on the assumed same day; the deposits are offset."
+    )
+
+
 def test_assumed_figures_are_mapped_to_notes() -> None:
     result = calculate_plan_quote(
         valuation=GOLDEN_VALUATION,
@@ -174,6 +200,8 @@ def test_assumed_figures_are_mapped_to_notes() -> None:
         "plan_b.floor_low",
         "plan_b.floor_high",
         "plan_b.expected_net",
+        "plan_b.expected_net_low",
+        "plan_b.expected_net_high",
         "plan_b.net_at_floor",
         "plan_b.price_gap",
         "plan_b.rpgt_retention",
@@ -220,3 +248,24 @@ def test_launch_from_price_is_required_without_a_sales_quote() -> None:
 
     with pytest.raises(ValueError, match="does not have a published from price"):
         perform_plan_quote(make_request(), FakePlanRepository(launch))
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"valuation": {**GOLDEN_VALUATION, "estimate": float("inf")}},
+        {
+            "valuation": GOLDEN_VALUATION,
+            "new_home": {"launch_id": 1, "sales_quote_rm": float("inf")},
+        },
+    ],
+)
+def test_non_finite_money_inputs_are_rejected(override: dict[str, Any]) -> None:
+    payload: dict[str, Any] = {
+        "valuation": GOLDEN_VALUATION,
+        "new_home": {"launch_id": 1},
+    }
+    payload.update(override)
+
+    with pytest.raises(ValidationError):
+        PlanQuoteRequest.model_validate(payload)

@@ -84,9 +84,9 @@ class ValuationResponse(BaseModel):
 
 
 class PlanValuationInput(BaseModel):
-    estimate: float = Field(gt=0)
-    low: float = Field(gt=0)
-    high: float = Field(gt=0)
+    estimate: float = Field(gt=0, allow_inf_nan=False)
+    low: float = Field(gt=0, allow_inf_nan=False)
+    high: float = Field(gt=0, allow_inf_nan=False)
     confidence: Confidence
     scheme: str = Field(min_length=1)
     is_sdp: bool
@@ -101,7 +101,7 @@ class PlanValuationInput(BaseModel):
 
 class PlanNewHomeInput(BaseModel):
     launch_id: int = Field(gt=0)
-    sales_quote_rm: float | None = Field(default=None, gt=0)
+    sales_quote_rm: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 
 class PlanQuoteRequest(BaseModel):
@@ -150,6 +150,8 @@ class PlanBQuote(BaseModel):
     floor_low: int
     floor_high: int
     expected_net: int
+    expected_net_low: int
+    expected_net_high: int
     net_at_floor: int
     deposit_gap: int
     price_gap: int

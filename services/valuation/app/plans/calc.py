@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal
 
 from app.plans.constants import (
@@ -19,20 +20,28 @@ from app.plans.constants import (
 PriceSource = Literal["from_price", "sales_quote"]
 
 
-def round_rm(amount: float) -> int:
-    return round(amount)
+def _decimal(value: Decimal | float | int) -> Decimal:
+    return value if isinstance(value, Decimal) else Decimal(str(value))
+
+
+def round_rm(amount: Decimal | float | int) -> int:
+    return int(_decimal(amount).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _apply_rate(value: float | int, rate: Decimal) -> int:
+    return round_rm(_decimal(value) * rate)
 
 
 def plan_a_offer(value: float) -> int:
-    return round_rm(value * PLAN_A_OFFER_RATE)
+    return _apply_rate(value, PLAN_A_OFFER_RATE)
 
 
 def plan_b_floor(value: float) -> int:
-    return round_rm(value * PLAN_B_FLOOR_RATE)
+    return _apply_rate(value, PLAN_B_FLOOR_RATE)
 
 
 def plan_b_net(value: float) -> int:
-    return round_rm(value * PLAN_B_EXPECTED_NET_RATE)
+    return _apply_rate(value, PLAN_B_EXPECTED_NET_RATE)
 
 
 def _timeline_step(
@@ -78,8 +87,8 @@ def build_plan_a_timeline(tenure: str | None) -> list[dict[str, object]]:
             "Sign both agreements",
             "After accepting the offer",
             (
-                "Sign the old-home sale agreement and the new-home e-SPA through "
-                "KPKT HIMS with iDsaya on the same day; the deposits are offset."
+                "Sign the old-home SPA separately and the new-home e-SPA through "
+                "KPKT HIMS with iDsaya on the assumed same day; the deposits are offset."
             ),
             assumption=True,
             note="Same-day signing and deposit offset are contract-design assumptions requiring legal review.",
@@ -192,6 +201,8 @@ def calculate_plan_quote(
     floor_low = plan_b_floor(low)
     floor_high = plan_b_floor(high)
     expected_net = plan_b_net(estimate)
+    expected_net_low = plan_b_net(low)
+    expected_net_high = plan_b_net(high)
     net_at_floor = plan_b_net(floor)
 
     plan_a_reasons: list[str] = []
@@ -204,8 +215,8 @@ def calculate_plan_quote(
             "Plan A requires the old-home valuation to be no higher than the new-home price."
         )
 
-    new_home_deposit = round_rm(new_home_price * NEW_HOME_DEPOSIT_RATE)
-    old_home_deposit_offset = round_rm(offer * OLD_HOME_DEPOSIT_RATE)
+    new_home_deposit = _apply_rate(new_home_price, NEW_HOME_DEPOSIT_RATE)
+    old_home_deposit_offset = _apply_rate(offer, OLD_HOME_DEPOSIT_RATE)
     plan_a_cash_gap = max(new_home_deposit - old_home_deposit_offset, 0)
 
     return {
@@ -231,7 +242,7 @@ def calculate_plan_quote(
                 ),
             },
             "price_gap": round_rm(new_home_price - offer),
-            "rpgt_retention": round_rm(offer * RPGT_RETENTION_RATE),
+            "rpgt_retention": _apply_rate(offer, RPGT_RETENTION_RATE),
             "rpgt_reminder": RPGT_REMINDER,
             "timeline": build_plan_a_timeline(
                 str(tenure) if tenure is not None else None
@@ -243,10 +254,12 @@ def calculate_plan_quote(
             "floor_low": floor_low,
             "floor_high": floor_high,
             "expected_net": expected_net,
+            "expected_net_low": expected_net_low,
+            "expected_net_high": expected_net_high,
             "net_at_floor": net_at_floor,
             "deposit_gap": new_home_deposit,
             "price_gap": round_rm(new_home_price - expected_net),
-            "rpgt_retention": round_rm(estimate * RPGT_RETENTION_RATE),
+            "rpgt_retention": _apply_rate(estimate, RPGT_RETENTION_RATE),
             "rpgt_reminder": RPGT_REMINDER,
             "timeline": build_plan_b_timeline(
                 str(tenure) if tenure is not None else None
@@ -285,6 +298,9 @@ def calculate_plan_quote(
             {
                 "fields": [
                     "plan_b.expected_net",
+                    "plan_b.expected_net_low",
+                    "plan_b.expected_net_high",
+                    "plan_b.net_at_floor",
                     "plan_b.price_gap",
                 ],
                 "assumption": True,

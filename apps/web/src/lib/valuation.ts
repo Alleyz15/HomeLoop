@@ -119,6 +119,8 @@ export type PlanQuoteResponse = {
     floor_low: number;
     floor_high: number;
     expected_net: number;
+    expected_net_low: number;
+    expected_net_high: number;
     net_at_floor: number;
     deposit_gap: number;
     price_gap: number;
