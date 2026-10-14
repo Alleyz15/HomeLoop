@@ -17,6 +17,8 @@ class ImportSpec:
     rename: dict[str, str] = field(default_factory=dict)
     drop: tuple[str, ...] = ()
     primary_key: tuple[str, ...] = ()
+    integer_columns: tuple[str, ...] = ()
+    requires_empty: bool = False
 
 
 FILE_SPECS = {
@@ -24,6 +26,7 @@ FILE_SPECS = {
         table="transactions",
         rename={"land": "land_sqm", "floor": "floor_sqm", "area": "area_sqm"},
         drop=("file", "y"),
+        requires_empty=True,
     ),
     "out_sdp_schemes.csv": ImportSpec(
         table="sdp_schemes",
@@ -46,6 +49,15 @@ FILE_SPECS = {
     "out_backtest.csv": ImportSpec(
         table="backtest_results",
         primary_key=("variant", "scope"),
+    ),
+    "sdp_launches.csv": ImportSpec(
+        table="sdp_launches",
+        primary_key=("project",),
+        integer_columns=("units",),
+    ),
+    "backtest_ratios.csv": ImportSpec(
+        table="backtest_ratios",
+        requires_empty=True,
     ),
 }
 
@@ -80,6 +92,14 @@ def load_records(path: Path, spec: ImportSpec) -> list[dict[str, object]]:
     )
     validate_primary_keys(frame, spec)
     normalized = frame.astype(object).where(pd.notna(frame), None)
+    for column in spec.integer_columns:
+        if column not in normalized:
+            continue
+        normalized[column] = pd.Series(
+            [int(value) if value is not None else None for value in normalized[column]],
+            index=normalized.index,
+            dtype=object,
+        )
     return normalized.to_dict(orient="records")
 
 
@@ -100,23 +120,65 @@ def ensure_transactions_empty(client: Any) -> None:
         )
 
 
-def import_directory(directory: Path, client: Any) -> dict[str, int]:
+def ensure_table_empty(client: Any, table: str) -> None:
+    response = client.table(table).select("id").limit(1).execute()
+    if response.data:
+        raise RuntimeError(
+            f"{table} table is not empty; clear it before importing this identity-keyed file again"
+        )
+
+
+def parse_only(value: str) -> tuple[str, ...]:
+    filenames = tuple(part.strip() for part in value.split(","))
+    if not filenames or any(not filename for filename in filenames):
+        raise SystemExit("--only must contain comma-separated CSV filenames")
+
+    unknown = [filename for filename in filenames if filename not in FILE_SPECS]
+    if unknown:
+        raise SystemExit(f"unknown --only file(s): {', '.join(unknown)}")
+
+    return filenames
+
+
+def import_directory(
+    directory: Path,
+    client: Any,
+    only: Sequence[str] | None = None,
+) -> dict[str, int]:
     counts: dict[str, int] = {}
+    selected = set(only) if only is not None else None
+    imports: list[tuple[ImportSpec, list[dict[str, object]]]] = []
 
     for filename, spec in FILE_SPECS.items():
+        if selected is not None and filename not in selected:
+            continue
+
         path = directory / filename
         if not path.is_file():
+            if selected is not None:
+                raise FileNotFoundError(f"selected import file not found: {path}")
             continue
 
         records = load_records(path, spec)
-        if spec.table == "transactions" and records:
-            ensure_transactions_empty(client)
+        imports.append((spec, records))
 
+    for spec, records in imports:
+        if spec.requires_empty and records:
+            if spec.table == "transactions":
+                ensure_transactions_empty(client)
+            else:
+                ensure_table_empty(client, spec.table)
+
+    for spec, records in imports:
         completed = 0
         if not records:
             print(f"{spec.table}: 0/0")
         for batch in batched(records):
-            client.table(spec.table).upsert(batch).execute()
+            conflict_target = ",".join(spec.primary_key) or None
+            client.table(spec.table).upsert(
+                batch,
+                on_conflict=conflict_target,
+            ).execute()
             completed += len(batch)
             print(f"{spec.table}: {completed}/{len(records)}")
 
@@ -128,6 +190,11 @@ def import_directory(directory: Path, client: Any) -> dict[str, int]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Import HomeLoop reference CSVs")
     parser.add_argument("--dir", type=Path, required=True, help="Directory of processed CSV files")
+    parser.add_argument(
+        "--only",
+        type=parse_only,
+        help="Comma-separated CSV filenames to import",
+    )
     return parser.parse_args()
 
 
@@ -147,7 +214,7 @@ def main() -> None:
         required_env("SUPABASE_SERVICE_ROLE_KEY"),
     )
 
-    import_directory(args.dir, client)
+    import_directory(args.dir, client, only=args.only)
 
 
 if __name__ == "__main__":
