@@ -1,8 +1,9 @@
 # HomeLoop valuation service
 
-Stateless FastAPI service for preliminary comparable-sales valuations. It reads
-`road_catalog` and `transactions` through the Supabase anon role and never writes
-valuation requests or uses the service-role key.
+Stateless FastAPI service for preliminary comparable-sales valuations and
+HomeLoop plan quotes. It reads `road_catalog`, `transactions`, and
+`sdp_launches` through the Supabase anon role and never writes valuation requests
+or uses the service-role key.
 
 ## Local setup
 
@@ -23,9 +24,16 @@ Required variables:
 - `SUPABASE_ANON_KEY`
 - `INTERNAL_API_KEY`
 
-`GET /health` is public and does not initialize a Supabase client. `GET /roads`
-and `POST /valuate` require `X-Internal-Key`. The service is server-to-server and
-does not enable CORS.
+`GET /health` is public and does not initialize a Supabase client. `GET /roads`,
+`POST /valuate`, and `POST /plans/quote` require `X-Internal-Key`. The service is
+server-to-server and does not enable CORS.
+
+`POST /plans/quote` accepts a successful valuation result plus an SDP launch ID.
+It rejects launches whose tier is not `selling`, uses a supplied sales quote in
+preference to the launch's published from-price, and returns the Plan A and Plan
+B figures, eligibility, assumptions, RPGT reminder, and documented timelines.
+All reusable plan constants and formulas live in the side-effect-free
+`app/plans` package.
 
 Install the test dependencies and run the offline suite with:
 

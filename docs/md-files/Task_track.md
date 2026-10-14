@@ -83,6 +83,17 @@
 - [x] 离线单元测试与 Bukit Jelutong golden integration test；只读核对为 RM785,635、RM742,127–877,738
 - [x] Render Docker 启动与部署说明；实际 Render / Vercel 环境设定由用户完成
 
+### 1.5 后端 B3 方案计算
+
+完成日期：2026-10-14｜commits `3d13e61`、`85a5e48`、`83caf6a`
+
+- [x] 方案 A 收购价 = 估价 ×（1 − 11.5% − 10%）；只限 SDP township、旧屋估价不高于新屋价格
+- [x] 方案 B 保底价 = 估价 × 75%；预计拿到 = 市价 ×（1 − 3.2% − 1.2%），并列出预计净额区间与保底价净额
+- [x] AI 低/高区间分别套用同一公式，所有金额四舍五入到 RM 整数
+- [x] 换屋计划书资料：两方案时间线、10% 订金与互抵假设、订金缺口、3% RPGT 扣留款、60/90 天提醒、租赁地契另加 1–3 个月
+- [x] `POST /plans/quote`：只读 anon 查询在售 `sdp_launches`，销售报价优先于官网起价，受 `X-Internal-Key` 保护
+- [x] 公式、资格规则、价格来源、leasehold 与安全测试；Next.js helper 改为 server-only，并与 B2/B3 schema 对齐
+
 ---
 
 ## 2. 待做：后端
@@ -98,13 +109,6 @@
 
 - [ ] 按 `services/valuation/README.md` 部署到 Render，并确认线上 `/health`
 - [ ] 在 Vercel 设置 server-only `VALUATION_API_URL` 与 `VALUATION_INTERNAL_KEY`；F4 串接时启用
-
-### B3. 方案计算（可以放 Next.js server 或 FastAPI）
-
-- [ ] 方案 A 收购价 = 估价 ×（1 − 11.5% − 10%）；只限 SDP township、旧屋估价不高于新屋价格（第 5.5 节）
-- [ ] 方案 B 保底价 = 估价 × 75%；预计拿到 ≈ 市价 ×（1 − 3.2% − 1.2%）
-- [ ] 初步报价区间（按 AI 区间算）
-- [ ] 换屋计划书：两个方案的时间线与资金进出、订金缺口、3% RPGT 扣留款、租赁地契加 1–3 个月（第 5.3、5.4 节）
 
 ### B4. 申请流程 API
 
@@ -175,6 +179,7 @@
 | 所有 CSV 被 `.gitignore` 排除 | 数据放 `data/processed/`，用脚本导入 |
 | `road_catalog` 的 Birai 验收笔数与任务文字不同 | 按指定的 trim/JLN 正规化后，`JLN BIRAI U8/69` 有 13 笔（其中 1 笔原始路名有前导空格）；常见地段 178 m²、建筑 190 m² 均符合预期 |
 | 相同 `road_norm` + 屋型可能横跨多个 scheme | `/roads` 会回传 scheme；这种情况调用 `/valuate` 时必须同时带入所选 scheme，否则回 422，避免使用错误期数的成交 |
+| 估价与方案 API 只能由服务器调用 | `apps/web/src/lib/valuation.ts` 已加 `server-only`；F4 必须从 Server Component、Server Action 或 route handler 调用，绝不能从 client component 调用或把内部 key 改成 `NEXT_PUBLIC_` |
 
 ## 5. 已确定的关键数字（不要随意改）
 
