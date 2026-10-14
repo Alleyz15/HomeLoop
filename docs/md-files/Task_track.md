@@ -70,6 +70,19 @@
 - [x] `scripts/create_demo_users.py`（账号由用户另行建立；脚本不输出密码或 key）
 - [x] `scripts/import_csv.py --only`、预检查与测试；Supabase migrations 已推送并通过 RLS/权限验证
 
+### 1.4 后端 B2 估价 API
+
+完成日期：2026-10-14｜commits `53e987b`–`7d020a6`
+
+- [x] `/health` 无 Supabase 调用；client 改为首次资料请求才建立，解决原本 health 测试卡住
+- [x] `/roads` 路名正规化与公开目录搜索；同一路名跨期数时要求带回所选 scheme，避免用错可比成交
+- [x] `/valuate` KNN：同期数 + 同屋型 + 排除首卖，log 面积距离、每年 0.02 时间惩罚、最近 10 笔
+- [x] 中位数估价、25 / 75 百分位区间、可信度门槛与近 3 年少于 10 笔的资料不足规则
+- [x] 中间单位从 `road_catalog` 自动带入常见面积；回传 10 笔成交、Act 242 免责声明与非 SDP 的 Plan B 提示
+- [x] `X-Internal-Key` 恒定时间验证；估价服务只用 anon key 只读资料；关闭 CORS 与公开 API 文档路由
+- [x] 离线单元测试与 Bukit Jelutong golden integration test；只读核对为 RM785,635、RM742,127–877,738
+- [x] Render Docker 启动与部署说明；实际 Render / Vercel 环境设定由用户完成
+
 ---
 
 ## 2. 待做：后端
@@ -81,15 +94,10 @@
 - [ ] 用户运行 `scripts/import_csv.py --only sdp_launches.csv,backtest_ratios.csv`；预期分别为 35 / 187 笔
 - [ ] 用户运行 `scripts/create_demo_users.py`，建立 1 个屋主与 1 个 admin demo 账号
 
-### B2. 估价 API（FastAPI）
+### B2. 估价 API 部署（用户操作）
 
-- [ ] KNN 估价：同期数 + 同屋型 + 排除首卖；以 log 地段、log 建筑面积找最近 10 笔，时间惩罚每年 0.02；每平方米价格的中位数，区间用第 25 / 75 百分位（方案详述第 6 节）
-- [ ] 资料不足规则：近 3 年少于 10 笔可比成交 → 回传 `insufficient_data`，不给估价
-- [ ] 可信度：区间宽度 < 20% 高、< 35% 中、其余低
-- [ ] 内部 key（`X-Internal-Key`）保护；用 anon key 读资料（最小权限）
-- [ ] 测试：单元测试 + golden test（Bukit Jelutong 双层排屋，地 164 m²、建筑 180 m² → 约 RM786,000，区间约 RM742k–878k，±2%）
-- [ ] 修复之前卡住的 health 测试（Supabase client 改为 lazy）
-- [ ] 部署到 Render 或 Railway，Vercel 填 `VALUATION_API_URL`
+- [ ] 按 `services/valuation/README.md` 部署到 Render，并确认线上 `/health`
+- [ ] 在 Vercel 设置 server-only `VALUATION_API_URL` 与 `VALUATION_INTERNAL_KEY`；F4 串接时启用
 
 ### B3. 方案计算（可以放 Next.js server 或 FastAPI）
 
@@ -163,10 +171,10 @@
 |---|---|
 | 部分网络的路由器 DNS 查不到 `*.supabase.co` | 改用 1.1.1.1 / 8.8.8.8，或在 hosts 文件加 `104.18.38.10 qcuzvdkrqzxogigsxisk.supabase.co`（Supabase IP 改变时要更新） |
 | `transactions` 只能导入一次 | 重新导入前要先 `truncate` 6 张参考表（见 README） |
-| 估价服务测试曾在 health 用例卡住 | 待 B2 修复 |
 | 大部分新屋项目只公布起价 | 第 ③ 步用起价，允许用户填销售报价 |
 | 所有 CSV 被 `.gitignore` 排除 | 数据放 `data/processed/`，用脚本导入 |
 | `road_catalog` 的 Birai 验收笔数与任务文字不同 | 按指定的 trim/JLN 正规化后，`JLN BIRAI U8/69` 有 13 笔（其中 1 笔原始路名有前导空格）；常见地段 178 m²、建筑 190 m² 均符合预期 |
+| 相同 `road_norm` + 屋型可能横跨多个 scheme | `/roads` 会回传 scheme；这种情况调用 `/valuate` 时必须同时带入所选 scheme，否则回 422，避免使用错误期数的成交 |
 
 ## 5. 已确定的关键数字（不要随意改）
 
