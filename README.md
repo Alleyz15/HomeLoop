@@ -40,7 +40,11 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-The API is available at `http://localhost:8000`; `GET /health` reports its status.
+The API is available at `http://localhost:8000`; `GET /health` reports its status
+without connecting to Supabase. The protected `/roads` and `/valuate` endpoints
+use the Supabase anon key for read-only reference-data access. See
+`services/valuation/README.md` for the request contract and Render deployment
+steps.
 
 ## Database migrations
 
@@ -99,12 +103,14 @@ The script creates or reuses `owner.demo@homeloop.my` and `admin.demo@homeloop.m
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Web | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web | Public browser-safe Supabase anon key |
-| `NEXT_PUBLIC_VALUATION_API_URL` | Web | Base URL for the valuation service |
+| `VALUATION_API_URL` | Next.js server | Base URL for the valuation service; never prefix with `NEXT_PUBLIC_` |
+| `VALUATION_INTERNAL_KEY` | Next.js server | Internal key sent to the valuation service; never prefix with `NEXT_PUBLIC_` |
 | `SUPABASE_URL` | Valuation service, importer | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Valuation service, importer | Server-only key for reference-data access |
+| `SUPABASE_ANON_KEY` | Valuation service | Anon key for read-only reference-data access |
+| `INTERNAL_API_KEY` | Valuation service | Internal server-to-server authentication key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Importer, demo-user script | Server-only administrative key; never used by the valuation service |
 | `DEMO_OWNER_PASSWORD` | Demo-user script | Password for the owner demo account |
 | `DEMO_ADMIN_PASSWORD` | Demo-user script | Password for the admin demo account |
-| `ALLOWED_ORIGINS` | Valuation service | Comma-separated browser origins; defaults to `http://localhost:3000` |
 
 ## Verify setup
 
