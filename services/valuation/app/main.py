@@ -8,7 +8,12 @@ from app.repository import ValuationRepository, get_repository
 from app.schemas import RoadResult, ValuationRequest, ValuationResponse
 from app.service import perform_valuation
 
-app = FastAPI(title="HomeLoop Valuation Service")
+app = FastAPI(
+    title="HomeLoop Valuation Service",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 
 def require_internal_key(

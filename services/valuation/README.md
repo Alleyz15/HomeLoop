@@ -27,10 +27,11 @@ Required variables:
 and `POST /valuate` require `X-Internal-Key`. The service is server-to-server and
 does not enable CORS.
 
-Run the offline test suite with:
+Install the test dependencies and run the offline suite with:
 
 ```bash
-pytest
+pip install -r requirements-dev.txt
+python -m pytest
 ```
 
 The golden integration test runs automatically only when `SUPABASE_URL` and

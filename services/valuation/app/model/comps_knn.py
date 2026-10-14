@@ -102,7 +102,7 @@ def confidence_for_range(width_ratio: float) -> Confidence:
 def _ym_to_month(value: object) -> str:
     ym = float(value)
     year = math.floor(ym)
-    month = min(12, max(1, round((ym - year) * 12) + 1))
+    month = min(12, max(1, round((ym - year) * 12)))
     return f"{year:04d}-{month:02d}"
 
 

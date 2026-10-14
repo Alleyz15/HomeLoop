@@ -78,17 +78,24 @@ class ValuationRepository:
         return group_road_rows(rows)[:limit]
 
     def catalog_for_road(
-        self, road_norm: str, property_type: str
+        self,
+        road_norm: str,
+        property_type: str,
+        scheme: str | None = None,
     ) -> dict[str, Any] | None:
-        response = (
+        query = (
             self.client.table("road_catalog")
             .select(CATALOG_COLUMNS)
             .eq("road_norm", road_norm)
             .eq("ptype", property_type)
-            .order("n_total", desc=True)
-            .limit(1)
-            .execute()
         )
+        if scheme:
+            query = query.eq("scheme", scheme)
+        response = query.order("n_total", desc=True).limit(2).execute()
+        if not scheme and len(response.data or []) > 1:
+            raise ValueError(
+                "road_norm matches multiple schemes; select and supply a scheme"
+            )
         return response.data[0] if response.data else None
 
     def catalog_for_scheme(

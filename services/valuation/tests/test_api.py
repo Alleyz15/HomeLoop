@@ -74,6 +74,13 @@ class ValuationApiSecurityTests(unittest.TestCase):
             any(middleware.cls is CORSMiddleware for middleware in main.app.user_middleware)
         )
 
+    def test_only_health_is_publicly_documentable(self) -> None:
+        route_paths = {route.path for route in main.app.routes}
+
+        self.assertNotIn("/docs", route_paths)
+        self.assertNotIn("/redoc", route_paths)
+        self.assertNotIn("/openapi.json", route_paths)
+
 
 if __name__ == "__main__":
     unittest.main()

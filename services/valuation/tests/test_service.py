@@ -1,9 +1,10 @@
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from app.repository import group_road_rows, normalize_road
+from app.repository import ValuationRepository, group_road_rows, normalize_road
 from app.schemas import ValuationRequest
 from app.service import DISCLAIMER, MODEL_VERSION, perform_valuation
 
@@ -17,13 +18,13 @@ class FakeRepository:
     ) -> None:
         self.catalog = catalog
         self.transaction_rows = transactions or []
-        self.requested_road: tuple[str, str] | None = None
+        self.requested_road: tuple[str, str, str | None] | None = None
         self.requested_scheme: tuple[str, str] | None = None
 
     def catalog_for_road(
-        self, road_norm: str, property_type: str
+        self, road_norm: str, property_type: str, scheme: str | None = None
     ) -> dict[str, Any] | None:
-        self.requested_road = (road_norm, property_type)
+        self.requested_road = (road_norm, property_type, scheme)
         return self.catalog
 
     def catalog_for_scheme(
@@ -39,6 +40,35 @@ class FakeRepository:
         self, scheme: str, property_type: str
     ) -> list[dict[str, Any]]:
         return self.transaction_rows
+
+
+class QueryStub:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+
+    def select(self, *args: object, **kwargs: object) -> "QueryStub":
+        return self
+
+    def eq(self, *args: object, **kwargs: object) -> "QueryStub":
+        return self
+
+    def order(self, *args: object, **kwargs: object) -> "QueryStub":
+        return self
+
+    def limit(self, *args: object, **kwargs: object) -> "QueryStub":
+        return self
+
+    def execute(self) -> SimpleNamespace:
+        return SimpleNamespace(data=self.rows)
+
+
+class ClientStub:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+
+    def table(self, name: str) -> QueryStub:
+        assert name == "road_catalog"
+        return QueryStub(self.rows)
 
 
 def recent_transactions() -> list[dict[str, Any]]:
@@ -121,6 +151,15 @@ def test_road_rows_are_grouped_with_property_type_details() -> None:
     ]
 
 
+def test_ambiguous_road_without_scheme_is_rejected() -> None:
+    repository = ValuationRepository(
+        ClientStub([{"scheme": "SCHEME A"}, {"scheme": "SCHEME B"}])  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ValueError, match="multiple schemes"):
+        repository.catalog_for_road("JLN SHARED", "Terrace")
+
+
 def test_request_requires_a_road_or_scheme() -> None:
     with pytest.raises(ValidationError, match="road_norm or scheme"):
         ValuationRequest(
@@ -143,7 +182,7 @@ def test_valuation_resolves_scheme_and_auto_fills_intermediate_sizes() -> None:
     repository = FakeRepository(
         catalog={
             "road_norm": "JLN TEST",
-            "scheme": "RESOLVED SCHEME",
+            "scheme": "SELECTED SCHEME",
             "district": "PETALING",
             "is_sdp": True,
             "typical_land_sqm": 164,
@@ -153,17 +192,21 @@ def test_valuation_resolves_scheme_and_auto_fills_intermediate_sizes() -> None:
     )
     request = ValuationRequest(
         road_norm=" Jalan Test ",
-        scheme="IGNORED SCHEME",
+        scheme="SELECTED SCHEME",
         property_type="Terrace",
         unit_position="intermediate",
     )
 
     result = perform_valuation(request, repository)
 
-    assert repository.requested_road == ("JLN TEST", "Terrace")
+    assert repository.requested_road == (
+        "JLN TEST",
+        "Terrace",
+        "SELECTED SCHEME",
+    )
     assert repository.requested_scheme is None
     assert result["status"] == "ok"
-    assert result["scheme"] == "RESOLVED SCHEME"
+    assert result["scheme"] == "SELECTED SCHEME"
     assert result["sizes_used"] == {
         "land_sqm": 164.0,
         "floor_sqm": 180.0,

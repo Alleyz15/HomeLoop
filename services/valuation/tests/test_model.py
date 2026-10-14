@@ -85,6 +85,15 @@ def test_estimate_uses_median_and_linear_quartiles_of_floor_price_per_sqm() -> N
     assert len(result["comparables"]) == 10
 
 
+def test_comparable_date_decodes_year_plus_month_over_twelve() -> None:
+    july_2021 = 2021 + (7 / 12)
+    rows = [transaction(row_id, ym=july_2021) for row_id in range(1, 11)]
+
+    result = estimate_from_transactions(rows, 100, 100, latest_ym=july_2021)
+
+    assert result["comparables"][0]["date"] == "2021-07"
+
+
 @pytest.mark.parametrize(
     ("width_ratio", "expected"),
     [

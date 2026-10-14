@@ -17,7 +17,10 @@ NON_SDP_NOTE = "This property is outside an SDP township; only Plan B applies."
 
 class Repository(Protocol):
     def catalog_for_road(
-        self, road_norm: str, property_type: str
+        self,
+        road_norm: str,
+        property_type: str,
+        scheme: str | None = None,
     ) -> dict[str, Any] | None: ...
 
     def catalog_for_scheme(
@@ -55,7 +58,12 @@ def perform_valuation(
 ) -> dict[str, Any]:
     if request.road_norm and request.road_norm.strip():
         road_norm = normalize_road(request.road_norm)
-        catalog = repository.catalog_for_road(road_norm, request.property_type)
+        requested_scheme = request.scheme.strip() if request.scheme else None
+        catalog = repository.catalog_for_road(
+            road_norm,
+            request.property_type,
+            requested_scheme,
+        )
     else:
         catalog = repository.catalog_for_scheme(
             request.scheme.strip(), request.property_type  # type: ignore[union-attr]
