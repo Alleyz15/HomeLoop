@@ -112,6 +112,12 @@
 
 ### B4. 申请流程 API
 
+已确定的 B4 状态机决定（2026-10-14）：
+
+- 补件可以从 `under_review` 或 `inspected` 发起；`info_return_status` 记录来源，屋主补件后回到原关卡并清空该字段。
+- 正式报价阶段每份申请只可换方案一次（`plan_switch_count`，与一次复核分开计算）：B → A 重新检查方案 A 资格、清空报价并回到 `inspection_scheduled` 等注册估价师；A → B 用已确认市价重新计算 75% 保底、检查额度并发出新的 14 天报价。
+- 屋主从 `accepted` 标记 e-SPA 已签后进入 `espa_signed`；admin 以 `espa_confirmed_at` / `espa_confirmed_by` 确认，不新增状态。所有挂牌及之后的追踪动作必须等 admin 确认。
+
 - [ ] 提交时的系统检查（第 1 关）（第 5.5 节）
 - [ ] 状态机：只允许合法的状态转换，并检查是屋主还是 admin 在操作（第 3.3 节）
 - [ ] Admin 操作：发初步报价、要求补件、拒绝（附原因）、安排上门、填看屋结果、批准正式报价
