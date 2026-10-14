@@ -94,6 +94,24 @@
 - [x] `POST /plans/quote`：只读 anon 查询在售 `sdp_launches`，销售报价优先于官网起价，受 `X-Internal-Key` 保护
 - [x] 公式、资格规则、价格来源、leasehold 与安全测试；Next.js helper 改为 server-only，并与 B2/B3 schema 对齐
 
+### 1.6 后端 B4 申请流程 API
+
+完成日期：2026-10-14｜commits `3ed7275`、`4a77305`、`dc9316e`、`f772eaf`
+
+- [x] 提交时执行第 1 关资格、必填资料与 PDPA 检查；每位屋主同一时间只允许一份活跃申请
+- [x] PostgreSQL SECURITY DEFINER RPC 状态机：锁定申请、验证调用者与合法转换，并在同一交易写入一笔 `application_events`
+- [x] Admin 操作：开始审核、要求补件、初步范围、拒绝、安排/记录上门、发正式报价、回应复核及接受后追踪
+- [x] 屋主操作：补件、继续/撤回、接受/换方案/拒绝/要求一次复核及标记 e-SPA 已签
+- [x] 正式报价由数据库按确认市值重算；14 天到期采用 lazy expiry，方案切换与发报价均检查月度额度
+- [x] Admin flags：正式估价低于 AI low 超过 10%、AI 低可信度、月度额度达到 80%
+- [x] server-only Next.js RPC helpers、pgTAP 状态机测试；本地重建后 56 项测试通过
+
+已确定的状态机决定：
+
+- 补件可以从 `under_review` 或 `inspected` 发起；`info_return_status` 记录来源，屋主补件后回到原关卡并清空该字段。
+- 正式报价阶段每份申请只可换方案一次（`plan_switch_count`，与一次复核分开计算）：B → A 重新检查方案 A 资格、清空报价并回到 `inspection_scheduled` 等注册估价师；A → B 用已确认市价重新计算 75% 保底、检查额度并发出新的 14 天报价。
+- 屋主从 `accepted` 标记 e-SPA 已签后进入 `espa_signed`；admin 以 `espa_confirmed_at` / `espa_confirmed_by` 确认，不新增状态。所有挂牌及之后的追踪动作必须等 admin 确认。
+
 ---
 
 ## 2. 待做：后端
@@ -109,17 +127,6 @@
 
 - [ ] 按 `services/valuation/README.md` 部署到 Render，并确认线上 `/health`
 - [ ] 在 Vercel 设置 server-only `VALUATION_API_URL` 与 `VALUATION_INTERNAL_KEY`；F4 串接时启用
-
-### B4. 申请流程 API
-
-- [ ] 提交时的系统检查（第 1 关）（第 5.5 节）
-- [ ] 状态机：只允许合法的状态转换，并检查是屋主还是 admin 在操作（第 3.3 节）
-- [ ] Admin 操作：发初步报价、要求补件、拒绝（附原因）、安排上门、填看屋结果、批准正式报价
-- [ ] 屋主操作：继续 / 不用了、接受 / 换方案 / 拒绝 / 要求复核（只能一次）、我已签约
-- [ ] 报价 14 天到期 → `expired`
-- [ ] 每月额度：批准时检查；快用完时标记
-- [ ] 系统自动标记：正式估价比 AI 最低价低 10% 以上、AI 可信度低、额度快用完
-- [ ] 每个操作写进 `application_events`
 
 ### B5. AI
 
@@ -180,6 +187,7 @@
 | `road_catalog` 的 Birai 验收笔数与任务文字不同 | 按指定的 trim/JLN 正规化后，`JLN BIRAI U8/69` 有 13 笔（其中 1 笔原始路名有前导空格）；常见地段 178 m²、建筑 190 m² 均符合预期 |
 | 相同 `road_norm` + 屋型可能横跨多个 scheme | `/roads` 会回传 scheme；这种情况调用 `/valuate` 时必须同时带入所选 scheme，否则回 422，避免使用错误期数的成交 |
 | 估价与方案 API 只能由服务器调用 | `apps/web/src/lib/valuation.ts` 已加 `server-only`；F4 必须从 Server Component、Server Action 或 route handler 调用，绝不能从 client component 调用或把内部 key 改成 `NEXT_PUBLIC_` |
+| B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此这些数值只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额 |
 
 ## 5. 已确定的关键数字（不要随意改）
 
