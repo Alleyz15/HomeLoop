@@ -15,9 +15,11 @@ class FakeRepository:
         *,
         catalog: dict[str, Any] | None,
         transactions: list[dict[str, Any]] | None = None,
+        lacks_floor_area: bool = False,
     ) -> None:
         self.catalog = catalog
         self.transaction_rows = transactions or []
+        self.lacks_floor_area = lacks_floor_area
         self.requested_road: tuple[str, str, str | None] | None = None
         self.requested_scheme: tuple[str, str] | None = None
 
@@ -40,6 +42,9 @@ class FakeRepository:
         self, scheme: str, property_type: str
     ) -> list[dict[str, Any]]:
         return self.transaction_rows
+
+    def scheme_lacks_floor_area(self, scheme: str, property_type: str) -> bool:
+        return self.lacks_floor_area
 
 
 class QueryStub:
@@ -226,6 +231,8 @@ def test_non_sdp_result_includes_plan_b_note() -> None:
             "scheme": "OTHER SCHEME",
             "district": "KLANG",
             "is_sdp": False,
+            "typical_land_sqm": 164,
+            "typical_floor_sqm": 180,
         },
         transactions=recent_transactions(),
     )
@@ -240,6 +247,79 @@ def test_non_sdp_result_includes_plan_b_note() -> None:
     result = perform_valuation(request, repository)
 
     assert result["note"] == "This property is outside an SDP township; only Plan B applies."
+
+
+def test_property_type_without_floor_area_is_reported_as_unsupported() -> None:
+    """High-rise rows leave the floor area empty, so no estimate is possible.
+
+    The catalog therefore has no typical floor area. The caller must learn
+    that the property type is unsupported rather than that data is thin.
+    """
+
+    repository = FakeRepository(
+        catalog={
+            "scheme": "SOME CONDO",
+            "district": "KUALA LUMPUR",
+            "is_sdp": False,
+            "typical_land_sqm": 97,
+            "typical_floor_sqm": None,
+        },
+        transactions=recent_transactions(),
+    )
+    request = ValuationRequest(
+        road_norm="JLN CONDO 1",
+        property_type="Condominium/Apartment",
+        unit_position="intermediate",
+    )
+
+    result = perform_valuation(request, repository)
+
+    assert result["status"] == "unsupported_property_type"
+    assert result["estimate"] is None
+    assert result["comparables"] == []
+    assert result["scheme"] == "SOME CONDO"
+    assert result["district"] == "KUALA LUMPUR"
+    assert result["is_sdp"] is False
+    assert "no built-up floor area" in result["note"]
+    assert result["disclaimer"] == DISCLAIMER
+
+
+def test_scheme_whose_transactions_have_no_floor_area_is_unsupported() -> None:
+    """A real scheme can be missing from the catalog because its rows have no
+    floor area and a blank road. Report that, not a bare not-found."""
+
+    repository = FakeRepository(catalog=None, lacks_floor_area=True)
+    request = ValuationRequest(
+        scheme="TAMAN CEMERLANG",
+        property_type="Condominium/Apartment",
+        unit_position="custom",
+        land_sqm=77,
+        floor_sqm=77,
+    )
+
+    result = perform_valuation(request, repository)
+
+    assert result["status"] == "unsupported_property_type"
+    assert result["scheme"] == "TAMAN CEMERLANG"
+    assert result["is_sdp"] is None
+    assert result["estimate"] is None
+    assert "no built-up floor area" in result["note"]
+
+
+def test_unknown_scheme_still_returns_not_found() -> None:
+    repository = FakeRepository(catalog=None, lacks_floor_area=False)
+    request = ValuationRequest(
+        scheme="NO SUCH SCHEME",
+        property_type="Terrace",
+        unit_position="custom",
+        land_sqm=164,
+        floor_sqm=180,
+    )
+
+    result = perform_valuation(request, repository)
+
+    assert result["status"] == "not_found"
+    assert result["note"] is None
 
 
 def test_missing_catalog_returns_not_found_without_a_price() -> None:

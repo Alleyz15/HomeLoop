@@ -30,7 +30,7 @@ export type Comparable = {
 };
 
 export type ValuationResponse = {
-  status: "ok" | "insufficient_data" | "not_found";
+  status: "ok" | "insufficient_data" | "not_found" | "unsupported_property_type";
   estimate: number | null;
   low: number | null;
   high: number | null;
