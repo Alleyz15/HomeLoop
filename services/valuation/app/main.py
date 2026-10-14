@@ -1,10 +1,12 @@
 import secrets
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 
-from app.config import Settings, get_settings, get_supabase_client
-from app.schemas import ValuationRequest
+from app.config import Settings, get_settings
+from app.repository import ValuationRepository, get_repository
+from app.schemas import RoadResult, ValuationRequest, ValuationResponse
+from app.service import perform_valuation
 
 app = FastAPI(title="HomeLoop Valuation Service")
 
@@ -31,11 +33,32 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/valuate", dependencies=[Depends(require_internal_key)])
-def valuate(request: ValuationRequest) -> None:
-    del request
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Valuation model not implemented",
-    )
+@app.get(
+    "/roads",
+    response_model=list[RoadResult],
+    dependencies=[Depends(require_internal_key)],
+)
+def roads(
+    q: str,
+    repository: Annotated[ValuationRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> list[dict[str, object]]:
+    if not q.strip():
+        raise HTTPException(status_code=422, detail="q must not be blank")
+    return repository.search_roads(q, limit)
+
+
+@app.post(
+    "/valuate",
+    response_model=ValuationResponse,
+    dependencies=[Depends(require_internal_key)],
+)
+def valuate(
+    request: ValuationRequest,
+    repository: Annotated[ValuationRepository, Depends(get_repository)],
+) -> dict[str, object]:
+    try:
+        return perform_valuation(request, repository)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
