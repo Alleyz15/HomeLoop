@@ -1,53 +1,79 @@
-import asyncio
+import inspect
+import secrets
 import unittest
+from unittest.mock import patch
 
 from fastapi import HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import Settings
-from app.main import health, valuate
-from app.schemas import ValuationRequest
+from app import config, main
 
 
-class ValuationApiTests(unittest.TestCase):
-    def test_health_reports_ok(self) -> None:
-        self.assertEqual(asyncio.run(health()), {"status": "ok"})
+class ValuationApiSecurityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        config.get_settings.cache_clear()
+        get_client = getattr(config, "get_supabase_client", None)
+        if get_client is not None:
+            get_client.cache_clear()
 
-    def test_request_allows_omitted_optional_property_fields(self) -> None:
-        request = ValuationRequest(scheme="Example", ptype="Terrace")
+    def test_health_is_sync_and_does_not_create_supabase_client(self) -> None:
+        self.assertFalse(inspect.iscoroutinefunction(main.health))
 
-        self.assertIsNone(request.land_sqm)
-        self.assertIsNone(request.floor_sqm)
-        self.assertIsNone(request.tenure)
+        with patch.object(
+            main,
+            "get_supabase_client",
+            side_effect=AssertionError("health must not create a Supabase client"),
+            create=True,
+        ):
+            self.assertEqual(main.health(), {"status": "ok"})
 
-    def test_valuate_is_explicitly_not_implemented(self) -> None:
-        request = ValuationRequest(scheme="Example", ptype="Terrace")
+    def test_settings_contain_only_the_required_secret_names(self) -> None:
+        self.assertEqual(
+            set(config.Settings.model_fields),
+            {"supabase_url", "supabase_anon_key", "internal_api_key"},
+        )
+        self.assertNotIn("supabase_service_role_key", config.Settings.model_fields)
+
+    def test_supabase_client_provider_is_lazy(self) -> None:
+        self.assertTrue(hasattr(config, "get_supabase_client"))
+        self.assertEqual(config.get_supabase_client.cache_info().currsize, 0)
+
+    def test_missing_internal_key_is_rejected(self) -> None:
+        settings = config.Settings(internal_api_key="expected", _env_file=None)
 
         with self.assertRaises(HTTPException) as raised:
-            asyncio.run(valuate(request))
+            main.require_internal_key(settings, None)
 
-        self.assertEqual(raised.exception.status_code, 501)
-        self.assertEqual(raised.exception.detail, "Valuation model not implemented")
+        self.assertEqual(raised.exception.status_code, 401)
 
-    def test_allowed_origins_are_parsed_from_comma_separated_setting(self) -> None:
-        settings = Settings(
-            allowed_origins="https://one.example, https://two.example",
-            _env_file=None,
-        )
+    def test_wrong_internal_key_is_rejected_with_constant_time_comparison(self) -> None:
+        settings = config.Settings(internal_api_key="expected", _env_file=None)
 
-        self.assertEqual(
-            settings.allowed_origins_list,
-            ["https://one.example", "https://two.example"],
-        )
+        with patch.object(secrets, "compare_digest", return_value=False) as compare:
+            with self.assertRaises(HTTPException) as raised:
+                main.require_internal_key(settings, "wrong")
 
-    def test_blank_allowed_origins_uses_the_local_default(self) -> None:
-        settings = Settings(allowed_origins="", _env_file=None)
+        compare.assert_called_once_with("wrong", "expected")
+        self.assertEqual(raised.exception.status_code, 401)
 
-        self.assertEqual(
-            settings.allowed_origins_list,
-            ["http://localhost:3000"],
+    def test_correct_internal_key_is_accepted(self) -> None:
+        settings = config.Settings(internal_api_key="expected", _env_file=None)
+
+        self.assertIsNone(main.require_internal_key(settings, "expected"))
+
+    def test_unconfigured_server_key_is_unavailable(self) -> None:
+        settings = config.Settings(internal_api_key=None, _env_file=None)
+
+        with self.assertRaises(HTTPException) as raised:
+            main.require_internal_key(settings, "anything")
+
+        self.assertEqual(raised.exception.status_code, 503)
+
+    def test_cors_middleware_is_not_installed(self) -> None:
+        self.assertFalse(
+            any(middleware.cls is CORSMiddleware for middleware in main.app.user_middleware)
         )
 
 
 if __name__ == "__main__":
     unittest.main()
-
