@@ -112,6 +112,14 @@
 - 正式报价阶段每份申请只可换方案一次（`plan_switch_count`，与一次复核分开计算）：B → A 重新检查方案 A 资格、清空报价并回到 `inspection_scheduled` 等注册估价师；A → B 用已确认市价重新计算 75% 保底、检查额度并发出新的 14 天报价。
 - 屋主从 `accepted` 标记 e-SPA 已签后进入 `espa_signed`；admin 以 `espa_confirmed_at` / `espa_confirmed_by` 确认，不新增状态。所有挂牌及之后的追踪动作必须等 admin 确认。
 
+### 1.7 B2 估价 API 修正（2026-10-14，未 commit）
+
+针对 B1–B3 代码审查发现的问题，已修正并以真实资料验证（golden test 仍通过，估价数字不变）：
+
+- [x] **参考成交月份差一个月**：`ym` 实际是 `年 + (月 - 1) / 12`（已用资料验证：`yr=2024` 的 `ym` 为 2024.0–2024.9167；最新 `ym` 2026.4167 = 2026 年 6 月，与资料范围一致）。原本 12 个月有 11 个显示早一个月，1 月只是因为下限截断才正确。例：Birai RM780,000 那笔 `ym=2023.9166667` 是 2023 年 12 月，原本显示 2023-11，现已更正。
+- [x] **`/roads` 会漏掉屋型**：原本 `.limit(limit * 10)` 是按「列」截断，再分组取前 N 条路，所以一条路较少见的屋型可能被切掉（第 ① 页第 2 步因此选不到自己的屋型）。改为先排序取出要显示的路，再回查这些路的全部 catalog 列。实测 `JLN BIRAI U8/66` 现在正确显示 `2 - 2 1/2 Storey Terraced` 与 `Cluster House`。
+- [x] **高楼产业回传误导性结果**：高楼成交的 `floor` 为空、`road` 是空白字串，所以根本进不了 `road_catalog`，屋主只会看到 `not_found` 或「资料不足」。新增 `unsupported_property_type` 状态与说明（需注册估价师人工估价），`not_found` 只保留给真的不存在的路或期数。
+
 ---
 
 ## 2. 待做：后端
@@ -125,8 +133,9 @@
 
 ### B2. 估价 API 部署（用户操作）
 
-- [ ] 按 `services/valuation/README.md` 部署到 Render，并确认线上 `/health`
-- [ ] 在 Vercel 设置 server-only `VALUATION_API_URL` 与 `VALUATION_INTERNAL_KEY`；F4 串接时启用
+- [x] 2026-10-14 已部署到 Render：`https://homeloop-valuation.onrender.com`，线上 `/health`、`/roads`、`/valuate` 均已用真实资料验证通过（免费方案冷启动约 22 秒）
+- [ ] 在 Vercel 设置 server-only `VALUATION_API_URL` 与 `VALUATION_INTERNAL_KEY`；F4 串接时启用（本机 `apps/web/.env.local` 已设好）
+- [ ] 上述 B2 修正需重新部署 Render 才会生效
 
 ### B5. AI
 
@@ -187,6 +196,14 @@
 | `road_catalog` 的 Birai 验收笔数与任务文字不同 | 按指定的 trim/JLN 正规化后，`JLN BIRAI U8/69` 有 13 笔（其中 1 笔原始路名有前导空格）；常见地段 178 m²、建筑 190 m² 均符合预期 |
 | 相同 `road_norm` + 屋型可能横跨多个 scheme | `/roads` 会回传 scheme；这种情况调用 `/valuate` 时必须同时带入所选 scheme，否则回 422，避免使用错误期数的成交 |
 | 估价与方案 API 只能由服务器调用 | `apps/web/src/lib/valuation.ts` 已加 `server-only`；F4 必须从 Server Component、Server Action 或 route handler 调用，绝不能从 client component 调用或把内部 key 改成 `NEXT_PUBLIC_` |
+| **估价对地段面积不单调（未修）** | 估价 = 可比成交「每平方米建筑面积」中位数 × 建筑面积，地段面积只影响选哪 10 笔，不影响换算。实测 Bukit Jelutong（建筑固定 190 m²）：地段 430 m² → RM1,420,880，但 480 m² → RM1,348,384，**地段更大反而少 RM72,496**；140–700 m² 范围内有 10 处下跌，最大一处在 180→190 m²（−RM84,329），正好落在最常见的地段大小附近。测过三种改法：加「有效面积」权重只能把下跌从 10 处降到 4 处；加距离上限完全无效；只有改成核权重平滑估计才能完全消除（0 处下跌），但中间值会变成 RM821,651（偏离文件的 RM786,000 约 4.5%），**会让 golden test 失败，也会使 deck 里「误差中位数 10.1%」的回测结论失效**。属模型设计问题，要改必须重跑回测，需团队决定 |
+| 高楼产业（41% 的成交）无法估价 | `Condominium/Apartment` 33,324 笔、`Flat` 6,548、`Low-Cost Flat` 8,276、`Town House` 1,601 共 49,749 笔的 `floor` 为空（单位面积放在 `land` 和 `area`），且 `road` 是空白字串，所以 `road_catalog` 里一笔都没有。方案 B 原本开放给 7 个县任何发展商的房子（含高楼）。要支持需：新 migration 把空白路名的成交纳入期数层级目录 + 改用 `area_sqm` 当面积基准。目前已改为明确告知不支持（见 1.7），属范围决定 |
+| 方案 A/B 报价公式有两处来源 | `private.application_offer` 写死 `0.785` / `0.75`，`services/valuation/app/plans/constants.py` 则由 11.5% + 10% / 75% 推导。目前两边一致（RM786,000 都得出 617,010 / 589,500），但改任何一个比率都要同时改 Python **和新增一个 migration**（规则 4 不准改已套用的 migration） |
+| `net_at_floor` 对保底买下也扣 3.2% 代理费 | `plans/calc.py` 的 `net_at_floor` = 保底价 × 0.956 = RM563,562，但《商业模式》第 0.2、4 节把 RM589,500 当成屋主实拿。保底触发时是 SDP 直接买下、没有代理，需产品决定是不扣费还是改栏位名称 |
+| `create_demo_users.py` 可能静默失效 | 第 41 行 `.update({"role": role}).eq("id", user.id)` 没有检查回传列数，无论是否更新成功都印出 `role=admin`。若 profile 列不存在，admin demo 帐号会留在 `owner`，整个 admin 面板进不去，而脚本却显示成功。建议加上回传检查 |
+| 每月额度按 UTC 月份计算 | `monthly_limit_usage` 与 `issue_offer` 的 `date_trunc('month', ...)` 用 session 时区（Supabase 预设 UTC）。马来西亚时间 11 月 1 日 02:00 发出的报价会算进 10 月。两处一致，所以不会重复计算，只是月份归属不对 |
+| `monthly_limits` 只种子到 2026-12 | `check_monthly_limit` 找不到当月列时会直接报错（fail closed，行为正确）。2027-01 起所有报价都会失败，长期使用前要补列 |
+| `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
 | B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此这些数值只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额 |
 
 ## 5. 已确定的关键数字（不要随意改）

@@ -54,29 +54,59 @@ class ValuationRepository:
     def __init__(self, client: Client) -> None:
         self.client = client
 
-    def search_roads(self, query: str, limit: int) -> list[dict[str, Any]]:
-        road_query = normalize_road(query).replace("%", "").replace("_", " ")
+    def _search_catalog(
+        self, column: str, pattern: str, row_limit: int
+    ) -> list[dict[str, Any]]:
         response = (
             self.client.table("road_catalog")
             .select(CATALOG_COLUMNS)
-            .ilike("road_norm", f"%{road_query}%")
+            .ilike(column, f"%{pattern}%")
             .order("n_recent_3y", desc=True)
-            .limit(limit * 10)
+            .limit(row_limit)
             .execute()
         )
-        rows = response.data or []
+        return response.data or []
+
+    def _catalog_rows_for_roads(
+        self, road_norms: Iterable[str]
+    ) -> list[dict[str, Any]]:
+        response = (
+            self.client.table("road_catalog")
+            .select(CATALOG_COLUMNS)
+            .in_("road_norm", sorted(set(road_norms)))
+            .order("n_recent_3y", desc=True)
+            .execute()
+        )
+        return response.data or []
+
+    def search_roads(self, query: str, limit: int) -> list[dict[str, Any]]:
+        road_query = normalize_road(query).replace("%", "").replace("_", " ")
+        rows = self._search_catalog("road_norm", road_query, limit * 10)
         if not rows:
             scheme_query = re.sub(r"\s+", " ", query.strip().upper())
-            response = (
-                self.client.table("road_catalog")
-                .select(CATALOG_COLUMNS)
-                .ilike("scheme", f"%{scheme_query}%")
-                .order("n_recent_3y", desc=True)
-                .limit(limit * 10)
-                .execute()
+            rows = self._search_catalog("scheme", scheme_query, limit * 10)
+
+        # The ranked page is capped by row, not by road, so a road's rarer
+        # property types can fall past the cap. Rank the distinct roads from
+        # that page, then refetch every catalog row for the roads we keep so
+        # each result lists all of the property types that road really has.
+        keys: list[tuple[str, str]] = []
+        for row in rows:
+            key = (str(row["road_norm"]), str(row["scheme"]))
+            if key not in keys:
+                keys.append(key)
+            if len(keys) == limit:
+                break
+        if not keys:
+            return []
+
+        grouped = {
+            (group["road_norm"], group["scheme"]): group
+            for group in group_road_rows(
+                self._catalog_rows_for_roads(road for road, _ in keys)
             )
-            rows = response.data or []
-        return group_road_rows(rows)[:limit]
+        }
+        return [grouped[key] for key in keys if key in grouped]
 
     def catalog_for_road(
         self,
@@ -148,6 +178,36 @@ class ValuationRepository:
             if len(page) < page_size:
                 return rows
             offset += page_size
+
+    def scheme_lacks_floor_area(self, scheme: str, property_type: str) -> bool:
+        """True when a scheme/type has transactions but none record floor area.
+
+        High-rise transactions carry the unit size in land/area and leave floor
+        empty, and their road is blank, so they never reach ``road_catalog``.
+        This distinguishes that case from a scheme that simply does not exist.
+        """
+
+        with_floor = (
+            self.client.table("transactions")
+            .select("id")
+            .eq("scheme", scheme)
+            .eq("ptype", property_type)
+            .not_.is_("floor_sqm", "null")
+            .limit(1)
+            .execute()
+        )
+        if with_floor.data:
+            return False
+
+        any_row = (
+            self.client.table("transactions")
+            .select("id")
+            .eq("scheme", scheme)
+            .eq("ptype", property_type)
+            .limit(1)
+            .execute()
+        )
+        return bool(any_row.data)
 
     def launch_by_id(self, launch_id: int) -> dict[str, Any] | None:
         response = (

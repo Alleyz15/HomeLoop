@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Protocol
 
 from app.model.comps_knn import estimate_from_transactions, resolve_subject_sizes
@@ -14,6 +15,11 @@ DISCLAIMER = (
 )
 MODEL_VERSION = "homeloop-comps-knn-v1"
 NON_SDP_NOTE = "This property is outside an SDP township; only Plan B applies."
+NO_FLOOR_AREA_NOTE = (
+    "NAPIC open transaction data records no built-up floor area for this "
+    "property type, so HomeLoop cannot produce a preliminary estimate. This "
+    "home has to be valued manually by a registered valuer."
+)
 
 
 class Repository(Protocol):
@@ -33,6 +39,8 @@ class Repository(Protocol):
     def comparable_transactions(
         self, scheme: str, property_type: str
     ) -> list[dict[str, Any]]: ...
+
+    def scheme_lacks_floor_area(self, scheme: str, property_type: str) -> bool: ...
 
 
 class PlanRepository(Protocol):
@@ -59,6 +67,21 @@ def _empty_response(status: str) -> dict[str, Any]:
     }
 
 
+def _unsupported_response(
+    scheme: str, catalog: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    response = _empty_response("unsupported_property_type")
+    response.update(
+        {
+            "scheme": scheme,
+            "is_sdp": None if catalog is None else bool(catalog.get("is_sdp")),
+            "district": None if catalog is None else catalog.get("district"),
+            "note": NO_FLOOR_AREA_NOTE,
+        }
+    )
+    return response
+
+
 def perform_valuation(
     request: ValuationRequest, repository: Repository
 ) -> dict[str, Any]:
@@ -76,7 +99,21 @@ def perform_valuation(
         )
 
     if catalog is None:
+        # A scheme search that finds nothing may still be a real scheme whose
+        # transactions have no floor area, which the catalog therefore skips.
+        requested = request.scheme.strip() if request.scheme else ""
+        if requested and repository.scheme_lacks_floor_area(
+            requested, request.property_type
+        ):
+            return _unsupported_response(requested)
         return _empty_response("not_found")
+
+    # High-rise rows carry the unit size in land/area and leave floor empty, so
+    # the catalog has no typical floor area and the comparables model has no
+    # price-per-floor-sqm to work from. Say so instead of reporting the generic
+    # insufficient-data result, which misstates the cause.
+    if catalog.get("typical_floor_sqm") is None:
+        return _unsupported_response(str(catalog["scheme"]), catalog)
 
     scheme = str(catalog["scheme"])
     sizes = resolve_subject_sizes(

@@ -4,7 +4,9 @@ from pydantic import BaseModel, Field, model_validator
 
 
 UnitPosition = Literal["intermediate", "corner_end", "custom"]
-ValuationStatus = Literal["ok", "insufficient_data", "not_found"]
+ValuationStatus = Literal[
+    "ok", "insufficient_data", "not_found", "unsupported_property_type"
+]
 Confidence = Literal["high", "medium", "low"]
 PlanPriceSource = Literal["from_price", "sales_quote"]
 

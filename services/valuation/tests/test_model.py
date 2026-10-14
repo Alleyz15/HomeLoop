@@ -85,13 +85,31 @@ def test_estimate_uses_median_and_linear_quartiles_of_floor_price_per_sqm() -> N
     assert len(result["comparables"]) == 10
 
 
-def test_comparable_date_decodes_year_plus_month_over_twelve() -> None:
-    july_2021 = 2021 + (7 / 12)
-    rows = [transaction(row_id, ym=july_2021) for row_id in range(1, 11)]
+@pytest.mark.parametrize(
+    ("ym", "expected"),
+    [
+        (2021.0, "2021-01"),
+        (2021 + (1 / 12), "2021-02"),
+        (2021 + (6 / 12), "2021-07"),
+        (2021 + (11 / 12), "2021-12"),
+        (2026 + (5 / 12), "2026-06"),
+    ],
+)
+def test_comparable_date_decodes_year_plus_month_minus_one_over_twelve(
+    ym: float, expected: str
+) -> None:
+    """NAPIC stores January as the whole year and December as year + 11/12.
 
-    result = estimate_from_transactions(rows, 100, 100, latest_ym=july_2021)
+    Verified against the loaded transactions: rows with ``yr = 2024`` span
+    ``ym`` 2024.0 to 2024.9166667, and the newest row is 2026.4166667, which
+    is June 2026 - the documented end of the source data.
+    """
 
-    assert result["comparables"][0]["date"] == "2021-07"
+    rows = [transaction(row_id, ym=ym) for row_id in range(1, 11)]
+
+    result = estimate_from_transactions(rows, 100, 100, latest_ym=ym)
+
+    assert result["comparables"][0]["date"] == expected
 
 
 @pytest.mark.parametrize(
