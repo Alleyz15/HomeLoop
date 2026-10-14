@@ -3,10 +3,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+from decimal import Decimal
+
 from app.model.comps_knn import estimate_from_transactions, resolve_subject_sizes
 from app.plans.calc import calculate_plan_quote
 from app.repository import normalize_road
-from app.schemas import PlanQuoteRequest, ValuationRequest
+from app.schemas import PlanQuoteRequest, SimulatorRequest, ValuationRequest
+from app.simulator.calc import run_simulation
 
 
 DISCLAIMER = (
@@ -45,6 +48,10 @@ class Repository(Protocol):
 
 class PlanRepository(Protocol):
     def launch_by_id(self, launch_id: int) -> dict[str, Any] | None: ...
+
+
+class SimulatorRepository(Protocol):
+    def backtest_ratios(self) -> list[dict[str, Any]]: ...
 
 
 def _empty_response(status: str) -> dict[str, Any]:
@@ -171,4 +178,20 @@ def perform_plan_quote(
         new_home_name=str(launch["project"]),
         new_home_price=new_home_price,
         price_source=price_source,
+    )
+
+
+def perform_simulation(
+    request: SimulatorRequest, repository: SimulatorRepository
+) -> dict[str, Any]:
+    return run_simulation(
+        repository.backtest_ratios(),
+        floor_ratio=Decimal(str(request.plan_b_floor_ratio)),
+        cost_pct=Decimal(str(request.plan_a_cost_pct)),
+        buffer_pct=Decimal(str(request.plan_a_buffer_pct)),
+        agent_pct=Decimal(str(request.seller_agent_pct)),
+        legal_pct=Decimal(str(request.seller_legal_pct)),
+        price_drop_pct=Decimal(str(request.price_drop_pct)),
+        reference_valuation_rm=Decimal(str(request.reference_valuation_rm)),
+        township=request.township,
     )
