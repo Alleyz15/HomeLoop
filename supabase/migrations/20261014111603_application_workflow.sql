@@ -44,6 +44,20 @@ create index applications_offer_month_plan_idx
   on public.applications (plan, offer_sent_at)
   where offer_sent_at is not null and offer_amount is not null;
 
+create unique index applications_one_active_per_owner_idx
+  on public.applications (user_id)
+  where status not in ('withdrawn', 'declined', 'expired', 'rejected', 'handover');
+
+insert into public.monthly_limits (month, plan_a_limit, plan_b_limit)
+values
+  (date '2027-01-01', 5000000, 20000000),
+  (date '2027-02-01', 5000000, 20000000),
+  (date '2027-03-01', 5000000, 20000000),
+  (date '2027-04-01', 5000000, 20000000),
+  (date '2027-05-01', 5000000, 20000000),
+  (date '2027-06-01', 5000000, 20000000)
+on conflict (month) do nothing;
+
 create or replace function private.write_application_event(
   p_application_id uuid,
   p_actor_id uuid,
@@ -269,9 +283,27 @@ declare
   v_high numeric;
   v_district text;
   v_is_sdp boolean;
+  v_new_home_price_source text;
+  v_constraint_name text;
 begin
   if v_actor_id is null then
     raise exception 'authentication required' using errcode = '42501';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(v_actor_id::text, 0)
+  );
+
+  if exists (
+    select 1
+    from public.applications
+    where applications.user_id = v_actor_id
+      and applications.status not in (
+        'withdrawn', 'declined', 'expired', 'rejected', 'handover'
+      )
+  ) then
+    raise exception 'You already have an active application'
+      using errcode = 'P0001';
   end if;
 
   if p_plan not in ('A', 'B') then
@@ -294,10 +326,15 @@ begin
       using errcode = '22023';
   end if;
 
-  if p_new_home_price_source not in ('price_from', 'sales_quote') then
-    raise exception 'new-home price source must be price_from or sales_quote'
+  if p_new_home_price_source not in ('from_price', 'price_from', 'sales_quote') then
+    raise exception 'new-home price source must be from_price or sales_quote'
       using errcode = '22023';
   end if;
+
+  v_new_home_price_source := case p_new_home_price_source
+    when 'from_price' then 'price_from'
+    else p_new_home_price_source
+  end;
 
   if pg_catalog.jsonb_typeof(p_valuation_snapshot) <> 'object'
      or pg_catalog.jsonb_typeof(p_plan_quote_snapshot) <> 'object' then
@@ -378,7 +415,7 @@ begin
       using errcode = '22023';
   end if;
 
-  if p_new_home_price_source = 'price_from'
+  if v_new_home_price_source = 'price_from'
      and (
        v_launch.price_from_rm is null
        or p_new_home_price <> v_launch.price_from_rm
@@ -397,41 +434,51 @@ begin
       using errcode = '22023';
   end if;
 
-  insert into public.applications (
-    user_id,
-    valuation_id,
-    launch_id,
-    unit_type,
-    plan,
-    new_home_price,
-    new_home_price_source,
-    address_line,
-    postcode,
-    title_no,
-    pdpa_consent,
-    pdpa_consent_at,
-    status,
-    valuation_snapshot,
-    plan_quote_snapshot
-  )
-  values (
-    v_actor_id,
-    p_valuation_id,
-    p_launch_id,
-    pg_catalog.btrim(p_unit_type),
-    p_plan,
-    p_new_home_price,
-    p_new_home_price_source,
-    pg_catalog.btrim(p_address_line),
-    pg_catalog.btrim(p_postcode),
-    nullif(pg_catalog.btrim(p_title_no), ''),
-    true,
-    pg_catalog.now(),
-    'submitted',
-    p_valuation_snapshot,
-    p_plan_quote_snapshot
-  )
-  returning * into v_application;
+  begin
+    insert into public.applications (
+      user_id,
+      valuation_id,
+      launch_id,
+      unit_type,
+      plan,
+      new_home_price,
+      new_home_price_source,
+      address_line,
+      postcode,
+      title_no,
+      pdpa_consent,
+      pdpa_consent_at,
+      status,
+      valuation_snapshot,
+      plan_quote_snapshot
+    )
+    values (
+      v_actor_id,
+      p_valuation_id,
+      p_launch_id,
+      pg_catalog.btrim(p_unit_type),
+      p_plan,
+      p_new_home_price,
+      v_new_home_price_source,
+      pg_catalog.btrim(p_address_line),
+      pg_catalog.btrim(p_postcode),
+      nullif(pg_catalog.btrim(p_title_no), ''),
+      true,
+      pg_catalog.now(),
+      'submitted',
+      p_valuation_snapshot,
+      p_plan_quote_snapshot
+    )
+    returning * into v_application;
+  exception
+    when unique_violation then
+      get stacked diagnostics v_constraint_name = constraint_name;
+      if v_constraint_name = 'applications_one_active_per_owner_idx' then
+        raise exception 'You already have an active application'
+          using errcode = 'P0001';
+      end if;
+      raise;
+  end;
 
   perform private.write_application_event(
     v_application.id,
@@ -445,7 +492,7 @@ begin
     pg_catalog.jsonb_build_object(
       'plan', p_plan,
       'launch_id', p_launch_id,
-      'new_home_price_source', p_new_home_price_source
+      'new_home_price_source', v_new_home_price_source
     )
   );
 

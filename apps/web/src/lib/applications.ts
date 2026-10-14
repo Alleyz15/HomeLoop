@@ -25,7 +25,8 @@ export type ApplicationStatus =
   | "handover";
 
 export type ApplicationPlan = "A" | "B";
-export type NewHomePriceSource = "price_from" | "sales_quote";
+export type NewHomePriceSource = "from_price" | "sales_quote";
+export type StoredNewHomePriceSource = "price_from" | "sales_quote";
 export type PropertyCondition = "good" | "fair" | "needs_repair";
 export type JsonObject = Record<string, unknown>;
 
@@ -37,7 +38,7 @@ export type Application = {
   unit_type: string;
   plan: ApplicationPlan;
   new_home_price: number;
-  new_home_price_source: NewHomePriceSource;
+  new_home_price_source: StoredNewHomePriceSource;
   address_line: string;
   postcode: string;
   title_no: string | null;

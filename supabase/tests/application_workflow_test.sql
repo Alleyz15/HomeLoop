@@ -53,6 +53,31 @@ values
     now()
   );
 
+insert into auth.users (
+  id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
+select
+  ('10000000-0000-0000-0000-' || pg_catalog.lpad(test_owner::text, 12, '0'))::uuid,
+  'authenticated',
+  'authenticated',
+  'b4-owner-' || test_owner || '@example.test',
+  'not-a-real-password',
+  now(),
+  '{"provider":"email","providers":["email"]}',
+  '{}',
+  now(),
+  now()
+from pg_catalog.generate_series(4, 13) as owners(test_owner);
+
 update public.profiles
 set role = 'admin'
 where id = '10000000-0000-0000-0000-000000000003';
@@ -68,6 +93,25 @@ insert into public.sdp_launches (
 values
   (91001, 'selling', 'B4 Test Launch', 'Test Township', 900000, current_date),
   (91002, 'upcoming', 'B4 Upcoming Launch', 'Test Township', 800000, current_date);
+
+select results_eq(
+  $$
+    select month, plan_a_limit, plan_b_limit
+    from public.monthly_limits
+    where month between date '2027-01-01' and date '2027-06-01'
+    order by month
+  $$,
+  $$
+    values
+      (date '2027-01-01', 5000000::numeric, 20000000::numeric),
+      (date '2027-02-01', 5000000::numeric, 20000000::numeric),
+      (date '2027-03-01', 5000000::numeric, 20000000::numeric),
+      (date '2027-04-01', 5000000::numeric, 20000000::numeric),
+      (date '2027-05-01', 5000000::numeric, 20000000::numeric),
+      (date '2027-06-01', 5000000::numeric, 20000000::numeric)
+  $$,
+  'monthly limits are seeded through June 2027'
+);
 
 insert into public.valuation_requests (
   id,
@@ -146,12 +190,70 @@ select is(
   'submission writes exactly one event'
 );
 
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000002';
+
+select lives_ok(
+  $$
+    select public.submit_application(
+      '20000000-0000-0000-0000-000000000002',
+      91001,
+      'Type A',
+      'B',
+      900000,
+      'from_price',
+      '2, Alias Test Street',
+      '40150',
+      true,
+      '{"status":"ok","estimate":800000,"low":700000,"high":900000,"confidence":"medium","scheme":"TEST SCHEME","district":"PETALING","is_sdp":true}',
+      '{"plan_a":{"offer":628000},"plan_b":{"floor":600000}}',
+      null
+    )
+  $$,
+  'submit_application accepts the B3 from_price alias'
+);
+
+select is(
+  (
+    select new_home_price_source
+    from public.applications
+    where valuation_id = '20000000-0000-0000-0000-000000000002'
+  ),
+  'price_from',
+  'the from_price alias is stored as price_from'
+);
+
+select throws_ok(
+  $$
+    select public.submit_application(
+      '20000000-0000-0000-0000-000000000002',
+      91001,
+      'Type B',
+      'B',
+      900000,
+      'from_price',
+      '3, Duplicate Test Street',
+      '40150',
+      true,
+      '{"status":"ok","estimate":800000,"low":700000,"high":900000,"confidence":"medium","scheme":"TEST SCHEME","district":"PETALING","is_sdp":true}',
+      '{"plan_a":{"offer":628000},"plan_b":{"floor":600000}}',
+      null
+    )
+  $$,
+  'P0001',
+  'You already have an active application',
+  'an owner receives a clear error when another active application exists'
+);
+
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+
 select throws_ok(
   $$
     update public.applications
     set status = 'accepted'
     where valuation_id = '20000000-0000-0000-0000-000000000001'
   $$,
+  '42501',
+  'permission denied for table applications',
   'owners have no direct update privilege on applications'
 );
 
@@ -170,6 +272,8 @@ select throws_ok(
       'forged_event'
     )
   $$,
+  '42501',
+  'permission denied for table application_events',
   'owners cannot forge application events directly'
 );
 
@@ -182,6 +286,8 @@ select throws_ok(
       '{}'::jsonb
     )
   $$,
+  '42501',
+  'admin access required',
   'an owner cannot call an admin action'
 );
 
@@ -196,6 +302,8 @@ select throws_ok(
       '{}'::jsonb
     )
   $$,
+  'P0002',
+  'application not found',
   'an owner cannot act on another owner application'
 );
 
@@ -439,6 +547,8 @@ select throws_ok(
       '{}'::jsonb
     )
   $$,
+  'P0001',
+  'formal offer review can only be requested once',
   'a second review request is rejected'
 );
 
@@ -474,7 +584,7 @@ insert into public.applications (
 values
   (
     '30000000-0000-0000-0000-000000000001',
-    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000004',
     '20000000-0000-0000-0000-000000000001',
     91001,
     'Type A',
@@ -494,7 +604,7 @@ values
   ),
   (
     '30000000-0000-0000-0000-000000000002',
-    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000005',
     '20000000-0000-0000-0000-000000000001',
     91001,
     'Type A',
@@ -514,7 +624,7 @@ values
   ),
   (
     '30000000-0000-0000-0000-000000000003',
-    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000006',
     '20000000-0000-0000-0000-000000000001',
     91001,
     'Type A',
@@ -534,7 +644,7 @@ values
   );
 
 set local role authenticated;
-set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000004';
 
 select lives_ok(
   $$select public.switch_plan('30000000-0000-0000-0000-000000000001', null, '{}'::jsonb)$$,
@@ -553,8 +663,12 @@ select results_eq(
 
 select throws_ok(
   $$select public.switch_plan('30000000-0000-0000-0000-000000000001', null, '{}'::jsonb)$$,
+  'P0001',
+  'plan can only be switched once per application',
   'a second plan switch is rejected independently of review_count'
 );
+
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000005';
 
 select lives_ok(
   $$select public.switch_plan('30000000-0000-0000-0000-000000000002', null, '{}'::jsonb)$$,
@@ -571,8 +685,12 @@ select results_eq(
   'B to A clears offer fields and requires a registered-valuer inspection'
 );
 
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000006';
+
 select throws_ok(
   $$select public.switch_plan('30000000-0000-0000-0000-000000000003', null, '{}'::jsonb)$$,
+  '22023',
+  'cannot switch to Plan A: old home is not in an SDP township',
   'an ineligible non-SDP home cannot switch from B to A'
 );
 
@@ -591,7 +709,7 @@ insert into public.applications (
 )
 values (
   '30000000-0000-0000-0000-000000000004',
-  '10000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000007',
   '20000000-0000-0000-0000-000000000001',
   91001,
   'Type A',
@@ -616,6 +734,8 @@ set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000003';
 
 select throws_ok(
   $$select public.issue_offer('30000000-0000-0000-0000-000000000004', null, '{}'::jsonb)$$,
+  'P0001',
+  'Plan A monthly limit exceeded: RM0 used + RM785000 offer > RM100 limit',
   'monthly limit blocks an offer before any application change'
 );
 
@@ -638,7 +758,7 @@ insert into public.applications (
 )
 values (
   '30000000-0000-0000-0000-000000000005',
-  '10000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000008',
   '20000000-0000-0000-0000-000000000001',
   91001,
   'Type A',
@@ -658,7 +778,7 @@ values (
 );
 
 set local role authenticated;
-set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000008';
 
 select lives_ok(
   $$select public.mark_espa_signed('30000000-0000-0000-0000-000000000005', null, '{}'::jsonb)$$,
@@ -669,6 +789,8 @@ set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000003';
 
 select throws_ok(
   $$select public.mark_listed('30000000-0000-0000-0000-000000000005', null, '{}'::jsonb)$$,
+  'P0001',
+  'admin must confirm the e-SPA before post-acceptance tracking',
   'post-acceptance tracking is blocked before admin e-SPA confirmation'
 );
 
@@ -727,6 +849,8 @@ set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
 
 select throws_ok(
   $$select * from public.admin_application_flags()$$,
+  '42501',
+  'admin access required',
   'owners cannot read admin application flags'
 );
 
@@ -742,7 +866,7 @@ insert into public.applications (
 values
   (
     '30000000-0000-0000-0000-000000000006',
-    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000009',
     '20000000-0000-0000-0000-000000000001',
     91001, 'Type A', 'B', 900000, 'price_from', '7, Test Street', '40150',
     true, 'indicative_sent', null, null, null, null,
@@ -751,7 +875,7 @@ values
   ),
   (
     '30000000-0000-0000-0000-000000000007',
-    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000010',
     '20000000-0000-0000-0000-000000000001',
     91001, 'Type A', 'B', 900000, 'price_from', '8, Test Street', '40150',
     true, 'offer_sent', 800000, 600000, now(), now() + interval '14 days',
@@ -760,7 +884,7 @@ values
   ),
   (
     '30000000-0000-0000-0000-000000000008',
-    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000011',
     '20000000-0000-0000-0000-000000000001',
     91001, 'Type A', 'B', 900000, 'price_from', '9, Test Street', '40150',
     true, 'under_review', null, null, null, null,
@@ -769,7 +893,7 @@ values
   ),
   (
     '30000000-0000-0000-0000-000000000009',
-    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000012',
     '20000000-0000-0000-0000-000000000001',
     91001, 'Type A', 'B', 900000, 'price_from', '10, Test Street', '40150',
     true, 'listed', 800000, 600000, now(), now() + interval '14 days',
@@ -778,7 +902,7 @@ values
   ),
   (
     '30000000-0000-0000-0000-000000000010',
-    '10000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000013',
     '20000000-0000-0000-0000-000000000001',
     91001, 'Type A', 'A', 900000, 'price_from', '11, Test Street', '40150',
     true, 'espa_signed', 800000, 628000, now(), now() + interval '14 days',
@@ -787,12 +911,14 @@ values
   );
 
 set local role authenticated;
-set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000009';
 
 select lives_ok(
   $$select public.withdraw_application('30000000-0000-0000-0000-000000000006', 'No longer proceeding', null, '{}'::jsonb)$$,
   'owner can withdraw after the indicative range'
 );
+
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000010';
 
 select lives_ok(
   $$select public.decline_offer('30000000-0000-0000-0000-000000000007', 'Not proceeding', null, '{}'::jsonb)$$,
