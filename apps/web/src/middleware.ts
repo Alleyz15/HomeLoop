@@ -1,6 +1,29 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Routes that need a signed-in user. Valuations require an account
+ * (页面与流程 原则 2), so the whole owner journey is included.
+ *
+ * The middleware only checks that someone is signed in. Role checks belong in
+ * the server components for those routes, so the role is read from the database
+ * rather than trusted from a token, and no database query runs on every request.
+ */
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/valuation",
+  "/new-home",
+  "/plans",
+  "/apply",
+  "/admin",
+];
+
+function isProtected(pathname: string): boolean {
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -30,9 +53,14 @@ export async function middleware(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;
 
-  if (!claims && request.nextUrl.pathname.startsWith("/dashboard")) {
+  if (!claims && isProtected(request.nextUrl.pathname)) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
+    redirectUrl.search = "";
+    redirectUrl.searchParams.set(
+      "next",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
 
     const redirectResponse = NextResponse.redirect(redirectUrl);
     response.cookies.getAll().forEach((cookie) => {
