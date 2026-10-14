@@ -54,6 +54,22 @@
 | 10/13 | Supabase Auth URL Configuration：Site URL 与 Redirect URLs（Vercel、localhost） | |
 | 10/14 | 4 份方案文件上传到 `docs/md-files/` | commit `9d303f6` |
 
+### 1.3 后端 B1 数据库
+
+完成日期：2026-10-14｜commit `2212c8e`
+
+- [x] `profiles.role`（`owner` / `admin`）与防止屋主自行升为 admin；`private.is_admin()` 和 admin RLS
+- [x] `road_catalog` materialized view：路名正规化、常见面积、占比、成交数、近 3 年成交数与搜索索引
+- [x] `sdp_launches` 表与导入器规格（资料由用户另行导入）
+- [x] `valuation_requests` 增加路名、单位类型、可信度与照片路径
+- [x] `applications` 表、状态与申请资料约束、owner/admin RLS
+- [x] `application_events` append-only 记录与 RLS
+- [x] `monthly_limits`、2026-10 至 2026-12 种子资料与 `monthly_limit_usage`
+- [x] `backtest_ratios` 表与导入器规格（资料由用户另行导入）
+- [x] 私有 Storage bucket `photos` 与本人目录/admin 读取政策
+- [x] `scripts/create_demo_users.py`（账号由用户另行建立；脚本不输出密码或 key）
+- [x] `scripts/import_csv.py --only`、预检查与测试；Supabase migrations 已推送并通过 RLS/权限验证
+
 ---
 
 ## 2. 待做：后端
@@ -62,16 +78,8 @@
 
 ### B1. 数据库（新 migration）
 
-- [ ] `profiles.role`：`owner` / `admin`，默认 `owner`；admin 可以读写所有申请（RLS）（原则 3）
-- [ ] **路名目录**（view 或 materialized view，由 `transactions` 汇总）：路名（JLN / JALAN 正规化）、期数、县、屋型、地契、常见地段与建筑面积、该面积占比、成交笔数、近 3 年笔数、是否 SDP（第 4 节）
-- [ ] `sdp_launches` 表 + 导入 `sdp_launches.csv`（放在 `data/processed/homeloop_data/`，CSV 不进 git）（第 5.1、6 节）
-- [ ] `valuation_requests` 增加栏位：路名、单位类型（中间 / 角头 / 自己输入）、照片路径
-- [ ] `applications` 表：所选方案、新屋与户型、新屋价格与来源（起价 / 用户填的报价）、完整地址、状态、初步报价区间、看屋结果（单位类型确认、屋况、确认后市价、调整原因）、正式报价、报价到期日（14 天）、复核次数、拒绝原因（第 3.3、5.5 节）
-- [ ] `application_events` 表：每次状态改变与操作的记录（谁、何时、做什么、原因）
-- [ ] `monthly_limits` 表：月份、方案 A 上限（假设 RM500 万）、方案 B 上限（假设 RM2,000 万）（原则 12）
-- [ ] `backtest_ratios` 表：187 笔回测误差比（风险模拟用）
-- [ ] Supabase Storage bucket `photos`：只有本人和 admin 能看
-- [ ] Demo 账号：1 个屋主、1 个 admin（关闭邮件验证）
+- [ ] 用户运行 `scripts/import_csv.py --only sdp_launches.csv,backtest_ratios.csv`；预期分别为 35 / 187 笔
+- [ ] 用户运行 `scripts/create_demo_users.py`，建立 1 个屋主与 1 个 admin demo 账号
 
 ### B2. 估价 API（FastAPI）
 
@@ -158,6 +166,7 @@
 | 估价服务测试曾在 health 用例卡住 | 待 B2 修复 |
 | 大部分新屋项目只公布起价 | 第 ③ 步用起价，允许用户填销售报价 |
 | 所有 CSV 被 `.gitignore` 排除 | 数据放 `data/processed/`，用脚本导入 |
+| `road_catalog` 的 Birai 验收笔数与任务文字不同 | 按指定的 trim/JLN 正规化后，`JLN BIRAI U8/69` 有 13 笔（其中 1 笔原始路名有前导空格）；常见地段 178 m²、建筑 190 m² 均符合预期 |
 
 ## 5. 已确定的关键数字（不要随意改）
 
