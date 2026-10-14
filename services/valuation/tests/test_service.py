@@ -194,6 +194,7 @@ def test_valuation_resolves_scheme_and_auto_fills_intermediate_sizes() -> None:
         road_norm=" Jalan Test ",
         scheme="SELECTED SCHEME",
         property_type="Terrace",
+        tenure="Freehold",
         unit_position="intermediate",
     )
 
@@ -216,6 +217,7 @@ def test_valuation_resolves_scheme_and_auto_fills_intermediate_sizes() -> None:
     assert result["disclaimer"] == DISCLAIMER
     assert result["model_version"] == MODEL_VERSION
     assert result["note"] is None
+    assert result["tenure"] == "Freehold"
 
 
 def test_non_sdp_result_includes_plan_b_note() -> None:

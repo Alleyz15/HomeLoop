@@ -14,6 +14,7 @@ CATALOG_COLUMNS = (
     "typical_floor_sqm,typical_share,n_recent_3y,n_total"
 )
 TRANSACTION_COLUMNS = "id,land_sqm,floor_sqm,price,ym,likely_primary"
+LAUNCH_COLUMNS = "id,tier,project,price_from_rm"
 
 
 def normalize_road(value: str) -> str:
@@ -147,6 +148,16 @@ class ValuationRepository:
             if len(page) < page_size:
                 return rows
             offset += page_size
+
+    def launch_by_id(self, launch_id: int) -> dict[str, Any] | None:
+        response = (
+            self.client.table("sdp_launches")
+            .select(LAUNCH_COLUMNS)
+            .eq("id", launch_id)
+            .limit(1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
 
 
 def get_repository() -> ValuationRepository:
