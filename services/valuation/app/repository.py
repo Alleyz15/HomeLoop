@@ -15,6 +15,17 @@ CATALOG_COLUMNS = (
 )
 TRANSACTION_COLUMNS = "id,land_sqm,floor_sqm,price,ym,likely_primary"
 LAUNCH_COLUMNS = "id,tier,project,price_from_rm"
+BACKTEST_COLUMNS = "id,township,scheme,ptype,actual_price,predicted_price,ratio"
+
+# The 187 backtest rows are fixed reference data and never change at runtime.
+_backtest_cache: list[dict[str, Any]] | None = None
+
+
+def clear_backtest_cache() -> None:
+    """Drop the cached backtest rows. Used by tests."""
+
+    global _backtest_cache
+    _backtest_cache = None
 
 
 def normalize_road(value: str) -> str:
@@ -208,6 +219,33 @@ class ValuationRepository:
             .execute()
         )
         return bool(any_row.data)
+
+    def backtest_ratios(self) -> list[dict[str, Any]]:
+        """All backtest error ratios, read once and cached for the process."""
+
+        global _backtest_cache
+        if _backtest_cache is not None:
+            return _backtest_cache
+
+        rows: list[dict[str, Any]] = []
+        page_size = 1000
+        offset = 0
+        while True:
+            response = (
+                self.client.table("backtest_ratios")
+                .select(BACKTEST_COLUMNS)
+                .order("id")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            page = response.data or []
+            rows.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
+
+        _backtest_cache = rows
+        return rows
 
     def launch_by_id(self, launch_id: int) -> dict[str, Any] | None:
         response = (

@@ -9,10 +9,12 @@ from app.schemas import (
     PlanQuoteRequest,
     PlanQuoteResponse,
     RoadResult,
+    SimulatorRequest,
+    SimulatorResponse,
     ValuationRequest,
     ValuationResponse,
 )
-from app.service import perform_plan_quote, perform_valuation
+from app.service import perform_plan_quote, perform_simulation, perform_valuation
 
 app = FastAPI(
     title="HomeLoop Valuation Service",
@@ -88,3 +90,18 @@ def quote_plans(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
+
+
+@app.post(
+    "/simulator/run",
+    response_model=SimulatorResponse,
+    dependencies=[Depends(require_internal_key)],
+)
+def run_simulator(
+    request: SimulatorRequest,
+    repository: Annotated[ValuationRepository, Depends(get_repository)],
+) -> dict[str, object]:
+    try:
+        return perform_simulation(request, repository)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error

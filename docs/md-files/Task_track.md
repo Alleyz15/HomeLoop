@@ -112,13 +112,27 @@
 - 正式报价阶段每份申请只可换方案一次（`plan_switch_count`，与一次复核分开计算）：B → A 重新检查方案 A 资格、清空报价并回到 `inspection_scheduled` 等注册估价师；A → B 用已确认市价重新计算 75% 保底、检查额度并发出新的 14 天报价。
 - 屋主从 `accepted` 标记 e-SPA 已签后进入 `espa_signed`；admin 以 `espa_confirmed_at` / `espa_confirmed_by` 确认，不新增状态。所有挂牌及之后的追踪动作必须等 admin 确认。
 
-### 1.7 B2 估价 API 修正（2026-10-14，未 commit）
+### 1.7 B2 估价 API 修正（2026-10-14，commit `d5056d7`）
 
 针对 B1–B3 代码审查发现的问题，已修正并以真实资料验证（golden test 仍通过，估价数字不变）：
 
 - [x] **参考成交月份差一个月**：`ym` 实际是 `年 + (月 - 1) / 12`（已用资料验证：`yr=2024` 的 `ym` 为 2024.0–2024.9167；最新 `ym` 2026.4167 = 2026 年 6 月，与资料范围一致）。原本 12 个月有 11 个显示早一个月，1 月只是因为下限截断才正确。例：Birai RM780,000 那笔 `ym=2023.9166667` 是 2023 年 12 月，原本显示 2023-11，现已更正。
 - [x] **`/roads` 会漏掉屋型**：原本 `.limit(limit * 10)` 是按「列」截断，再分组取前 N 条路，所以一条路较少见的屋型可能被切掉（第 ① 页第 2 步因此选不到自己的屋型）。改为先排序取出要显示的路，再回查这些路的全部 catalog 列。实测 `JLN BIRAI U8/66` 现在正确显示 `2 - 2 1/2 Storey Terraced` 与 `Cluster House`。
 - [x] **高楼产业回传误导性结果**：高楼成交的 `floor` 为空、`road` 是空白字串，所以根本进不了 `road_catalog`，屋主只会看到 `not_found` 或「资料不足」。新增 `unsupported_property_type` 状态与说明（需注册估价师人工估价），`not_found` 只保留给真的不存在的路或期数。
+
+### 1.8 后端 B6 风险模拟 API
+
+完成日期：2026-10-14
+
+- [x] `POST /simulator/run`（受 `X-Internal-Key` 保护）：拉杆参数全部可选，预设值直接取自 `app/plans/constants.py`，没有重复写死任何数字
+- [x] 压力测试方法完全照《商业模式》第 5 节：实现市价 = 估价 × 误差比 ×（1 − 跌幅）；**方案 B 补差额 = max(0, 保底比例 − 误差比 ×（1 − 跌幅）×（1 − 3.2% − 1.2%））**，即保底价对比屋主扣掉代理费与律师费后的**净收款**；**方案 A 旧屋盈亏 = 误差比 ×（1 − 跌幅）×（1 − 成本 11.5%）− 收购率 78.5%**，即 11.5% 成本是按**转售价**计算
+- [x] 以线上 187 笔 `backtest_ratios`（anon key 只读、进程内缓存）重现《商业模式》第 5 节整张表：方案 A 平均 +12.3% / +7.7% / +3.2% / −5.9%，亏损单 15% / 30% / 47% / 72%；方案 B 触发 6% / 9% / 13% / 45%，平均成本 0.45% / 0.70% / 1.08% / 3.29% —— **八个数字全部吻合**
+- [x] 输出 `n_cases`、方案 B（触发比例、每单平均、触发时平均、p90、最大）、方案 A（亏损比例、每单平均、平均百分比、p10）、10 格误差比直方图（供 A3 图表，格数合计 = n_cases）、使用的参数、`model_version` 与「这是基于历史回测误差的模拟、不是预测」说明
+- [x] 可选 township 筛选（例：Bukit Jelutong 38 笔）
+- [x] 30 项离线单元测试（纯函数以小 fixture 验证、参数越界回 422、无 key 回 401、直方图合计）＋ 9 项 integration benchmark（无环境变量时 skip），把《商业模式》的数字钉成验收契约
+- [x] `apps/web/src/lib/valuation.ts` 新增 server-only `simulate()` 与完整型别
+
+**金额基准（重要，给 A3 前端）：** 文件第 5 节的原生结果是**占估价的百分比**，RM3,500 / RM26,000 是把百分比套在文件示例的 RM786,000 估价上得出的，不是 187 笔的 RM 平均。所以回传三种基准：`avg_topup_pct_of_valuation`（原生，完全吻合文件）、`avg_topup_per_deal`（按 `reference_valuation_rm` 换算，预设 786,000，得 RM3,549 / RM25,863，与文件差 1.4% / 0.5%）、`avg_topup_per_deal_sample_weighted`（按每笔自己的估价平均，得 RM7,354 / RM36,953 —— 因为 187 笔的平均估价是 RM944,511，远高于 786,000）。A3 页面要显示百分比，或显示 RM 时必须标明用的是哪个估价。
 
 ---
 
@@ -128,7 +142,7 @@
 
 ### B1. 数据库（新 migration）
 
-- [ ] 用户运行 `scripts/import_csv.py --only sdp_launches.csv,backtest_ratios.csv`；预期分别为 35 / 187 笔
+- [x] 2026-10-14 已确认线上 `backtest_ratios` 有 187 笔、`sdp_launches` 有 35 笔（本机 CSV 在 `data/homeloop_data/`，不是 README 写的 `data/processed/homeloop_data/`）
 - [ ] 用户运行 `scripts/create_demo_users.py`，建立 1 个屋主与 1 个 admin demo 账号
 
 ### B2. 估价 API 部署（用户操作）
@@ -145,7 +159,7 @@
 
 ### B6. 风险模拟 API
 
-- [ ] 输入：保底比例、方案 A 缓冲、成本、房价下跌幅度；输出：需补差额或会亏损的比例、每单平均成本、每单平均盈利（用 `backtest_ratios`）
+- [x] 2026-10-14 完成，见 1.8。输入：保底比例、方案 A 缓冲、成本、代理费/律师费、房价下跌幅度、township；输出：需补差额或会亏损的比例、每单平均成本、每单平均盈利、直方图（用 `backtest_ratios`）
 
 ---
 
@@ -204,6 +218,7 @@
 | 每月额度按 UTC 月份计算 | `monthly_limit_usage` 与 `issue_offer` 的 `date_trunc('month', ...)` 用 session 时区（Supabase 预设 UTC）。马来西亚时间 11 月 1 日 02:00 发出的报价会算进 10 月。两处一致，所以不会重复计算，只是月份归属不对 |
 | `monthly_limits` 只种子到 2026-12 | `check_monthly_limit` 找不到当月列时会直接报错（fail closed，行为正确）。2027-01 起所有报价都会失败，长期使用前要补列 |
 | `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
+| 风险模拟的 RM 金额要标明估价基准 | 《商业模式》第 5 节算的是**占估价的百分比**；RM3,500 / RM26,000 是套在示例的 RM786,000 上。187 笔的平均估价是 RM944,511，所以按每笔自己估价平均会得到 RM7,354 / RM36,953。`/simulator/run` 三种基准都回传，A3 优先显示百分比 |
 | B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此这些数值只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额 |
 
 ## 5. 已确定的关键数字（不要随意改）

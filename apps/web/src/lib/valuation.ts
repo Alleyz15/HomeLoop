@@ -137,6 +137,63 @@ export type PlanQuoteResponse = {
   model_version: string;
 };
 
+export type SimulatorInput = {
+  plan_b_floor_ratio?: number;
+  plan_a_cost_pct?: number;
+  plan_a_buffer_pct?: number;
+  seller_agent_pct?: number;
+  seller_legal_pct?: number;
+  price_drop_pct?: number;
+  reference_valuation_rm?: number;
+  township?: string | null;
+};
+
+export type SimulatorInputsUsed = {
+  plan_b_floor_ratio: number;
+  plan_a_cost_pct: number;
+  plan_a_buffer_pct: number;
+  plan_a_offer_rate: number;
+  seller_agent_pct: number;
+  seller_legal_pct: number;
+  plan_b_net_rate: number;
+  price_drop_pct: number;
+  reference_valuation_rm: number;
+  township: string | null;
+};
+
+export type SimulatorHistogramBin = {
+  lower: number;
+  upper: number;
+  count: number;
+};
+
+export type SimulatorResponse = {
+  n_cases: number;
+  plan_b: {
+    share_needing_topup: number;
+    /** Mean top-up in RM, restated at `inputs.reference_valuation_rm`. */
+    avg_topup_per_deal: number;
+    avg_topup_when_triggered: number;
+    p90_topup: number;
+    max_topup: number;
+    /** The primitive result: mean top-up as a share of the valuation. */
+    avg_topup_pct_of_valuation: number;
+    /** Mean top-up in RM using each backtest case's own valuation. */
+    avg_topup_per_deal_sample_weighted: number;
+  };
+  plan_a: {
+    share_loss_making: number;
+    avg_profit_per_deal: number;
+    avg_profit_pct: number;
+    p10_profit_pct: number;
+    avg_profit_per_deal_sample_weighted: number;
+  };
+  ratio_histogram: SimulatorHistogramBin[];
+  inputs: SimulatorInputsUsed;
+  model_version: string;
+  note: string;
+};
+
 function getApiConfig(): { baseUrl: string; internalKey: string } {
   const baseUrl = process.env.VALUATION_API_URL;
   const internalKey = process.env.VALUATION_INTERNAL_KEY;
@@ -194,6 +251,15 @@ export function searchRoads(q: string, limit = 10): Promise<RoadResult[]> {
 
 export function quotePlans(input: PlanQuoteInput): Promise<PlanQuoteResponse> {
   return valuationApi<PlanQuoteResponse>("/plans/quote", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function simulate(
+  input: SimulatorInput = {},
+): Promise<SimulatorResponse> {
+  return valuationApi<SimulatorResponse>("/simulator/run", {
     method: "POST",
     body: JSON.stringify(input),
   });
