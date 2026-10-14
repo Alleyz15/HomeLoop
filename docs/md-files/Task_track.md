@@ -147,6 +147,20 @@
 - [x] `npm run build` 通过（11 条路由）、`tsc --noEmit` 与 `eslint` 乾净
 - [x] 实机验证（本机 dev + 线上 Supabase）：7 条受保护路由全部 307 导向 `/login?next=…`；`/`、`/login`、`/guide` 保持 200；未登入的导航只有 `HomeLoop｜Home｜Sign in`，没有漏出屋主或 admin 选单
 
+### 1.10 前端 F2（第一段）：Welcome、估价输入、估价结果
+
+完成日期：2026-10-15
+
+- [x] `src/lib/valuations.ts`：server-only `saveValuation()` / `getValuation()` / `getRoadMeta()`。**补上了之前缺的一环**：原本没有任何程式写入 `valuation_requests`，而 B4 的 `submit_application` 需要一个真实的 `p_valuation_id`，现在估价完成就会存一笔并取得 id
+- [x] 估不出价（资料不足）的请求也会存，金额留 null，屋主仍有纪录、之后也能据此送申请
+- [x] `src/lib/units.ts`：m² ↔ sq ft 换算、排屋尺寸快捷、RM 格式化
+- [x] `src/app/valuation/actions.ts`：`findRoads`（走 B2 `/roads`）与 `createValuation`（走 B2 `/valuate` → 存档 → 导向结果页），全部 server action，内部 key 不会进浏览器
+- [x] `is_sdp` / `district` / `tenure_mode` 直接读 `road_catalog`（authenticated 有 select 权限），**不新增 migration**；`valuation_requests` 没有 `is_sdp` 栏位，这样就不用改表
+- [x] `npm run build`（11 条路由）、`tsc --noEmit`、`eslint` 全部乾净
+- [x] 静态核对过 insert 的 13 个栏位都存在，且 `unit_position` / `confidence` 的 CHECK 约束与送出的值相符
+
+**未验证**：`/valuation` 受登入保护，而 demo 帐号还没建立，所以整条「搜路名 → 估价 → 存档 → 结果页」尚未用真实 session 跑过。Render 的 `/roads` 与 `/valuate` 已单独验证可用。
+
 ---
 
 ## 2. 待做：后端
@@ -189,10 +203,12 @@
 
 ### F2. 屋主端
 
-- [ ] Welcome 页（`/`）：先做普通版（标题、一句话介绍、按钮），正式设计之后再定
+- [x] 2026-10-15 Welcome 页（`/`）：普通版（标题、一句话介绍、按钮）；已登入时直接显示「去我的 Dashboard」
 - [ ] Dashboard（`/dashboard`）：8 格进度条 + 依状态变化的简略卡片 → 点进去看详细页；方案 B 显示挂牌子进度（第 5.6 节）
-- [ ] ① 估价输入（`/valuation`）：路名搜索（自动带出期数与是否 SDP）→ 屋型 → 单位类型（中间单位自动带入面积）→ 地契 → 照片上传（可选）；m² / sq ft 切换；找不到路名时改用期数搜索（第 4 节）
-- [ ] ② 估价结果（`/valuation/result/[id]`）：区间与中间值、可信度、10 笔参考成交表、AI 白话解说、免责声明；资料不足时显示提示；非 SDP 旧屋提示只适用方案 B
+- [x] 2026-10-15 ① 估价输入（`/valuation`）：路名搜索（JALAN/JLN 同字、自动带出期数、县与是否 SDP 标签）→ 屋型（只列这条路真实成交过的，附近 3 年笔数与常见面积）→ 单位类型（中间单位自动带入常见面积并显示占比；角头/自填则手动输入）→ 地契；m² / sq ft 切换会换算已输入的数字；排屋 20×70 / 22×75 / 22×80 尺快捷按钮；搜不到路名时提示改用期数或 township（第 4 节）
+  - [ ] **还没做**：照片上传（第 4 节标为可选）。需要 Supabase Storage `photos` bucket 的本人目录上传
+- [x] 2026-10-15 ② 估价结果（`/valuation/result/[id]`）：区间与中间值、可信度（三档各自的白话说明）、10 笔参考成交表（月份、地段、建筑、价格、每平方米）、Act 242 免责声明在页脚；资料不足时不显示数字、改为说明少于 10 笔并建议人工估价；非 SDP 旧屋显示「只适用方案 B」卡片
+  - [ ] **还没做**：AI 白话解说（属 B5，交给 Codex；版面已留位置）
 - [ ] ③ 选新屋（`/new-home`）：在售项目卡片 + 「即将推出」分页（登记兴趣）→ 项目详情 → 选户型 → 价格默认起价、可填销售报价 → 显示差额与价格来源（第 5.1、5.3 节）
 - [ ] ④ 选方案（`/plans`）：方案 A / B 两张卡片 + 引导问题（能否先付 10% 订金）→ 详细计算 → 确认；不符合资格时方案 A 变灰并说明原因（第 5.3 节）
 - [ ] ⑤ 换屋计划书 + 提交申请（`/apply`，同一页）：时间线、资金进出、订金缺口提醒、要准备的东西、RPGT 提醒；下半部填门牌、地契号码（可选）、PDPA 同意（第 5.3、5.4 节）
