@@ -76,7 +76,7 @@ select
   '{}',
   now(),
   now()
-from pg_catalog.generate_series(4, 13) as owners(test_owner);
+from pg_catalog.generate_series(4, 14) as owners(test_owner);
 
 update public.profiles
 set role = 'admin'
@@ -979,6 +979,72 @@ select results_eq(
     ('30000000-0000-0000-0000-000000000010'::uuid, 1::bigint)
   $$,
   'withdraw, decline, reject, guarantee, and Plan A completion each write exactly one event'
+);
+
+reset role;
+
+insert into public.applications (
+  id, user_id, valuation_id, launch_id, unit_type, plan,
+  new_home_price, new_home_price_source, address_line, postcode,
+  pdpa_consent, status, confirmed_value, offer_amount,
+  offer_sent_at, offer_expires_at, valuation_snapshot, plan_quote_snapshot
+)
+values (
+  '30000000-0000-0000-0000-000000000011',
+  '10000000-0000-0000-0000-000000000014',
+  '20000000-0000-0000-0000-000000000001',
+  91001,
+  'Type A',
+  'A',
+  1200000,
+  'sales_quote',
+  '12, Test Street',
+  '40150',
+  true,
+  'accepted',
+  5100000,
+  4000000,
+  '2026-10-31 17:00:00+00'::timestamptz,
+  '2026-11-14 17:00:00+00'::timestamptz,
+  '{"status":"ok","estimate":5100000,"low":4900000,"high":5300000,"confidence":"high","scheme":"TEST SCHEME","district":"PETALING","is_sdp":true}',
+  '{}'
+);
+
+select is(
+  (
+    select plan_a_used
+    from public.monthly_limit_usage
+    where month = '2026-11-01'::date
+  ),
+  4000000::numeric,
+  '2026-11-01 01:00 MYT is attributed to the November monthly usage'
+);
+
+select throws_ok(
+  $$
+    select private.check_monthly_limit(
+      'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      'A',
+      1100000,
+      '2026-11-01'::date
+    )
+  $$,
+  'P0001',
+  'Plan A monthly limit exceeded: RM4000000 used + RM1100000 offer > RM5000000 limit',
+  'monthly-limit enforcement counts the MYT boundary offer in November'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000003';
+
+select is(
+  (
+    select quota_near
+    from public.admin_application_flags()
+    where application_id = '30000000-0000-0000-0000-000000000011'
+  ),
+  true,
+  'admin quota-near flag uses the same Kuala Lumpur month boundary'
 );
 
 select * from finish();
