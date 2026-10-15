@@ -203,7 +203,9 @@ def calculate_plan_quote(
     expected_net = plan_b_net(estimate)
     expected_net_low = plan_b_net(low)
     expected_net_high = plan_b_net(high)
-    net_at_floor = plan_b_net(floor)
+    # When the guarantee triggers, SDP purchases directly at the floor. There
+    # is no estate-agent sale and therefore no agent or seller-legal deduction.
+    net_at_floor = floor
 
     plan_a_reasons: list[str] = []
     if not is_sdp:
@@ -300,11 +302,10 @@ def calculate_plan_quote(
                     "plan_b.expected_net",
                     "plan_b.expected_net_low",
                     "plan_b.expected_net_high",
-                    "plan_b.net_at_floor",
                     "plan_b.price_gap",
                 ],
                 "assumption": True,
-                "note": "Expected net assumes 3.2% agent fees and 1.2% legal fees.",
+                "note": "Open-market expected net assumes 3.2% agent fees and 1.2% legal fees; the guarantee floor is a direct SDP purchase without those deductions.",
             },
             {
                 "fields": ["plan_b.rpgt_retention"],

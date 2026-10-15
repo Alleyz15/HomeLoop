@@ -65,11 +65,23 @@ def test_golden_plan_formulas_and_ranges() -> None:
     assert result["plan_b"]["expected_net"] == 751_067
     assert result["plan_b"]["expected_net_low"] == 709_473
     assert result["plan_b"]["expected_net_high"] == 839_118
-    assert result["plan_b"]["net_at_floor"] == 563_300
+    assert result["plan_b"]["net_at_floor"] == 589_226
 
 
 def test_money_rounding_uses_conventional_half_up() -> None:
     assert round_rm(100.5) == 101
+
+
+def test_guarantee_floor_has_no_open_market_fee_deduction() -> None:
+    result = calculate_plan_quote(
+        valuation={**GOLDEN_VALUATION, "estimate": 786_000},
+        new_home_name="Serenia Baleria 1 & 2",
+        new_home_price=809_888,
+        price_source="from_price",
+    )
+
+    assert result["plan_b"]["floor"] == 589_500
+    assert result["plan_b"]["net_at_floor"] == 589_500
 
 
 def test_deposits_price_gaps_and_rpgt_retention_use_the_correct_bases() -> None:
