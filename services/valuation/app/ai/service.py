@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -61,22 +61,19 @@ class GenerationOutcome:
     model: str | None = None
 
 
-class _ModelChainError(Exception):
-    def __init__(self, error: BaseException, models_tried: list[str]) -> None:
-        super().__init__(type(error).__name__)
-        self.error = error
-        self.models_tried = tuple(models_tried)
-
-    @property
-    def code(self) -> int | None:
-        return _http_status(self.error)
+AttemptOutcome = Literal["ok", "timeout", "503", "429", "error"]
 
 
-def _model_chain_error_detail(error: _ModelChainError) -> str:
-    detail = _api_error_detail(error.error)
-    if len(error.models_tried) > 1:
-        detail += " models_tried=" + ",".join(error.models_tried)
-    return detail
+@dataclass(frozen=True)
+class _AttemptResult:
+    model: str
+    outcome: AttemptOutcome
+    elapsed_ms: int
+    response: Any | None = None
+    error: BaseException | None = None
+
+    def summary(self) -> str:
+        return f"{self.model}:{self.outcome}:{self.elapsed_ms}ms"
 
 
 class _ResultCache:
@@ -190,7 +187,7 @@ def _http_status(error: BaseException) -> int | None:
 
 def _is_timeout_error(error: BaseException) -> bool:
     return (
-        isinstance(error, TimeoutError)
+        isinstance(error, (TimeoutError, FutureTimeoutError))
         or "timeout" in type(error).__name__.casefold()
     )
 
@@ -249,7 +246,16 @@ class AiService:
             self._client = genai.Client(
                 api_key=self.settings.gemini_api_key,
                 http_options=types.HttpOptions(
-                    timeout=max(1, round(self.settings.gemini_timeout_seconds * 1000))
+                    timeout=max(
+                        1,
+                        round(
+                            min(
+                                self.settings.gemini_timeout_seconds,
+                                self.settings.gemini_attempt_timeout_seconds,
+                            )
+                            * 1000
+                        ),
+                    )
                 ),
             )
         return self._client
@@ -292,13 +298,12 @@ class AiService:
 
         prompt = _load_prompt(prompt_name)
         deadline = time.monotonic() + self.settings.gemini_timeout_seconds
+        attempts: list[_AttemptResult] = []
 
-        def ensure_time_remaining() -> None:
-            if time.monotonic() >= deadline:
-                raise TimeoutError()
+        def time_remaining() -> float:
+            return max(0.0, deadline - time.monotonic())
 
         def invoke(*, model: str, thinking_budget: int | None) -> Any:
-            ensure_time_remaining()
             return self._get_client().models.generate_content(
                 model=model,
                 contents=json.dumps(payload, sort_keys=True, ensure_ascii=False),
@@ -336,102 +341,160 @@ class AiService:
                     )
             raise RuntimeError("thinking fallback chain exhausted")
 
-        def call() -> tuple[Any, str]:
-            primary_model = self.settings.gemini_model
+        def run_attempt(model: str, *, thinking_fallback: bool) -> _AttemptResult | None:
+            remaining = time_remaining()
+            if remaining <= 0:
+                return None
+            wait_seconds = min(
+                max(0.001, self.settings.gemini_attempt_timeout_seconds),
+                remaining,
+            )
+            executor = ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="gemini-attempt",
+            )
+            if thinking_fallback:
+                operation = lambda: invoke_with_thinking_fallback(model)
+            else:
+                operation = lambda: invoke(model=model, thinking_budget=0)
+            started = time.monotonic()
+            future = executor.submit(operation)
             try:
-                response = invoke_with_thinking_fallback(primary_model)
-            except Exception as error:
-                status = _http_status(error)
-                if status not in {429, 503}:
-                    raise
+                response = future.result(timeout=wait_seconds)
+                outcome: AttemptOutcome = "ok"
+                error: BaseException | None = None
+            except Exception as caught:
+                future.cancel()
+                response = None
+                error = caught
+                status = _http_status(caught)
+                if _is_timeout_error(caught):
+                    outcome = "timeout"
+                elif status == 503:
+                    outcome = "503"
+                elif status == 429:
+                    outcome = "429"
+                else:
+                    outcome = "error"
+            finally:
+                elapsed_ms = max(0, round((time.monotonic() - started) * 1000))
+                executor.shutdown(wait=False, cancel_futures=True)
+
+            attempt = _AttemptResult(
+                model=model,
+                outcome=outcome,
+                elapsed_ms=elapsed_ms,
+                response=response,
+                error=error,
+            )
+            attempts.append(attempt)
+            logger.info(
+                "AI attempt endpoint=%s model=%s outcome=%s elapsed_ms=%s",
+                endpoint,
+                model,
+                outcome,
+                elapsed_ms,
+            )
+            return attempt
+
+        def failure(last_attempt: _AttemptResult | None) -> GenerationOutcome:
+            detail = "; ".join(attempt.summary() for attempt in attempts)
+            if last_attempt is None or last_attempt.outcome == "timeout":
+                reason: FallbackReason = "timeout"
+            elif last_attempt.outcome == "503":
+                reason = "unavailable"
+            elif last_attempt.outcome == "429":
+                reason = "rate_limited"
+            else:
+                reason = "api_error"
+
+            error = last_attempt.error if last_attempt is not None else None
+            if error is not None and _error_contains_html(error):
+                reason = "api_error"
+                safe_error = (
+                    "request rejected before reaching the model — "
+                    "check API key format"
+                )
+                detail = f"{detail}; {safe_error}" if detail else safe_error
+            elif (
+                error is not None
+                and last_attempt is not None
+                and last_attempt.outcome == "error"
+            ):
+                safe_error = _api_error_detail(error)
+                detail = f"{detail}; {safe_error}" if detail else safe_error
+
+            return GenerationOutcome(
+                fallback_reason=reason,
+                fallback_detail=detail or None,
+            )
+
+        primary_model = self.settings.gemini_model
+        response: Any | None = None
+        response_model: str | None = None
+        attempt = run_attempt(primary_model, thinking_fallback=True)
+        if attempt is None:
+            return failure(None)
+        if attempt.outcome == "ok":
+            response = attempt.response
+            response_model = primary_model
+        else:
+            last_attempt = attempt
+            if attempt.outcome in {"503", "429"}:
                 logger.warning(
                     "AI transient retry endpoint=%s status=%s "
                     "delay_seconds=%s model=%s",
                     endpoint,
-                    status,
+                    attempt.outcome,
                     TRANSIENT_RETRY_DELAY_SECONDS,
                     primary_model,
                 )
-                if time.monotonic() + TRANSIENT_RETRY_DELAY_SECONDS >= deadline:
-                    raise TimeoutError() from error
-                time.sleep(TRANSIENT_RETRY_DELAY_SECONDS)
-                ensure_time_remaining()
-                try:
-                    response = invoke_with_thinking_fallback(primary_model)
-                except Exception as retry_error:
-                    if _http_status(retry_error) not in {429, 503}:
-                        raise
-                    models_tried = [primary_model]
-                    last_error: BaseException = retry_error
-                    for fallback_model in self.settings.gemini_fallback_model_list:
-                        if fallback_model in models_tried:
-                            continue
-                        models_tried.append(fallback_model)
-                        try:
-                            fallback_response = invoke(
-                                model=fallback_model,
-                                thinking_budget=0,
-                            )
-                        except Exception as fallback_error:
-                            if _http_status(fallback_error) not in {429, 503}:
-                                raise
-                            last_error = fallback_error
-                            continue
+                if time_remaining() > TRANSIENT_RETRY_DELAY_SECONDS:
+                    time.sleep(TRANSIENT_RETRY_DELAY_SECONDS)
+                    retry = run_attempt(primary_model, thinking_fallback=True)
+                    if retry is not None:
+                        last_attempt = retry
+                        if retry.outcome == "ok":
+                            response = retry.response
+                            response_model = primary_model
+                        elif retry.outcome not in {"timeout", "503", "429"}:
+                            return failure(retry)
+            elif attempt.outcome != "timeout":
+                return failure(attempt)
+
+            if response_model is None:
+                tried_models = {primary_model}
+                for fallback_model in self.settings.gemini_fallback_model_list:
+                    if fallback_model in tried_models or time_remaining() <= 0:
+                        continue
+                    tried_models.add(fallback_model)
+                    fallback_attempt = run_attempt(
+                        fallback_model,
+                        thinking_fallback=False,
+                    )
+                    if fallback_attempt is None:
+                        break
+                    last_attempt = fallback_attempt
+                    if fallback_attempt.outcome == "ok":
                         logger.info(
                             "AI fallback_model used endpoint=%s primary=%s fallback=%s",
                             endpoint,
                             primary_model,
                             fallback_model,
                         )
-                        return fallback_response, fallback_model
-                    raise _ModelChainError(last_error, models_tried) from last_error
-            return response, primary_model
+                        response = fallback_attempt.response
+                        response_model = fallback_model
+                        break
+                    if fallback_attempt.outcome not in {"timeout", "503", "429"}:
+                        return failure(fallback_attempt)
+                else:
+                    return failure(last_attempt)
 
-        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gemini")
-        future = executor.submit(call)
-        try:
-            response, response_model = future.result(
-                timeout=self.settings.gemini_timeout_seconds
-            )
-        except Exception as error:
-            future.cancel()
-            if _is_timeout_error(error):
-                return GenerationOutcome(
-                    fallback_reason="timeout",
-                    fallback_detail=(
-                        f"timeout_seconds={self.settings.gemini_timeout_seconds:g}"
-                    ),
-                )
-            status = _http_status(error)
-            detail = (
-                _model_chain_error_detail(error)
-                if isinstance(error, _ModelChainError)
-                else _api_error_detail(error)
-            )
-            if _error_contains_html(error):
-                return GenerationOutcome(
-                    fallback_reason="api_error",
-                    fallback_detail=(
-                        "request rejected before reaching the model — "
-                        "check API key format"
-                    ),
-                )
-            if status == 503:
-                return GenerationOutcome(
-                    fallback_reason="unavailable",
-                    fallback_detail=detail,
-                )
-            if status == 429:
-                return GenerationOutcome(
-                    fallback_reason="rate_limited",
-                    fallback_detail=detail,
-                )
-            return GenerationOutcome(
-                fallback_reason="api_error",
-                fallback_detail=detail,
-            )
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            if response_model is None:
+                return failure(last_attempt)
+
+        if response is None:
+            return failure(attempt)
 
         thought_tokens = _thought_tokens(response)
         logger.info(

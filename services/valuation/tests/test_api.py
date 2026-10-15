@@ -42,6 +42,7 @@ class ValuationApiSecurityTests(unittest.TestCase):
                 "gemini_max_output_tokens",
                 "gemini_top_p",
                 "gemini_timeout_seconds",
+                "gemini_attempt_timeout_seconds",
             },
         )
         self.assertNotIn("supabase_service_role_key", config.Settings.model_fields)

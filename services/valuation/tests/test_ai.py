@@ -450,6 +450,142 @@ def test_sdk_timeout_falls_back_to_template() -> None:
     assert "RM785,635" in result["text"]
 
 
+def test_primary_attempt_timeout_moves_to_fallback_model(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="app.ai.service")
+    calls: list[str] = []
+
+    def generate(**kwargs: object) -> SimpleNamespace:
+        model = str(kwargs["model"])
+        calls.append(model)
+        if model == "gemini-primary":
+            time.sleep(0.06)
+        return sdk_response(generated_explanation())
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_model="gemini-primary",
+                gemini_fallback_models="gemini-fallback",
+                gemini_attempt_timeout_seconds=0.01,
+                gemini_timeout_seconds=0.2,
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "llm"
+    assert result["model"] == "gemini-fallback"
+    assert calls == ["gemini-primary", "gemini-fallback"]
+    assert (
+        "AI attempt endpoint=explain-valuation model=gemini-primary "
+        "outcome=timeout elapsed_ms="
+    ) in caplog.text
+    assert (
+        "AI attempt endpoint=explain-valuation model=gemini-fallback "
+        "outcome=ok elapsed_ms="
+    ) in caplog.text
+
+
+def test_all_attempt_timeouts_return_template_with_attempt_list() -> None:
+    def slow_generation(**_: object) -> SimpleNamespace:
+        time.sleep(0.08)
+        return sdk_response(generated_explanation())
+
+    client = SimpleNamespace(
+        models=SimpleNamespace(generate_content=slow_generation)
+    )
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_model="gemini-primary",
+                gemini_fallback_models="gemini-fallback-1,gemini-fallback-2",
+                gemini_attempt_timeout_seconds=0.01,
+                gemini_timeout_seconds=0.1,
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == "timeout"
+    assert result["fallback_detail"] is not None
+    assert "gemini-primary:timeout:" in result["fallback_detail"]
+    assert "gemini-fallback-1:timeout:" in result["fallback_detail"]
+    assert "gemini-fallback-2:timeout:" in result["fallback_detail"]
+
+
+def test_generation_respects_overall_timeout_cap() -> None:
+    calls: list[str] = []
+
+    def slow_generation(**kwargs: object) -> SimpleNamespace:
+        calls.append(str(kwargs["model"]))
+        time.sleep(0.1)
+        return sdk_response(generated_explanation())
+
+    client = SimpleNamespace(
+        models=SimpleNamespace(generate_content=slow_generation)
+    )
+    started = time.perf_counter()
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_model="gemini-primary",
+                gemini_fallback_models="gemini-fallback-1,gemini-fallback-2",
+                gemini_attempt_timeout_seconds=0.02,
+                gemini_timeout_seconds=0.03,
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+    elapsed = time.perf_counter() - started
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == "timeout"
+    assert elapsed < 0.08
+    assert calls[0] == "gemini-primary"
+
+
+def test_attempt_timeout_does_not_retry_same_model() -> None:
+    calls: list[str] = []
+
+    def generate(**kwargs: object) -> SimpleNamespace:
+        model = str(kwargs["model"])
+        calls.append(model)
+        time.sleep(0.05)
+        return sdk_response(generated_explanation())
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_model="gemini-primary",
+                gemini_fallback_models="",
+                gemini_attempt_timeout_seconds=0.01,
+                gemini_timeout_seconds=0.1,
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "template"
+    assert calls == ["gemini-primary"]
+
+
 def test_api_error_records_exception_class_and_http_status() -> None:
     def raise_bad_request(**_: object) -> None:
         raise ClientError(
@@ -472,7 +608,9 @@ def test_api_error_records_exception_class_and_http_status() -> None:
         )
 
     assert result["fallback_reason"] == "api_error"
-    assert result["fallback_detail"] == "ClientError status=400"
+    assert result["fallback_detail"] is not None
+    assert "gemini-3.8-flash:error:" in result["fallback_detail"]
+    assert result["fallback_detail"].endswith("ClientError status=400")
 
 
 @pytest.mark.parametrize(
@@ -689,7 +827,10 @@ def test_transient_api_failure_after_retry_has_specific_reason(
 
     assert result["source"] == "template"
     assert result["fallback_reason"] == reason
-    assert result["fallback_detail"] == f"ClientError status={status_code}"
+    assert result["fallback_detail"] is not None
+    assert result["fallback_detail"].count(
+        f"gemini-3.8-flash:{status_code}:"
+    ) == 2
     sleep.assert_called_once_with(1.5)
 
 
@@ -867,6 +1008,7 @@ def test_fallback_model_defaults_and_normalization() -> None:
         "gemini-two",
         "gemini-one",
     )
+    assert defaults.gemini_attempt_timeout_seconds == 8
 
 
 def test_empty_fallback_models_in_env_file_disable_fallbacks(tmp_path: Path) -> None:
@@ -933,7 +1075,9 @@ def test_html_api_error_reports_key_format_hint_without_body() -> None:
 
     assert result["source"] == "template"
     assert result["fallback_reason"] == "api_error"
-    assert result["fallback_detail"] == (
+    assert result["fallback_detail"] is not None
+    assert "gemini-3.8-flash:error:" in result["fallback_detail"]
+    assert result["fallback_detail"].endswith(
         "request rejected before reaching the model — check API key format"
     )
 

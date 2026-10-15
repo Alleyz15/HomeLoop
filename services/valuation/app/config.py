@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from supabase import Client, create_client
 
 from app.ai.constants import (
+    DEFAULT_ATTEMPT_TIMEOUT_SECONDS,
     DEFAULT_GEMINI_FALLBACK_MODELS,
     DEFAULT_GEMINI_MODEL,
     DEFAULT_MAX_OUTPUT_TOKENS,
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     gemini_max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     gemini_top_p: float = DEFAULT_TOP_P
     gemini_timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    gemini_attempt_timeout_seconds: float = DEFAULT_ATTEMPT_TIMEOUT_SECONDS
 
     @field_validator("gemini_api_key", mode="before")
     @classmethod
@@ -86,6 +88,11 @@ class Settings(BaseSettings):
     @classmethod
     def default_timeout_seconds(cls, value: object) -> object:
         return DEFAULT_TIMEOUT_SECONDS if value in {None, ""} else value
+
+    @field_validator("gemini_attempt_timeout_seconds", mode="before")
+    @classmethod
+    def default_attempt_timeout_seconds(cls, value: object) -> object:
+        return DEFAULT_ATTEMPT_TIMEOUT_SECONDS if value in {None, ""} else value
 
     @property
     def gemini_fallback_model_list(self) -> tuple[str, ...]:

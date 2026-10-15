@@ -28,17 +28,19 @@ Required variables:
 deterministic template text. `GEMINI_MODEL` defaults to `gemini-3.8-flash`, so a
 future model switch needs only an environment-variable change.
 `GEMINI_FALLBACK_MODELS` defaults to
-`gemini-3.7-flash,gemini-3.5-flash`. After the primary model's one delayed retry
-still returns HTTP 429 or 503, the service tries each fallback once in order
-with thinking budget `0`, all within the same overall timeout. Set
+`gemini-3.7-flash,gemini-3.5-flash`. Each model attempt has an 8-second timeout;
+a timeout moves directly to the next fallback model without retrying the same
+model. After an HTTP 429 or 503, the primary model alone receives one delayed
+retry before the service tries each fallback once in order with thinking budget
+`0`. All attempts share the same 20-second overall cap. Set
 `GEMINI_FALLBACK_MODELS` to an empty string to disable this model chain. The
 response and logs identify the model that actually produced the answer, while
 the cache remains keyed by the configured primary model and input. Generation
-uses temperature `0.3`, top-p `0.9`, a 4,096-token output limit, a 20-second timeout,
-and `GEMINI_THINKING_BUDGET=0` unless their corresponding environment variables
+uses temperature `0.3`, top-p `0.9`, a 4,096-token output limit,
+`GEMINI_ATTEMPT_TIMEOUT_SECONDS=8`, `GEMINI_TIMEOUT_SECONDS=20`, and
+`GEMINI_THINKING_BUDGET=0` unless their corresponding environment variables
 override them. If a model rejects that thinking budget, the service explicitly
-retries with budget `128`, then once without a thinking config. HTTP 429 and 503
-responses receive one delayed retry within the overall timeout.
+retries with budget `128`, then once without a thinking config.
 
 `GET /health` is public and does not initialize a Supabase client. `GET /roads`,
 `POST /valuate`, `POST /plans/quote`, `POST /ai/explain-valuation`, and
@@ -88,11 +90,11 @@ For a focused real-model smoke check of the golden explanation case, configure
 app) or in the process environment and run:
 
 ```bash
-python eval/smoke_explain.py
+python eval/smoke_explain.py --runs 5
 ```
 
-It prints the source, sanitized fallback diagnostics, thought-token count,
-latency, and visible answer. It never prints the key or prompt.
+It prints one source/model/latency summary per uncached run and a final LLM
+success-rate and average-latency line. It never prints the key or prompt.
 
 The golden integration test runs automatically only when `SUPABASE_URL` and
 `SUPABASE_ANON_KEY` are present in the process environment. It never needs the
@@ -110,6 +112,8 @@ service-role key.
    `GEMINI_MODEL=gemini-3.8-flash` (or the approved replacement model). Set
    `GEMINI_FALLBACK_MODELS=gemini-3.7-flash,gemini-3.5-flash` to use the default
    transient-error fallback chain (or set it empty to disable fallbacks). Set
+   `GEMINI_ATTEMPT_TIMEOUT_SECONDS=8` for each model attempt and keep
+   `GEMINI_TIMEOUT_SECONDS=20` as the cap for the complete chain. Set
    `GEMINI_THINKING_BUDGET=0` unless real-model evaluation supports a different
    budget. Generate a strong, independent internal key; do not reuse a Supabase
    key. Do not add a Supabase service-role key.
