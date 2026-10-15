@@ -58,6 +58,25 @@ class GenerationOutcome:
     fallback_reason: FallbackReason | None = None
     fallback_detail: str | None = None
     thought_tokens: int | None = None
+    model: str | None = None
+
+
+class _ModelChainError(Exception):
+    def __init__(self, error: BaseException, models_tried: list[str]) -> None:
+        super().__init__(type(error).__name__)
+        self.error = error
+        self.models_tried = tuple(models_tried)
+
+    @property
+    def code(self) -> int | None:
+        return _http_status(self.error)
+
+
+def _model_chain_error_detail(error: _ModelChainError) -> str:
+    detail = _api_error_detail(error.error)
+    if len(error.models_tried) > 1:
+        detail += " models_tried=" + ",".join(error.models_tried)
+    return detail
 
 
 class _ResultCache:
@@ -281,10 +300,16 @@ class AiService:
             return GenerationOutcome(fallback_reason="no_api_key")
 
         prompt = _load_prompt(prompt_name)
+        deadline = time.monotonic() + self.settings.gemini_timeout_seconds
 
-        def invoke(*, thinking_budget: int | None) -> Any:
+        def ensure_time_remaining() -> None:
+            if time.monotonic() >= deadline:
+                raise TimeoutError()
+
+        def invoke(*, model: str, thinking_budget: int | None) -> Any:
+            ensure_time_remaining()
             return self._get_client().models.generate_content(
-                model=self.settings.gemini_model,
+                model=model,
                 contents=json.dumps(payload, sort_keys=True, ensure_ascii=False),
                 config=self._config(
                     prompt,
@@ -293,7 +318,7 @@ class AiService:
                 ),
             )
 
-        def invoke_with_thinking_fallback() -> Any:
+        def invoke_with_thinking_fallback(model: str) -> Any:
             budgets: list[int | None] = [self.settings.gemini_thinking_budget]
             if self.settings.gemini_thinking_budget != THINKING_RETRY_BUDGET:
                 budgets.append(THINKING_RETRY_BUDGET)
@@ -301,7 +326,7 @@ class AiService:
 
             for index, budget in enumerate(budgets):
                 try:
-                    return invoke(thinking_budget=budget)
+                    return invoke(model=model, thinking_budget=budget)
                 except Exception as error:
                     if (
                         not _is_thinking_config_rejection(error)
@@ -316,13 +341,14 @@ class AiService:
                         _http_status(error),
                         budget,
                         next_budget,
-                        self.settings.gemini_model,
+                        model,
                     )
             raise RuntimeError("thinking fallback chain exhausted")
 
-        def call() -> Any:
+        def call() -> tuple[Any, str]:
+            primary_model = self.settings.gemini_model
             try:
-                return invoke_with_thinking_fallback()
+                response = invoke_with_thinking_fallback(primary_model)
             except Exception as error:
                 status = _http_status(error)
                 if status not in {429, 503}:
@@ -333,15 +359,49 @@ class AiService:
                     endpoint,
                     status,
                     TRANSIENT_RETRY_DELAY_SECONDS,
-                    self.settings.gemini_model,
+                    primary_model,
                 )
+                if time.monotonic() + TRANSIENT_RETRY_DELAY_SECONDS >= deadline:
+                    raise TimeoutError() from error
                 time.sleep(TRANSIENT_RETRY_DELAY_SECONDS)
-                return invoke_with_thinking_fallback()
+                ensure_time_remaining()
+                try:
+                    response = invoke_with_thinking_fallback(primary_model)
+                except Exception as retry_error:
+                    if _http_status(retry_error) not in {429, 503}:
+                        raise
+                    models_tried = [primary_model]
+                    last_error: BaseException = retry_error
+                    for fallback_model in self.settings.gemini_fallback_model_list:
+                        if fallback_model in models_tried:
+                            continue
+                        models_tried.append(fallback_model)
+                        try:
+                            fallback_response = invoke(
+                                model=fallback_model,
+                                thinking_budget=0,
+                            )
+                        except Exception as fallback_error:
+                            if _http_status(fallback_error) not in {429, 503}:
+                                raise
+                            last_error = fallback_error
+                            continue
+                        logger.info(
+                            "AI fallback_model used endpoint=%s primary=%s fallback=%s",
+                            endpoint,
+                            primary_model,
+                            fallback_model,
+                        )
+                        return fallback_response, fallback_model
+                    raise _ModelChainError(last_error, models_tried) from last_error
+            return response, primary_model
 
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gemini")
         future = executor.submit(call)
         try:
-            response = future.result(timeout=self.settings.gemini_timeout_seconds)
+            response, response_model = future.result(
+                timeout=self.settings.gemini_timeout_seconds
+            )
         except Exception as error:
             future.cancel()
             if _is_timeout_error(error):
@@ -352,6 +412,11 @@ class AiService:
                     ),
                 )
             status = _http_status(error)
+            detail = (
+                _model_chain_error_detail(error)
+                if isinstance(error, _ModelChainError)
+                else _api_error_detail(error)
+            )
             if _error_contains_html(error):
                 return GenerationOutcome(
                     fallback_reason="api_error",
@@ -363,16 +428,16 @@ class AiService:
             if status == 503:
                 return GenerationOutcome(
                     fallback_reason="unavailable",
-                    fallback_detail=_api_error_detail(error),
+                    fallback_detail=detail,
                 )
             if status == 429:
                 return GenerationOutcome(
                     fallback_reason="rate_limited",
-                    fallback_detail=_api_error_detail(error),
+                    fallback_detail=detail,
                 )
             return GenerationOutcome(
                 fallback_reason="api_error",
-                fallback_detail=_api_error_detail(error),
+                fallback_detail=detail,
             )
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
@@ -382,7 +447,7 @@ class AiService:
             "AI usage endpoint=%s thought_tokens=%s model=%s",
             endpoint,
             thought_tokens if thought_tokens is not None else "unknown",
-            self.settings.gemini_model,
+            response_model,
         )
         finish_reason = _finish_reason(response)
         if finish_reason == "MAX_TOKENS":
@@ -390,6 +455,7 @@ class AiService:
                 fallback_reason="truncated",
                 fallback_detail="finish_reason=MAX_TOKENS",
                 thought_tokens=thought_tokens,
+                model=response_model,
             )
         text = getattr(response, "text", None)
         if _looks_like_html(text):
@@ -399,15 +465,18 @@ class AiService:
                     "request rejected before reaching the model — check API key format"
                 ),
                 thought_tokens=thought_tokens,
+                model=response_model,
             )
         if not text or not str(text).strip():
             return GenerationOutcome(
                 fallback_reason="empty_response",
                 thought_tokens=thought_tokens,
+                model=response_model,
             )
         return GenerationOutcome(
             text=str(text).strip(),
             thought_tokens=thought_tokens,
+            model=response_model,
         )
 
     def _log_result(
@@ -428,7 +497,7 @@ class AiService:
         logger.info(
             "AI response endpoint=%s source=llm model=%s",
             endpoint,
-            self.settings.gemini_model,
+            outcome.model or self.settings.gemini_model,
         )
 
     def _explain_valuation(
@@ -438,7 +507,10 @@ class AiService:
         key = self._cache_key("explain-valuation", payload)
         cached = self._cache.get(key)
         if cached is not None:
-            return cached, GenerationOutcome(text=str(cached["text"]))
+            return cached, GenerationOutcome(
+                text=str(cached["text"]),
+                model=str(cached["model"]),
+            )
 
         outcome = self._generate(
             endpoint="explain-valuation",
@@ -473,7 +545,11 @@ class AiService:
         result = {
             "text": text,
             "source": source,
-            "model": self.settings.gemini_model,
+            "model": (
+                outcome.model
+                if source == "llm" and outcome.model is not None
+                else self.settings.gemini_model
+            ),
             "fallback_reason": outcome.fallback_reason,
             "fallback_detail": outcome.fallback_detail,
         }
@@ -555,7 +631,11 @@ class AiService:
         result = {
             **body,
             "source": source,
-            "model": self.settings.gemini_model,
+            "model": (
+                outcome.model
+                if source == "llm" and outcome.model is not None
+                else self.settings.gemini_model
+            ),
             "fallback_reason": outcome.fallback_reason,
             "fallback_detail": outcome.fallback_detail,
         }

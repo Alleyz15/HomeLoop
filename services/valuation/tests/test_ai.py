@@ -1,5 +1,7 @@
 import json
+import logging
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -504,6 +506,7 @@ def test_transient_api_failure_after_retry_has_specific_reason(
             Settings(
                 internal_api_key="internal",
                 gemini_api_key="test-only-key",
+                gemini_fallback_models="",
                 _env_file=None,
             )
         ).explain_valuation(
@@ -514,6 +517,191 @@ def test_transient_api_failure_after_retry_has_specific_reason(
     assert result["fallback_reason"] == reason
     assert result["fallback_detail"] == f"ClientError status={status_code}"
     sleep.assert_called_once_with(1.5)
+
+
+def test_primary_503_uses_first_fallback_model_and_caches_success(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="app.ai.service")
+    calls: list[tuple[str, object]] = []
+
+    def generate(**kwargs: object) -> object:
+        model = str(kwargs["model"])
+        config = kwargs["config"]
+        calls.append((model, config))
+        if model == "gemini-primary":
+            raise ClientError(
+                503,
+                {"message": "high demand", "status": "UNAVAILABLE"},
+            )
+        return sdk_response(generated_explanation())
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    service = AiService(
+        Settings(
+            internal_api_key="internal",
+            gemini_api_key="test-only-key",
+            gemini_model="gemini-primary",
+            gemini_fallback_models=' "gemini-fallback-1" , \'gemini-fallback-2\' ',
+            _env_file=None,
+        )
+    )
+    request = ExplainValuationRequest.model_validate(explain_payload())
+    with (
+        patch("app.ai.service.genai.Client", return_value=client),
+        patch("app.ai.service.time.sleep") as sleep,
+    ):
+        first = service.explain_valuation(request)
+        second = service.explain_valuation(request)
+
+    assert first["source"] == "llm"
+    assert first["model"] == "gemini-fallback-1"
+    assert second == first
+    assert [model for model, _ in calls] == [
+        "gemini-primary",
+        "gemini-primary",
+        "gemini-fallback-1",
+    ]
+    fallback_config = calls[-1][1]
+    assert fallback_config.thinking_config.thinking_budget == 0
+    sleep.assert_called_once_with(1.5)
+    assert (
+        "AI fallback_model used endpoint=explain-valuation "
+        "primary=gemini-primary fallback=gemini-fallback-1"
+    ) in caplog.text
+
+
+def test_primary_and_fallback_503_return_template_with_all_models_in_detail() -> None:
+    calls: list[str] = []
+
+    def generate(**kwargs: object) -> None:
+        calls.append(str(kwargs["model"]))
+        raise ClientError(
+            503,
+            {"message": "high demand", "status": "UNAVAILABLE"},
+        )
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    with (
+        patch("app.ai.service.genai.Client", return_value=client),
+        patch("app.ai.service.time.sleep"),
+    ):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_model="gemini-primary",
+                gemini_fallback_models="gemini-fallback",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == "unavailable"
+    assert "gemini-primary" in result["fallback_detail"]
+    assert "gemini-fallback" in result["fallback_detail"]
+    assert calls == ["gemini-primary", "gemini-primary", "gemini-fallback"]
+
+
+def test_fallback_models_are_tried_once_in_configured_order() -> None:
+    calls: list[str] = []
+
+    def generate(**kwargs: object) -> object:
+        model = str(kwargs["model"])
+        calls.append(model)
+        if model != "gemini-fallback-2":
+            raise ClientError(
+                429,
+                {"message": "rate limited", "status": "RESOURCE_EXHAUSTED"},
+            )
+        return sdk_response(generated_explanation())
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    with (
+        patch("app.ai.service.genai.Client", return_value=client),
+        patch("app.ai.service.time.sleep"),
+    ):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_model="gemini-primary",
+                gemini_fallback_models="gemini-fallback-1,gemini-fallback-2",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "llm"
+    assert result["model"] == "gemini-fallback-2"
+    assert calls == [
+        "gemini-primary",
+        "gemini-primary",
+        "gemini-fallback-1",
+        "gemini-fallback-2",
+    ]
+
+
+def test_empty_fallback_model_setting_disables_fallbacks() -> None:
+    calls: list[str] = []
+
+    def generate(**kwargs: object) -> None:
+        calls.append(str(kwargs["model"]))
+        raise ClientError(
+            503,
+            {"message": "high demand", "status": "UNAVAILABLE"},
+        )
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    with (
+        patch("app.ai.service.genai.Client", return_value=client),
+        patch("app.ai.service.time.sleep"),
+    ):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_model="gemini-primary",
+                gemini_fallback_models="",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == "unavailable"
+    assert calls == ["gemini-primary", "gemini-primary"]
+
+
+def test_fallback_model_defaults_and_normalization() -> None:
+    defaults = Settings(_env_file=None)
+    normalized = Settings(
+        gemini_fallback_models=' "gemini-one" , \'gemini-two\' , , gemini-one ',
+        _env_file=None,
+    )
+
+    assert defaults.gemini_fallback_model_list == (
+        "gemini-3.7-flash",
+        "gemini-3.5-flash",
+    )
+    assert normalized.gemini_fallback_model_list == (
+        "gemini-one",
+        "gemini-two",
+        "gemini-one",
+    )
+
+
+def test_empty_fallback_models_in_env_file_disable_fallbacks(tmp_path: Path) -> None:
+    env_file = tmp_path / "empty-fallback.env"
+    env_file.write_text("GEMINI_FALLBACK_MODELS=\n", encoding="utf-8")
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.gemini_fallback_model_list == ()
 
 
 def test_settings_strip_whitespace_and_surrounding_quotes_from_gemini_values() -> None:

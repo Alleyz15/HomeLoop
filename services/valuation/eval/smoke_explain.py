@@ -35,6 +35,7 @@ def main() -> None:
     latency_ms = round((perf_counter() - started) * 1000)
 
     print(f"source={result['source']}")
+    print(f"model={result['model']}")
     print(f"fallback_reason={result['fallback_reason']}")
     print(f"fallback_detail={result['fallback_detail']}")
     print(f"thought_tokens={diagnostics.thought_tokens}")

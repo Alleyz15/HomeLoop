@@ -2,6 +2,7 @@ from typing import Final
 
 
 DEFAULT_GEMINI_MODEL: Final = "gemini-3.8-flash"
+DEFAULT_GEMINI_FALLBACK_MODELS: Final = "gemini-3.7-flash,gemini-3.5-flash"
 DEFAULT_TEMPERATURE: Final = 0.3
 DEFAULT_MAX_OUTPUT_TOKENS: Final = 4096
 DEFAULT_TOP_P: Final = 0.9

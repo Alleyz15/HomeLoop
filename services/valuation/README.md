@@ -26,8 +26,15 @@ Required variables:
 
 `GEMINI_API_KEY` is optional. Without it, both AI endpoints return complete,
 deterministic template text. `GEMINI_MODEL` defaults to `gemini-3.8-flash`, so a
-future model switch needs only an environment-variable change. Generation uses
-temperature `0.3`, top-p `0.9`, a 4,096-token output limit, a 20-second timeout,
+future model switch needs only an environment-variable change.
+`GEMINI_FALLBACK_MODELS` defaults to
+`gemini-3.7-flash,gemini-3.5-flash`. After the primary model's one delayed retry
+still returns HTTP 429 or 503, the service tries each fallback once in order
+with thinking budget `0`, all within the same overall timeout. Set
+`GEMINI_FALLBACK_MODELS` to an empty string to disable this model chain. The
+response and logs identify the model that actually produced the answer, while
+the cache remains keyed by the configured primary model and input. Generation
+uses temperature `0.3`, top-p `0.9`, a 4,096-token output limit, a 20-second timeout,
 and `GEMINI_THINKING_BUDGET=0` unless their corresponding environment variables
 override them. If a model rejects that thinking budget, the service explicitly
 retries with budget `128`, then once without a thinking config. HTTP 429 and 503
@@ -101,6 +108,8 @@ service-role key.
 5. Add `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `INTERNAL_API_KEY` as Render
    environment variables. Add `GEMINI_API_KEY` to enable LLM phrasing and set
    `GEMINI_MODEL=gemini-3.8-flash` (or the approved replacement model). Set
+   `GEMINI_FALLBACK_MODELS=gemini-3.7-flash,gemini-3.5-flash` to use the default
+   transient-error fallback chain (or set it empty to disable fallbacks). Set
    `GEMINI_THINKING_BUDGET=0` unless real-model evaluation supports a different
    budget. Generate a strong, independent internal key; do not reuse a Supabase
    key. Do not add a Supabase service-role key.

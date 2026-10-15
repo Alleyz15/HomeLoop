@@ -36,6 +36,7 @@ class ValuationApiSecurityTests(unittest.TestCase):
                 "internal_api_key",
                 "gemini_api_key",
                 "gemini_model",
+                "gemini_fallback_models",
                 "gemini_thinking_budget",
                 "gemini_temperature",
                 "gemini_max_output_tokens",
