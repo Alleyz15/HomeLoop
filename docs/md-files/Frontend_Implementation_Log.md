@@ -1,0 +1,214 @@
+# HomeLoop Frontend Implementation Log
+
+Last updated: 2026-10-15 (Asia/Kuala_Lumpur)
+
+This file records frontend work by phase and action: what changed, which files were affected, bugs or gaps found, verification results, and commit references. It includes server-side Next.js helpers because they support the frontend journey. Backend implementations are included only as integration dependencies.
+
+Product authority: [HomeLoop_更新_页面与流程.md](HomeLoop_更新_页面与流程.md). Overall progress: [Task_track.md](Task_track.md).
+
+## How to maintain this log
+
+- Update the relevant action after implementation or investigation. Add a new action for later fixes rather than overwriting the history of the original work.
+- Record the date, actual changes, repository-relative affected paths, bugs found or “none recorded,” verification commands/results, and commit hash.
+- Separate implemented code from live verification and deployment. A helper being complete does not mean its screen is complete.
+- Mark uncommitted changes as “pending commit”; replace that label after the commit exists. Never invent a commit hash or a test result.
+- Historical results below come from commit messages and the task tracker. They have not all been reproduced in this workspace.
+- For planned actions, “files” means existing integration points or proposed paths, not files already modified.
+
+## Phase summary
+
+| Phase | Current status | Remaining work |
+|---|---|---|
+| F0 — Frontend foundation and API helpers | Implemented | Use the helpers in the remaining screens |
+| F1 — Shared layout and authentication | Implemented; signed-in checks pending | Verify owner/admin login and role redirects with real sessions |
+| F2 — Homeowner journey | Partially implemented | Dashboard, photos, new-home selection, plans, application and offer controls |
+| F3 — Admin journey | Role guard and helpers implemented; screens pending | Applications panel, application details, risk simulator |
+| F4 — Integration, QA and delivery | In progress | Resolve open contracts, build checks, browser QA and complete demo flow |
+
+## F0 — Foundation and frontend integration helpers
+
+### F0-01 — Application shell and shared UI
+
+- Date / commits: 2026-10-13; `03e0580`, dependency update `87de5e6`.
+- Changes: created the Next.js application, TypeScript/Tailwind configuration, shared UI primitives, application layout, placeholder pages, and Supabase browser/server clients; subsequently upgraded the Next.js 15 patch version.
+- Affected files: `apps/web/package.json`, `apps/web/package-lock.json`, `apps/web/next.config.ts`, `apps/web/tsconfig.json`, `apps/web/eslint.config.mjs`, `apps/web/postcss.config.mjs`, `apps/web/components.json`, `apps/web/.env.example`, `apps/web/src/app/globals.css`, `apps/web/src/app/layout.tsx`, `apps/web/src/components/ui/*`, `apps/web/src/components/placeholder-page.tsx`, `apps/web/src/lib/utils.ts`, `apps/web/src/lib/supabase/{client,server}.ts`, initial page and middleware files.
+- Bugs / gaps: placeholder routes are scaffolding, not finished product screens. `/guide` and `src/lib/guide/index.ts` remain placeholders.
+- Result / verification: source and Git history confirm the foundation exists. See F1/F2 for later recorded build results; no separate scaffold execution log was found.
+
+### F0-02 — Server-only valuation and plan API boundary
+
+- Date / commits: 2026-10-14; `85a5e48`, `83caf6a`, contract update `d5056d7`.
+- Changes: added the `server-only` boundary, typed valuation/road-search/plan contracts, internal-key HTTP requests, API error handling, and plan range types; reflected the unsupported-property-type response in the web contract.
+- Affected files: `apps/web/src/lib/valuation.ts`, `apps/web/.env.example`, `.env.example`.
+- Bugs / gaps: internal API credentials must remain server-side. The existence of `quotePlans()` did not implement a Plans screen or call it from a page.
+- Result / verification: helper implementations exist; actual valuation UI use is recorded in F2-02. Plan request rounding is recorded separately in F2-05.
+
+### F0-03 — Application workflow RPC wrappers
+
+- Date / commits: 2026-10-14; `4a77305`, submission contract refinement `f772eaf`.
+- Changes: added typed wrappers for submission, review, information requests, indicative quotes, inspection, formal offers, owner responses, expiry, completion tracking and admin flags. Calls use the signed-in Supabase server client.
+- Affected file: `apps/web/src/lib/applications.ts`.
+- Bugs / gaps: wrappers exist without owner/admin workflow screens. Insufficient-data submission conflicts with the product specification; see FE-BUG-02.
+- Result / verification: source confirms the wrapper layer. The tracker records 56 passing B4 database tests historically; that is backend evidence, not browser verification of these actions.
+
+### F0-04 — Risk-simulation API contract
+
+- Date / commit: 2026-10-14; `3f1ea2f`.
+- Changes: added `simulate()` and typed simulation parameters, risk results and histogram output for the future admin simulator.
+- Affected file: `apps/web/src/lib/valuation.ts`.
+- Bugs / gaps: RM outputs use different valuation bases; the simulator UI must label the chosen basis or lead with percentages. No simulator screen exists yet.
+- Result / verification: helper exists. Backend tests and historical data checks are recorded in Task_track B6; no frontend simulator interaction has been verified.
+
+## F1 — Shared layout and authentication
+
+Implementation commit for F1-01 through F1-03: `c8d1fe2` (2026-10-15).
+
+### F1-01 — Database role lookup and navigation
+
+- Changes: added `getSessionUser()` and role-based landing paths; read roles from `profiles.role`, default missing/unrecognized roles to `owner`, render guest/owner/admin navigation, email and sign-out controls.
+- Affected files: `apps/web/src/lib/auth.ts`, `apps/web/src/app/layout.tsx`.
+- Bugs / gaps: no new bug recorded for the role lookup. The admin navigation includes a simulator route whose page is not implemented; see FE-GAP-01.
+- Result: role-aware layout implemented; Act 242 footer retained.
+
+### F1-02 — Login, registration and logout
+
+- Changes: added email/password Server Actions, sign-in/register UI, form state, password length validation, generic sign-in failures, redirect-path filtering and an email-confirmation notice when registration returns no session.
+- Affected files: `apps/web/src/app/auth/actions.ts`, `apps/web/src/app/auth/state.ts`, `apps/web/src/app/login/page.tsx`, `apps/web/src/app/login/auth-form.tsx`.
+- Bug found and fixed historically: exporting state objects from a `"use server"` module caused a build failure. Auth state was moved to `state.ts`. The analogous valuation module is an open finding in FE-BUG-04.
+- Result: authentication UI/actions implemented; real-session verification remains pending in the tracker.
+
+### F1-03 — Session and admin route protection
+
+- Changes: protected `/dashboard`, `/valuation`, `/new-home`, `/plans`, `/apply` and `/admin` prefixes; preserved the destination in `next`; added a database-role check in the admin layout that redirects owners to `/dashboard`.
+- Affected files: `apps/web/src/middleware.ts`, `apps/web/src/app/admin/layout.tsx`, `apps/web/src/app/admin/page.tsx` (placeholder).
+- Bugs / gaps: no separate authorization bug confirmed in this inspection. Signed-in owner/admin behavior still needs live testing.
+- Result / historical verification for F1: commit message and tracker report clean build, TypeScript and ESLint checks; unauthenticated protected-route redirects and public routes were checked against the live project. Those results have not been rerun here.
+
+## F2 — Homeowner journey
+
+### F2-01 — Welcome page
+
+- Date / commit: 2026-10-15; `f4597bf`.
+- Changes: replaced the welcome placeholder with the HomeLoop proposition, free-valuation/sign-in links, and a role-based dashboard link for signed-in users.
+- Affected file: `apps/web/src/app/page.tsx`.
+- Bugs / gaps: none separately recorded for this action.
+- Result: welcome content implemented; destination Dashboard remains a placeholder.
+
+### F2-02 — Valuation input and Server Actions
+
+- Date / commit: 2026-10-15; `f4597bf`.
+- Changes: implemented road search, scheme/district/SDP labels, road-specific property types, intermediate/corner/custom choices, typical-area display, manual sizes, m²/sq-ft conversion, terrace shortcuts, tenure controls, submission/loading states and API error messages. Passed the selected scheme with road information and invoked the protected API through Server Actions.
+- Affected files: `apps/web/src/app/valuation/page.tsx`, `apps/web/src/app/valuation/valuation-form.tsx`, `apps/web/src/app/valuation/actions.ts`, `apps/web/src/lib/units.ts`.
+- Bugs / gaps: automatic tenure selection is claimed in earlier documentation but is not connected in the current form (FE-BUG-03). Exported state objects require build verification (FE-BUG-04). Optional photos are pending. Intermediate units without typical sizes show manual inputs, but those values are not submitted under the current `needsSizes` condition (FE-BUG-05).
+- Result: main form implemented; authenticated search → valuation → save → result has not been verified end to end in the tracker or this chat.
+
+### F2-03 — Save valuations and render results
+
+- Date / commit: 2026-10-15; `f4597bf`.
+- Changes: saved the signed-in user's valuation with comparables, returned the saved ID and redirected to `/valuation/result/[id]`; added owner-scoped retrieval, catalog metadata lookup, amount/range/confidence display, comparable table, insufficient-data copy and the non-SDP Plan B notice. Stored unpriced requests with null amounts.
+- Affected files: `apps/web/src/lib/valuations.ts`, `apps/web/src/app/valuation/actions.ts`, `apps/web/src/app/valuation/result/[id]/page.tsx`, `apps/web/src/lib/units.ts`.
+- Bug fixed historically: no frontend code previously wrote `valuation_requests`, so the application workflow had no saved valuation ID to reference.
+- Open bug: result copy says an insufficient-data application can be submitted, but SQL rejects it (FE-BUG-02).
+- Result / historical verification for F2-01 through F2-03: tracker reports build, TypeScript and ESLint passed and all 13 inserted columns/constraints were statically checked. Real-session end-to-end verification remains pending.
+
+### F2-04 — AI explanation and loading experience
+
+- Date / commits: 2026-10-15; initial integration `1a93777`, diagnostic types `04831ed`, `f8447bc`, contract enrichment `3474211`, streaming/loading `1fb3620`.
+- Changes: added typed `explainValuation()` / `adminAssist()` calls and fallback diagnostics; passed property-type context; rendered the valuation explanation and distinguished LLM text from template output. Moved explanation work into an async component under Suspense so the AI request no longer blocks the valuation content. Added rotating loading phrases, animated dots, reduced-motion support and accessible status text. API failures omit the explanation card.
+- Affected files: `apps/web/src/lib/valuation.ts`, `apps/web/src/app/valuation/result/[id]/page.tsx`, `apps/web/src/components/ai-thinking.tsx`.
+- Bug / UX problem addressed: awaiting AI text in the main page delayed visible valuation results.
+- Result / verification: source and tracker confirm the integration and streaming structure; browser timing/accessibility checks were not rerun in this chat. The admin phrase preset/helper exists, but the admin detail screen is pending.
+
+### F2-05 — Whole-RM rounding before plan quotation
+
+- Date / commit: 2026-10-15; pending commit (working-tree changes).
+- Changes: inside `quotePlans()`, copy the input and apply `Math.round()` to `estimate`, `low` and `high` before serializing the request. Preserve original stored/input precision and all other fields. Backend formulas still round the calculated offers.
+- Affected files: `apps/web/src/lib/valuation.ts` (implementation), `scripts/quote_plans.test.mjs` (new regression test), `docs/md-files/Task_track.md` (completion note).
+- Bug found: passing RM785,635.36 directly produced Plan A RM616,724 and Plan B RM589,227; using the displayed whole-RM valuation RM785,635 produces RM616,723 and RM589,226. Earlier backend plan fixtures already used an integer and did not expose the input-rounding difference.
+- Result: approved round → calculate → round policy implemented at the frontend API boundary. The Plans screen still has no caller, so this prepares its future integration.
+- Verification executed in this chat: `node --test scripts/quote_plans.test.mjs` passed (one test; two helper calls). Checks cover all three outgoing amounts, a .5 boundary, already-rounded input, preserved original input/other fields, request URL/method/key and response forwarding. The test mocks HTTP and does not call a live API.
+- Additional verification executed: imported the actual Python plan functions and asserted both raw-input and rounded-input Plan A/B outputs; passed. `git diff --check` passed.
+- Limitation: full web build/lint could not run in this workspace because frontend dependencies are absent. No deploy or commit was performed.
+
+### F2-06 through F2-11 — Remaining homeowner actions
+
+These are planned actions. No implementation changes or completion tests are recorded for them.
+
+| Action | Intended change | Existing integration points / proposed files | Bugs, dependencies and acceptance work |
+|---|---|---|---|
+| F2-06 Dashboard | Eight-stage progress, current-state cards and Plan B listing sub-progress | Existing `apps/web/src/app/dashboard/page.tsx` (placeholder), `apps/web/src/lib/applications.ts`, `apps/web/src/lib/valuations.ts` | Verify new user, saved valuation, active application and offer states |
+| F2-07 Photos | Optional owner-folder upload and photo display | Existing valuation form/actions; storage integration and display files to be selected during implementation | Private `photos` bucket exists; test ownership and upload failures |
+| F2-08 New-home selection | Selling/upcoming catalogue, details, unit choice, sales quote and price source | Existing `apps/web/src/app/new-home/page.tsx` (placeholder); proposed `apps/web/src/app/new-home/[project]/page.tsx` | Preserve selected valuation across steps; confirm available launch/unit data |
+| F2-09 Plan selection | Plan A/B cards, recommendation question, eligibility and detailed quotes | Existing `apps/web/src/app/plans/page.tsx` (placeholder), `apps/web/src/lib/valuation.ts`; proposed detail routes | Use `quotePlans()` so the approved rounding policy applies |
+| F2-10 Apply | Timeline, cash timing, address/title, PDPA consent and submission | Proposed `apps/web/src/app/apply/page.tsx` and actions; existing application/valuation helpers | Resolve FE-BUG-02 before supporting manual-valuation applications |
+| F2-11 Owner responses | Proceed/withdraw, accept/switch/decline/review and e-SPA declaration | Existing application RPC wrappers; UI/actions paths to be selected | Test expiry, one-review/one-switch limits and permitted status transitions |
+
+## F3 — Admin journey
+
+The admin role guard is implemented in F1-03; workflow and AI helpers are implemented in F0/F2. The following screens are planned, with no completed UI verification recorded.
+
+| Action | Intended change | Existing integration points / proposed files | Bugs, dependencies and acceptance work |
+|---|---|---|---|
+| F3-01 Applications panel | Monthly quota bars, stage tabs, application list, filters and flags | Existing `apps/web/src/app/admin/page.tsx` (placeholder), `apps/web/src/lib/applications.ts` | Verify quota/flags, empty lists and role access |
+| F3-02 Application detail | Property/launch data, comparables/photos, AI summary, audit history and stage-specific actions | Proposed `apps/web/src/app/admin/applications/[id]/page.tsx` and actions; existing application and AI helpers | Show computed offer previews; final decisions remain admin actions; test every transition |
+| F3-03 Risk simulator | Sliders, risk metrics, histogram and township filtering | Proposed `apps/web/src/app/admin/simulator/page.tsx`; existing `simulate()` helper | Navigation currently points to an absent page (FE-GAP-01); label RM valuation basis |
+
+## F4 — Integration, QA and delivery
+
+### F4-01 — Repository inspection and local verification baseline
+
+- Date / commit: 2026-10-15; investigation only, no code changes for the inspection.
+- Actions: compared current pages, helpers, SQL submission rules, tracker and Git history; confirmed placeholder/missing routes and reproduced the rounding discrepancy.
+- Files examined: `apps/web/src/app/**`, `apps/web/src/lib/**`, `apps/web/src/middleware.ts`, `supabase/migrations/20261014111603_application_workflow.sql`, plan calculation source/tests and project documentation.
+- Results executed in this workspace: initial `npm run lint` failed because `eslint` is not installed; `npm run build` failed because `next` is not installed; `python -m pytest` failed because `pytest` is not installed. These are environment limitations, not successful application checks or evidence of a particular runtime failure.
+- Successful targeted checks: the F2-05 Node regression test, direct Python formula assertions and whitespace check. Historical build/test claims remain explicitly historical.
+- Bugs / gaps recorded: FE-BUG-01 through FE-BUG-05 and FE-GAP-01 below. No full browser or live-session verification was performed here.
+
+### F4-02 — Dedicated frontend implementation record
+
+- Date / commit: 2026-10-15; pending commit.
+- Changes: created this phase/action log, linked it from the overall tracker, reconstructed existing changes using source and commits, separated planned work from implemented work, and recorded verification limits and open findings.
+- Affected files: `docs/md-files/Frontend_Implementation_Log.md`, `docs/md-files/Task_track.md`.
+- Bugs / gaps: earlier implementation plans contain unchecked steps despite completion summaries; this file supplements those plans with evidence and actual status.
+- Verification: checked recorded commit references and affected paths against Git/source; this is a documentation update, with no runtime implementation changes.
+
+### F4-03 — Remaining integration and release actions
+
+Status: pending. No completion or deployment is claimed.
+
+- Wire the remaining screens to the server helpers; preserve valuation, launch and plan selections across the journey.
+- Resolve the open bugs below and record each fix as a new action with its own files, results and commit.
+- Run frontend lint, TypeScript and production build once dependencies are installed; reconcile FE-BUG-04 with the earlier clean-build report.
+- Verify real-session owner/admin login, role restrictions, valuation persistence and owner data isolation.
+- Verify loading, error and empty states throughout the journey; the existing AI loading card covers only one part of this work.
+- Check desktop/mobile layout, keyboard use and reduced-motion behavior in a browser.
+- Exercise both plan journeys, review/switch/expiry rules, admin actions, quota limits and post-acceptance tracking.
+- Deploy the frontend and complete the documented demo with real demo sessions. Record environment, date, results, failures and deployment/commit reference without credentials.
+
+## Frontend bug and gap register
+
+| ID | Status / evidence | Problem and impact | Affected files / next action |
+|---|---|---|---|
+| FE-BUG-01 | Fixed locally; pending commit; targeted checks passed | Decimal valuation input caused RM1 differences from the agreed whole-RM calculation sequence | `apps/web/src/lib/valuation.ts`, `scripts/quote_plans.test.mjs`; see F2-05 |
+| FE-BUG-02 | Open; confirmed code/spec conflict | Result page says insufficient-data owners can apply; `submit_application` requires status `ok` and positive valuation amounts. Saving an unpriced record alone does not enable submission | `apps/web/src/app/valuation/result/[id]/page.tsx`, `apps/web/src/lib/valuations.ts`, `supabase/migrations/20261014111603_application_workflow.sql`; agree and implement the manual-valuation contract before F2-10; any schema fix requires a new migration |
+| FE-BUG-03 | Open; observed statically, no browser reproduction | Form initializes tenure to `Freehold`; selecting a road/type does not call `roadDetails()` or apply `tenure_mode`, despite earlier automatic-tenure claims. Leasehold users must manually correct it | `apps/web/src/app/valuation/valuation-form.tsx`, `apps/web/src/app/valuation/actions.ts`, `apps/web/src/lib/valuations.ts`; connect metadata and verify both tenures |
+| FE-BUG-04 | Open; static build-rule finding, production build not rerun | Valuation `actions.ts` has `"use server"` but exports `emptyRoadSearch` and `emptyValuationForm` objects. This repeats the export pattern historically fixed in auth; earlier tracker reports of a clean build need reconciliation | `apps/web/src/app/valuation/actions.ts`, `apps/web/src/app/valuation/valuation-form.tsx`; verify with installed Next.js and move runtime state exports to a separate module if confirmed |
+| FE-BUG-05 | Open; observed statically, conditional path not exercised | An intermediate unit without typical catalog sizes allows manual sizes, but hidden `land_sqm`/`floor_sqm` values are sent only when `needsSizes` is true (corner/custom). The intermediate manual fallback therefore sends empty sizes and can be rejected | `apps/web/src/app/valuation/valuation-form.tsx`, `apps/web/src/app/valuation/actions.ts`; submit manually entered intermediate sizes and test missing catalog metadata |
+| FE-GAP-01 | Pending implementation | `/admin/simulator` is linked in navigation without a page. Dashboard, new-home, plans, admin applications and guide pages remain placeholders; apply and detail routes are absent | `apps/web/src/app/layout.tsx` and the pending route files in F2/F3; implement and verify navigation as those screens are completed |
+
+## Entry template for future actions
+
+```text
+Action ID / title:
+Phase:
+Date (Asia/Kuala_Lumpur):
+Status: planned / in progress / implemented / verified / deployed
+Problem or purpose:
+Changes made (before → after):
+Affected files (actual repository-relative paths):
+Bugs found / fixed / still open:
+Verification commands and actual results:
+Remaining checks or limitations:
+Commit(s): pending commit / verified hash
+Deployment reference (if applicable):
+```

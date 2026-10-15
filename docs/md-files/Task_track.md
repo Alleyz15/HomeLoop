@@ -4,6 +4,8 @@
 
 本文件记录整个系统的任务进度，分为**后端**与**前端**两部分。
 
+前端每阶段与每项操作的变更、受影响文件、bug、验证结果及 commit 记录见 [Frontend_Implementation_Log.md](Frontend_Implementation_Log.md)。后续前端实现或修复需同步更新该文件。
+
 > **给 AI 编程助手（Codex / Claude）的规则**
 > 1. 开始任何任务前，先读本文件和 `docs/md-files/` 里的其他文件。产品规则以《HomeLoop_更新_页面与流程.md》为准。
 > 2. 完成一个任务后，把它从「待做」移到「已完成」，写上日期、commit 和一句说明。
@@ -158,6 +160,7 @@
 - [x] `is_sdp` / `district` / `tenure_mode` 直接读 `road_catalog`（authenticated 有 select 权限），**不新增 migration**；`valuation_requests` 没有 `is_sdp` 栏位，这样就不用改表
 - [x] `npm run build`（11 条路由）、`tsc --noEmit`、`eslint` 全部乾净
 - [x] 静态核对过 insert 的 13 个栏位都存在，且 `unit_position` / `confidence` 的 CHECK 约束与送出的值相符
+- [x] 2026-10-15（待 commit）修正方案报价舍入顺序：`quotePlans()` 在发送前将 `estimate` / `low` / `high` 用 `Math.round()` 转成整数 RM，后端再计算并舍入报价；原始估价保留小数。RM785,635.36 对应方案 A RM616,723、方案 B RM589,226；回归测试见 `scripts/quote_plans.test.mjs`。
 
 **未验证**：demo 帐号已建立，但整条「搜路名 → 估价 → 存档 → 结果页」尚未用真实 session 跑过。Render 的 `/roads` 与 `/valuate` 已单独验证可用。
 
@@ -238,6 +241,7 @@
 
 | 问题 | 说明 |
 |---|---|
+| 前端待处理的整合问题（2026-10-15） | 详见前端记录 FE-BUG-02 至 FE-BUG-05：资料不足结果页承诺可申请，但 SQL 拒绝；地契自动带入未接线；valuation Server Actions 导出状态对象需重跑 build 核实；无常见面积的中间单位手填面积未随表单提交。当前仅记录发现，尚未修复。 |
 | 部分网络的路由器 DNS 查不到 `*.supabase.co` | 改用 1.1.1.1 / 8.8.8.8，或在 hosts 文件加 `104.18.38.10 qcuzvdkrqzxogigsxisk.supabase.co`（Supabase IP 改变时要更新） |
 | `transactions` 只能导入一次 | 重新导入前要先 `truncate` 6 张参考表（见 README） |
 | 大部分新屋项目只公布起价 | 第 ③ 步用起价，允许用户填销售报价 |
