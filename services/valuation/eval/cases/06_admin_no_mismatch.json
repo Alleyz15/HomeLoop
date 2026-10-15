@@ -1,0 +1,13 @@
+{
+  "name": "admin no mismatch",
+  "endpoint": "admin_assist",
+  "input": {
+    "plan": "A", "status": "under_review",
+    "valuation_snapshot": {"status": "ok", "estimate": 785635, "low": 742127, "high": 877738, "confidence": "high"},
+    "plan_quote_snapshot": {"plan_a": {"offer": 616723}},
+    "road_typical_sizes": {"land_sqm": 164, "floor_sqm": 180},
+    "entered_sizes": {"land_sqm": 164, "floor_sqm": 180},
+    "unit_type": "intermediate", "confidence": "high", "confirmed_value": null,
+    "events": [], "flags": []
+  }
+}

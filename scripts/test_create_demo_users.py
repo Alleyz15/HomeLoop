@@ -22,8 +22,10 @@ class FakeProfilesQuery:
         self.user_id = value
         return self
 
-    def execute(self) -> None:
+    def execute(self) -> SimpleNamespace:
         self.client.profile_updates.append((self.user_id, self.role))
+        data = [] if self.client.drop_profile_update_result else [{"id": self.user_id}]
+        return SimpleNamespace(data=data)
 
 
 class FakeAdmin:
@@ -42,10 +44,16 @@ class FakeAdmin:
         return SimpleNamespace(user=user)
 
 class FakeSupabase:
-    def __init__(self, users: list[SimpleNamespace] | None = None) -> None:
+    def __init__(
+        self,
+        users: list[SimpleNamespace] | None = None,
+        *,
+        drop_profile_update_result: bool = False,
+    ) -> None:
         self.users = users or []
         self.created_payloads: list[dict[str, object]] = []
         self.profile_updates: list[tuple[str, str]] = []
+        self.drop_profile_update_result = drop_profile_update_result
         self.auth = SimpleNamespace(admin=FakeAdmin(self))
 
     def table(self, name: str) -> FakeProfilesQuery:
@@ -86,6 +94,14 @@ class CreateDemoUsersTests(unittest.TestCase):
         self.assertNotIn("admin-secret", output.getvalue())
         self.assertIn("owner.demo@homeloop.my: created", output.getvalue())
         self.assertIn("admin.demo@homeloop.my: created", output.getvalue())
+
+    def test_exits_when_profile_role_update_matches_no_row(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "role update did not match"):
+            provision_demo_users(
+                FakeSupabase(drop_profile_update_result=True),
+                "owner-secret",
+                "admin-secret",
+            )
 
 
 if __name__ == "__main__":

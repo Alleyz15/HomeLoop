@@ -1,0 +1,12 @@
+{
+  "name": "medium confidence valuation",
+  "endpoint": "explain_valuation",
+  "input": {
+    "status": "ok", "estimate": 700000, "low": 610000, "high": 820000,
+    "confidence": "medium", "range_width_pct": 30, "scheme": "TEST SCHEME",
+    "district": "PETALING", "sizes_used": {"land_sqm": 180, "floor_sqm": 170, "land_auto_filled": true, "floor_auto_filled": true},
+    "is_sdp": true, "comparables": [],
+    "disclaimer": "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, Estate Agents and Property Managers Act 1981 (Act 242).",
+    "model_version": "homeloop-comps-knn-v1"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "insufficient data",
+  "endpoint": "explain_valuation",
+  "input": {
+    "status": "insufficient_data", "estimate": null, "low": null, "high": null,
+    "confidence": null, "range_width_pct": null, "scheme": "TEST SCHEME",
+    "district": "PETALING", "sizes_used": {"land_sqm": 164, "floor_sqm": 180, "land_auto_filled": false, "floor_auto_filled": false},
+    "is_sdp": true, "comparables": [],
+    "disclaimer": "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, Estate Agents and Property Managers Act 1981 (Act 242).",
+    "model_version": "homeloop-comps-knn-v1"
+  }
+}

@@ -30,7 +30,17 @@ class ValuationApiSecurityTests(unittest.TestCase):
     def test_settings_contain_only_the_required_secret_names(self) -> None:
         self.assertEqual(
             set(config.Settings.model_fields),
-            {"supabase_url", "supabase_anon_key", "internal_api_key"},
+            {
+                "supabase_url",
+                "supabase_anon_key",
+                "internal_api_key",
+                "gemini_api_key",
+                "gemini_model",
+                "gemini_temperature",
+                "gemini_max_output_tokens",
+                "gemini_top_p",
+                "gemini_timeout_seconds",
+            },
         )
         self.assertNotIn("supabase_service_role_key", config.Settings.model_fields)
 

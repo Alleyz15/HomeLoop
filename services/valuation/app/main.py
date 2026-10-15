@@ -1,13 +1,19 @@
 import secrets
+from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 
+from app.ai.service import AiService
 from app.config import Settings, get_settings
 from app.repository import ValuationRepository, get_repository
 from app.schemas import (
     PlanQuoteRequest,
     PlanQuoteResponse,
+    AdminAssistRequest,
+    AdminAssistResponse,
+    AiExplanationResponse,
+    ExplainValuationRequest,
     RoadResult,
     SimulatorRequest,
     SimulatorResponse,
@@ -39,6 +45,11 @@ def require_internal_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid internal API key",
         )
+
+
+@lru_cache
+def get_ai_service() -> AiService:
+    return AiService(get_settings())
 
 
 @app.get("/health")
@@ -89,6 +100,30 @@ def quote_plans(
         return perform_plan_quote(request, repository)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post(
+    "/ai/explain-valuation",
+    response_model=AiExplanationResponse,
+    dependencies=[Depends(require_internal_key)],
+)
+def explain_valuation(
+    request: ExplainValuationRequest,
+    ai_service: Annotated[AiService, Depends(get_ai_service)],
+) -> dict[str, object]:
+    return ai_service.explain_valuation(request)
+
+
+@app.post(
+    "/ai/admin-assist",
+    response_model=AdminAssistResponse,
+    dependencies=[Depends(require_internal_key)],
+)
+def admin_assist(
+    request: AdminAssistRequest,
+    ai_service: Annotated[AiService, Depends(get_ai_service)],
+) -> dict[str, object]:
+    return ai_service.admin_assist(request)
 
 
 

@@ -38,7 +38,15 @@ def _ensure_user(client: Any, email: str, password: str, role: str) -> None:
         user = response.user if hasattr(response, "user") else response
         outcome = "created"
 
-    client.table("profiles").update({"role": role}).eq("id", user.id).execute()
+    response = (
+        client.table("profiles")
+        .update({"role": role})
+        .eq("id", user.id)
+        .execute()
+    )
+    matched = getattr(response, "data", None)
+    if not matched or not any(str(row.get("id")) == str(user.id) for row in matched):
+        raise SystemExit(f"{email}: role update did not match the profile row")
     print(f"{email}: {outcome}; role={role}")
 
 

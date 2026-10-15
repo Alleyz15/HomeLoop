@@ -64,7 +64,7 @@
 - [x] `valuation_requests` 增加路名、单位类型、可信度与照片路径
 - [x] `applications` 表、状态与申请资料约束、owner/admin RLS
 - [x] `application_events` append-only 记录与 RLS
-- [x] `monthly_limits`、2026-10 至 2026-12 种子资料与 `monthly_limit_usage`
+- [x] `monthly_limits`、2026-10 至 2027-06 种子资料与 `monthly_limit_usage`
 - [x] `backtest_ratios` 表与导入器规格（资料由用户另行导入）
 - [x] 私有 Storage bucket `photos` 与本人目录/admin 读取政策
 - [x] `scripts/create_demo_users.py`（账号由用户另行建立；脚本不输出密码或 key）
@@ -88,7 +88,7 @@
 完成日期：2026-10-14｜commits `3d13e61`、`85a5e48`、`83caf6a`
 
 - [x] 方案 A 收购价 = 估价 ×（1 − 11.5% − 10%）；只限 SDP township、旧屋估价不高于新屋价格
-- [x] 方案 B 保底价 = 估价 × 75%；预计拿到 = 市价 ×（1 − 3.2% − 1.2%），并列出预计净额区间与保底价净额
+- [x] 方案 B 保底价 = 估价 × 75%；公开市场预计拿到 = 市价 ×（1 − 3.2% − 1.2%），并列出预计净额区间；触发保底时由 SDP 直接买下，`net_at_floor` 等于保底价、不扣代理费
 - [x] AI 低/高区间分别套用同一公式，所有金额四舍五入到 RM 整数
 - [x] 换屋计划书资料：两方案时间线、10% 订金与互抵假设、订金缺口、3% RPGT 扣留款、60/90 天提醒、租赁地契另加 1–3 个月
 - [x] `POST /plans/quote`：只读 anon 查询在售 `sdp_launches`，销售报价优先于官网起价，受 `X-Internal-Key` 保护
@@ -159,7 +159,7 @@
 - [x] `npm run build`（11 条路由）、`tsc --noEmit`、`eslint` 全部乾净
 - [x] 静态核对过 insert 的 13 个栏位都存在，且 `unit_position` / `confidence` 的 CHECK 约束与送出的值相符
 
-**未验证**：`/valuation` 受登入保护，而 demo 帐号还没建立，所以整条「搜路名 → 估价 → 存档 → 结果页」尚未用真实 session 跑过。Render 的 `/roads` 与 `/valuate` 已单独验证可用。
+**未验证**：demo 帐号已建立，但整条「搜路名 → 估价 → 存档 → 结果页」尚未用真实 session 跑过。Render 的 `/roads` 与 `/valuate` 已单独验证可用。
 
 ---
 
@@ -170,19 +170,22 @@
 ### B1. 数据库（新 migration）
 
 - [x] 2026-10-14 已确认线上 `backtest_ratios` 有 187 笔、`sdp_launches` 有 35 笔（本机 CSV 在 `data/homeloop_data/`，不是 README 写的 `data/processed/homeloop_data/`）
-- [ ] 用户运行 `scripts/create_demo_users.py`，建立 1 个屋主与 1 个 admin demo 账号
+- [x] 2026-10-15 用户已运行 `scripts/create_demo_users.py`，建立 1 个屋主与 1 个 admin demo 账号；脚本现在也会验证 role 更新确实命中 profile（commit `0388866`）
 
 ### B2. 估价 API 部署（用户操作）
 
 - [x] 2026-10-14 已部署到 Render：`https://homeloop-valuation.onrender.com`，线上 `/health`、`/roads`、`/valuate` 均已用真实资料验证通过（免费方案冷启动约 22 秒）
-- [ ] 在 Vercel 设置 server-only `VALUATION_API_URL` 与 `VALUATION_INTERNAL_KEY`；F4 串接时启用（本机 `apps/web/.env.local` 已设好）
+- [x] 2026-10-15 已在 Vercel 设置 server-only `VALUATION_API_URL` 与 `VALUATION_INTERNAL_KEY`（不得改成 `NEXT_PUBLIC_`）
 - [ ] 上述 B2 修正需重新部署 Render 才会生效
 
 ### B5. AI
 
-- [ ] 估价白话解说（LLM；数字只能从估价结果带入）（原则 14）
-- [ ] Admin 辅助：一段话总结申请、找出对不上的地方（例如填的面积跟这条路的常见面积差很多）、起草给屋主的讯息
-- [ ] AI 只辅助，不自动批准
+完成日期：2026-10-15｜commit `1a93777`
+
+- [x] 估价白话解说：Gemini 可选、无 key/API 错误/超时/额度/数字 guard 失败时用完整 deterministic template；所有输出数字必须来自输入（原则 14）
+- [x] Admin 辅助：Python 先确定面积、低可信度及 AI/确认市值差异，LLM 只能措辞；输出一段摘要与注明需 admin review 的屋主讯息草稿
+- [x] AI 只辅助，不自动批准或拒绝；`google-genai` 固定版本、8 秒 timeout、500 笔记忆体 LRU、结构化 admin 输出及约 10 个 eval cases
+- [x] `/valuation/result/[id]` 的既有 AI slot 已由 Server Component 串接；失败时静默隐藏，不影响确定性估价结果
 
 ### B6. 风险模拟 API
 
@@ -199,7 +202,7 @@
 - [x] 2026-10-15 版面：顶部导航按角色切换（未登录 Home｜屋主 Dashboard/Valuation/New home/Plans｜admin Applications/Risk simulator）、显示登入的邮箱与登出按钮、底部 Act 242 免责声明原文不变
 - [x] 2026-10-15 登录 / 注册（邮箱 + 密码，Server Actions）；登录后按 `profiles.role` 导向 `/dashboard` 或 `/admin`；支援 `?next=` 回到原本要去的页面（只允许站内相对路径）
 - [x] 2026-10-15 未登录访问受保护页面时导向 `/login?next=…`；受保护前缀为 `/dashboard`、`/valuation`、`/new-home`、`/plans`、`/apply`、`/admin`（原则 2：要登录才能估价）
-- [ ] **待验证**：登入后的角色导向与 admin 守卫还没跑过真实帐号，因为 demo 帐号还没建立（见 B1）。建完帐号后要验证：屋主登入 → `/dashboard`、admin 登入 → `/admin`、屋主手动输入 `/admin` → 被送回 `/dashboard`
+- [ ] **待验证**：demo 帐号已建立；仍要实测屋主登入 → `/dashboard`、admin 登入 → `/admin`、屋主手动输入 `/admin` → 被送回 `/dashboard`
 
 ### F2. 屋主端
 
@@ -208,7 +211,7 @@
 - [x] 2026-10-15 ① 估价输入（`/valuation`）：路名搜索（JALAN/JLN 同字、自动带出期数、县与是否 SDP 标签）→ 屋型（只列这条路真实成交过的，附近 3 年笔数与常见面积）→ 单位类型（中间单位自动带入常见面积并显示占比；角头/自填则手动输入）→ 地契；m² / sq ft 切换会换算已输入的数字；排屋 20×70 / 22×75 / 22×80 尺快捷按钮；搜不到路名时提示改用期数或 township（第 4 节）
   - [ ] **还没做**：照片上传（第 4 节标为可选）。需要 Supabase Storage `photos` bucket 的本人目录上传
 - [x] 2026-10-15 ② 估价结果（`/valuation/result/[id]`）：区间与中间值、可信度（三档各自的白话说明）、10 笔参考成交表（月份、地段、建筑、价格、每平方米）、Act 242 免责声明在页脚；资料不足时不显示数字、改为说明少于 10 笔并建议人工估价；非 SDP 旧屋显示「只适用方案 B」卡片
-  - [ ] **还没做**：AI 白话解说（属 B5，交给 Codex；版面已留位置）
+  - [x] 2026-10-15 AI 白话解说已串接 server-only B5 helper；服务失败时隐藏 slot，不阻断结果页
 - [ ] ③ 选新屋（`/new-home`）：在售项目卡片 + 「即将推出」分页（登记兴趣）→ 项目详情 → 选户型 → 价格默认起价、可填销售报价 → 显示差额与价格来源（第 5.1、5.3 节）
 - [ ] ④ 选方案（`/plans`）：方案 A / B 两张卡片 + 引导问题（能否先付 10% 订金）→ 详细计算 → 确认；不符合资格时方案 A 变灰并说明原因（第 5.3 节）
 - [ ] ⑤ 换屋计划书 + 提交申请（`/apply`，同一页）：时间线、资金进出、订金缺口提醒、要准备的东西、RPGT 提醒；下半部填门牌、地契号码（可选）、PDPA 同意（第 5.3、5.4 节）
@@ -240,13 +243,12 @@
 | `road_catalog` 的 Birai 验收笔数与任务文字不同 | 按指定的 trim/JLN 正规化后，`JLN BIRAI U8/69` 有 13 笔（其中 1 笔原始路名有前导空格）；常见地段 178 m²、建筑 190 m² 均符合预期 |
 | 相同 `road_norm` + 屋型可能横跨多个 scheme | `/roads` 会回传 scheme；这种情况调用 `/valuate` 时必须同时带入所选 scheme，否则回 422，避免使用错误期数的成交 |
 | 估价与方案 API 只能由服务器调用 | `apps/web/src/lib/valuation.ts` 已加 `server-only`；F4 必须从 Server Component、Server Action 或 route handler 调用，绝不能从 client component 调用或把内部 key 改成 `NEXT_PUBLIC_` |
-| **估价对地段面积不单调（未修）** | 估价 = 可比成交「每平方米建筑面积」中位数 × 建筑面积，地段面积只影响选哪 10 笔，不影响换算。实测 Bukit Jelutong（建筑固定 190 m²）：地段 430 m² → RM1,420,880，但 480 m² → RM1,348,384，**地段更大反而少 RM72,496**；140–700 m² 范围内有 10 处下跌，最大一处在 180→190 m²（−RM84,329），正好落在最常见的地段大小附近。测过三种改法：加「有效面积」权重只能把下跌从 10 处降到 4 处；加距离上限完全无效；只有改成核权重平滑估计才能完全消除（0 处下跌），但中间值会变成 RM821,651（偏离文件的 RM786,000 约 4.5%），**会让 golden test 失败，也会使 deck 里「误差中位数 10.1%」的回测结论失效**。属模型设计问题，要改必须重跑回测，需团队决定 |
-| 高楼产业（41% 的成交）无法估价 | `Condominium/Apartment` 33,324 笔、`Flat` 6,548、`Low-Cost Flat` 8,276、`Town House` 1,601 共 49,749 笔的 `floor` 为空（单位面积放在 `land` 和 `area`），且 `road` 是空白字串，所以 `road_catalog` 里一笔都没有。方案 B 原本开放给 7 个县任何发展商的房子（含高楼）。要支持需：新 migration 把空白路名的成交纳入期数层级目录 + 改用 `area_sqm` 当面积基准。目前已改为明确告知不支持（见 1.7），属范围决定 |
+| **估价对地段面积不单调（已接受的 deadline 限制）** | 估价 = 可比成交「每平方米建筑面积」中位数 × 建筑面积，地段面积只影响选哪 10 笔，不直接参与价格换算。团队决定截止日前不改模型，避免破坏 Bukit Jelutong golden result 与既有回测；产品需清楚披露这是初步估价限制，并以注册估价师上门检查及正式确认市值作风险缓解。截止日后若改核权重等方法，必须重跑完整回测。 |
+| Prototype 只支援 landed homes | 现阶段即使是方案 B，也只处理可由现有 road/floor 数据估价的 landed old homes。高楼 49,749 笔的 `floor` 为空、`road` 是空白字串，无法进入当前 `road_catalog`/KNN；高楼支援列为下一阶段，届时需新增期数层级目录并以 `area_sqm` 作为面积基准。长期产品范围仍可扩至 7 个县任何发展商，但 prototype 的 Plan B 文案不得暗示现已支援高楼。 |
 | 方案 A/B 报价公式有两处来源 | `private.application_offer` 写死 `0.785` / `0.75`，`services/valuation/app/plans/constants.py` 则由 11.5% + 10% / 75% 推导。目前两边一致（RM786,000 都得出 617,010 / 589,500），但改任何一个比率都要同时改 Python **和新增一个 migration**（规则 4 不准改已套用的 migration） |
-| `net_at_floor` 对保底买下也扣 3.2% 代理费 | `plans/calc.py` 的 `net_at_floor` = 保底价 × 0.956 = RM563,562，但《商业模式》第 0.2、4 节把 RM589,500 当成屋主实拿。保底触发时是 SDP 直接买下、没有代理，需产品决定是不扣费还是改栏位名称 |
-| `create_demo_users.py` 可能静默失效 | 第 41 行 `.update({"role": role}).eq("id", user.id)` 没有检查回传列数，无论是否更新成功都印出 `role=admin`。若 profile 列不存在，admin demo 帐号会留在 `owner`，整个 admin 面板进不去，而脚本却显示成功。建议加上回传检查 |
-| 每月额度按 UTC 月份计算 | `monthly_limit_usage` 与 `issue_offer` 的 `date_trunc('month', ...)` 用 session 时区（Supabase 预设 UTC）。马来西亚时间 11 月 1 日 02:00 发出的报价会算进 10 月。两处一致，所以不会重复计算，只是月份归属不对 |
-| `monthly_limits` 只种子到 2026-12 | `check_monthly_limit` 找不到当月列时会直接报错（fail closed，行为正确）。2027-01 起所有报价都会失败，长期使用前要补列 |
+| `net_at_floor` 保底净额（已解决） | commit `0388866` 已按《商业模式》第 0.2、4 节改为保底价本身；RM786,000 对应 RM589,500。公开市场的 `expected_net` 仍保留 3.2% 代理费及 1.2% 律师费假设。 |
+| `create_demo_users.py` role 验证（已解决） | commit `0388866` 会检查 update 回传确实包含目标 profile；未命中时非零退出，不再误报 admin role 已设定。 |
+| 每月额度月份归属（已解决） | Migration `20261015084351_fix_monthly_limit_timezone.sql`（commit `93faa61`）已于 2026-10-15 套用线上，统一以 `Asia/Kuala_Lumpur` 计算报价月份；本机重建与 59 项 pgTAP 已通过，远端 migration list 已对齐，linked database lint 无错误。 |
 | `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
 | 风险模拟的 RM 金额要标明估价基准 | 《商业模式》第 5 节算的是**占估价的百分比**；RM3,500 / RM26,000 是套在示例的 RM786,000 上。187 笔的平均估价是 RM944,511，所以按每笔自己估价平均会得到 RM7,354 / RM36,953。`/simulator/run` 三种基准都回传，A3 优先显示百分比 |
 | B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此这些数值只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额 |
