@@ -13,6 +13,7 @@ from app.ai.constants import (
     DEFAULT_THINKING_BUDGET,
     DEFAULT_TIMEOUT_SECONDS,
     DEFAULT_TOP_P,
+    GEMINI_MIN_HTTP_DEADLINE_SECONDS,
 )
 
 
@@ -88,6 +89,16 @@ class Settings(BaseSettings):
     @classmethod
     def default_timeout_seconds(cls, value: object) -> object:
         return DEFAULT_TIMEOUT_SECONDS if value in {None, ""} else value
+
+    @field_validator("gemini_timeout_seconds")
+    @classmethod
+    def validate_google_timeout_minimum(cls, value: float) -> float:
+        if value < GEMINI_MIN_HTTP_DEADLINE_SECONDS:
+            raise ValueError(
+                "GEMINI_TIMEOUT_SECONDS must be at least 10 seconds "
+                "because Google rejects shorter request deadlines"
+            )
+        return value
 
     @field_validator("gemini_attempt_timeout_seconds", mode="before")
     @classmethod

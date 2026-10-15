@@ -1,12 +1,14 @@
 import json
 import logging
 import time
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from google.genai.errors import ClientError
+from pydantic import ValidationError
 
 import app.ai.service as ai_service_module
 from app.ai.guard import numbers_are_grounded, ungrounded_numbers
@@ -425,6 +427,81 @@ def test_generation_uses_zero_thinking_budget_and_large_visible_output_budget() 
     assert configs[0].max_output_tokens == 4096
 
 
+def test_google_client_deadline_is_ten_seconds_when_attempt_budget_is_eight() -> None:
+    client = SimpleNamespace(
+        models=SimpleNamespace(
+            generate_content=lambda **_: sdk_response(generated_explanation())
+        )
+    )
+    with patch("app.ai.service.genai.Client", return_value=client) as client_factory:
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_timeout_seconds=10,
+                gemini_attempt_timeout_seconds=8,
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "llm"
+    http_options = client_factory.call_args.kwargs["http_options"]
+    assert http_options.timeout == 10_000
+
+
+def test_overall_timeout_below_google_minimum_is_rejected_at_startup() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="GEMINI_TIMEOUT_SECONDS must be at least 10 seconds",
+    ):
+        Settings(gemini_timeout_seconds=9.99, _env_file=None)
+
+
+def test_eight_second_local_budget_moves_to_fallback_model() -> None:
+    waits: list[float] = []
+
+    class FakeFuture:
+        def result(self, timeout: float) -> SimpleNamespace:
+            waits.append(timeout)
+            if len(waits) == 1:
+                raise FutureTimeoutError()
+            return sdk_response(generated_explanation())
+
+        def cancel(self) -> None:
+            return None
+
+    class FakeExecutor:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def submit(self, _: object) -> FakeFuture:
+            return FakeFuture()
+
+        def shutdown(self, **_: object) -> None:
+            return None
+
+    with patch("app.ai.service.ThreadPoolExecutor", FakeExecutor):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                gemini_model="gemini-primary",
+                gemini_fallback_models="gemini-fallback",
+                gemini_timeout_seconds=20,
+                gemini_attempt_timeout_seconds=8,
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "llm"
+    assert result["model"] == "gemini-fallback"
+    assert waits == [8, 8]
+
+
 def test_sdk_timeout_falls_back_to_template() -> None:
     def slow_generation(**_: object) -> SimpleNamespace:
         time.sleep(0.05)
@@ -438,7 +515,9 @@ def test_sdk_timeout_falls_back_to_template() -> None:
             Settings(
                 internal_api_key="internal",
                 gemini_api_key="test-only-key",
-                gemini_timeout_seconds=0.01,
+                gemini_fallback_models="",
+                gemini_attempt_timeout_seconds=0.01,
+                gemini_timeout_seconds=10,
                 _env_file=None,
             )
         ).explain_valuation(
@@ -472,7 +551,7 @@ def test_primary_attempt_timeout_moves_to_fallback_model(
                 gemini_model="gemini-primary",
                 gemini_fallback_models="gemini-fallback",
                 gemini_attempt_timeout_seconds=0.01,
-                gemini_timeout_seconds=0.2,
+                gemini_timeout_seconds=10,
                 _env_file=None,
             )
         ).explain_valuation(
@@ -508,7 +587,7 @@ def test_all_attempt_timeouts_return_template_with_attempt_list() -> None:
                 gemini_model="gemini-primary",
                 gemini_fallback_models="gemini-fallback-1,gemini-fallback-2",
                 gemini_attempt_timeout_seconds=0.01,
-                gemini_timeout_seconds=0.1,
+                gemini_timeout_seconds=10,
                 _env_file=None,
             )
         ).explain_valuation(
@@ -537,14 +616,13 @@ def test_generation_respects_overall_timeout_cap() -> None:
     started = time.perf_counter()
     with patch("app.ai.service.genai.Client", return_value=client):
         result = AiService(
-            Settings(
+            Settings.model_construct(
                 internal_api_key="internal",
                 gemini_api_key="test-only-key",
                 gemini_model="gemini-primary",
                 gemini_fallback_models="gemini-fallback-1,gemini-fallback-2",
                 gemini_attempt_timeout_seconds=0.02,
                 gemini_timeout_seconds=0.03,
-                _env_file=None,
             )
         ).explain_valuation(
             ExplainValuationRequest.model_validate(explain_payload())
@@ -575,7 +653,7 @@ def test_attempt_timeout_does_not_retry_same_model() -> None:
                 gemini_model="gemini-primary",
                 gemini_fallback_models="",
                 gemini_attempt_timeout_seconds=0.01,
-                gemini_timeout_seconds=0.1,
+                gemini_timeout_seconds=10,
                 _env_file=None,
             )
         ).explain_valuation(
@@ -587,10 +665,14 @@ def test_attempt_timeout_does_not_retry_same_model() -> None:
 
 
 def test_api_error_records_exception_class_and_http_status() -> None:
+    error_message = (
+        "Manually set deadline 8s is too short. Minimum allowed deadline is 10s."
+    )
+
     def raise_bad_request(**_: object) -> None:
         raise ClientError(
             400,
-            {"message": "bad request", "status": "INVALID_ARGUMENT"},
+            {"message": error_message, "status": "INVALID_ARGUMENT"},
         )
 
     client = SimpleNamespace(
@@ -610,7 +692,36 @@ def test_api_error_records_exception_class_and_http_status() -> None:
     assert result["fallback_reason"] == "api_error"
     assert result["fallback_detail"] is not None
     assert "gemini-3.8-flash:error:" in result["fallback_detail"]
-    assert result["fallback_detail"].endswith("ClientError status=400")
+    assert "ClientError status=400" in result["fallback_detail"]
+    assert error_message in result["fallback_detail"]
+
+
+def test_api_error_message_is_limited_to_first_two_hundred_characters() -> None:
+    error_message = "x" * 200 + "not-included"
+
+    def raise_bad_request(**_: object) -> None:
+        raise ClientError(
+            400,
+            {"message": error_message, "status": "INVALID_ARGUMENT"},
+        )
+
+    client = SimpleNamespace(
+        models=SimpleNamespace(generate_content=raise_bad_request)
+    )
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["fallback_detail"] is not None
+    assert "message=" + "x" * 200 in result["fallback_detail"]
+    assert "not-included" not in result["fallback_detail"]
 
 
 @pytest.mark.parametrize(

@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from app.ai.constants import (
     AI_CACHE_SIZE,
+    GEMINI_MIN_HTTP_DEADLINE_SECONDS,
     SIZE_MISMATCH_THRESHOLD,
     THINKING_RETRY_BUDGET,
     TRANSIENT_RETRY_DELAY_SECONDS,
@@ -205,7 +206,14 @@ def _is_thinking_config_rejection(error: BaseException) -> bool:
 
 def _api_error_detail(error: BaseException) -> str:
     status = _http_status(error)
-    return f"{type(error).__name__} status={status if status is not None else 'unknown'}"
+    status_text = status if status is not None else "unknown"
+    detail = f"{type(error).__name__} status={status_text}"
+    raw_message = getattr(error, "message", None)
+    if isinstance(raw_message, str):
+        message = " ".join(raw_message.strip().split())[:200]
+        if message:
+            detail += f" message={message}"
+    return detail
 
 
 def _looks_like_html(value: object) -> bool:
@@ -246,15 +254,12 @@ class AiService:
             self._client = genai.Client(
                 api_key=self.settings.gemini_api_key,
                 http_options=types.HttpOptions(
-                    timeout=max(
-                        1,
-                        round(
-                            min(
-                                self.settings.gemini_timeout_seconds,
-                                self.settings.gemini_attempt_timeout_seconds,
-                            )
-                            * 1000
-                        ),
+                    timeout=round(
+                        max(
+                            GEMINI_MIN_HTTP_DEADLINE_SECONDS,
+                            self.settings.gemini_timeout_seconds,
+                        )
+                        * 1000
                     )
                 ),
             )
