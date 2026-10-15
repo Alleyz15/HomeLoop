@@ -40,6 +40,8 @@ def evaluate_case(service: AiService, case: dict[str, Any]) -> None:
 
     print(f"CASE: {case['name']}")
     print(f"source={result['source']}")
+    print(f"fallback_reason={result['fallback_reason']}")
+    print(f"fallback_detail={result['fallback_detail']}")
     print(f"number_guard={'pass' if numbers_are_grounded(text, guard_payload) else 'fail'}")
     print(f"sentence_count={sentence_count(text)}")
     print(text)

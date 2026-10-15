@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
+import { AiThinking } from "@/components/ai-thinking";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +15,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { formatArea, formatRm } from "@/lib/units";
 import { explainValuation } from "@/lib/valuation";
-import { getRoadMeta, getValuation } from "@/lib/valuations";
+import {
+  getRoadMeta,
+  getValuation,
+  type RoadMeta,
+  type StoredValuation,
+} from "@/lib/valuations";
 
 const VALUATION_DISCLAIMER =
   "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, Estate Agents and Property Managers Act 1981 (Act 242).";
@@ -23,6 +30,71 @@ const CONFIDENCE_COPY = {
   medium: "Medium — the comparable sales vary a little in size or age.",
   low: "Low — the comparable sales vary widely, so treat this as a rough guide.",
 } as const;
+
+async function ValuationExplanation({
+  valuation,
+  meta,
+}: {
+  valuation: StoredValuation;
+  meta: RoadMeta | null;
+}) {
+  const priced =
+    valuation.estimate != null &&
+    valuation.low != null &&
+    valuation.high != null;
+
+  try {
+    const explanation = await explainValuation({
+      status: priced ? "ok" : "insufficient_data",
+      estimate: valuation.estimate,
+      low: valuation.low,
+      high: valuation.high,
+      confidence: valuation.confidence,
+      range_width_pct:
+        priced && valuation.estimate
+          ? ((valuation.high! - valuation.low!) / valuation.estimate) * 100
+          : null,
+      scheme: valuation.scheme,
+      property_type: valuation.ptype,
+      district: meta?.district ?? null,
+      sizes_used:
+        valuation.land_sqm && valuation.floor_sqm
+          ? {
+              land_sqm: valuation.land_sqm,
+              floor_sqm: valuation.floor_sqm,
+              land_auto_filled: valuation.unit_position === "intermediate",
+              floor_auto_filled: valuation.unit_position === "intermediate",
+            }
+          : null,
+      is_sdp: meta?.is_sdp ?? null,
+      comparables: valuation.comps ?? [],
+      disclaimer: VALUATION_DISCLAIMER,
+      model_version: "homeloop-comps-knn-v1",
+    });
+
+    if (!explanation.text?.trim()) {
+      return null;
+    }
+
+    return (
+      <Card>
+        <CardHeader>
+          {explanation.source === "llm" ? (
+            <CardDescription>AI-generated explanation</CardDescription>
+          ) : null}
+          <CardTitle className="text-lg">What this result means</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm leading-6 text-muted-foreground">
+            {explanation.text}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  } catch {
+    return null;
+  }
+}
 
 export default async function ValuationResultPage({
   params,
@@ -45,38 +117,6 @@ export default async function ValuationResultPage({
     valuation.low != null &&
     valuation.high != null;
   const comparables = valuation.comps ?? [];
-  let aiExplanation: string | null = null;
-  try {
-    const explanation = await explainValuation({
-      status: priced ? "ok" : "insufficient_data",
-      estimate: valuation.estimate,
-      low: valuation.low,
-      high: valuation.high,
-      confidence: valuation.confidence,
-      range_width_pct:
-        priced && valuation.estimate
-          ? ((valuation.high! - valuation.low!) / valuation.estimate) * 100
-          : null,
-      scheme: valuation.scheme,
-      district: meta?.district ?? null,
-      sizes_used:
-        valuation.land_sqm && valuation.floor_sqm
-          ? {
-              land_sqm: valuation.land_sqm,
-              floor_sqm: valuation.floor_sqm,
-              land_auto_filled: valuation.unit_position === "intermediate",
-              floor_auto_filled: valuation.unit_position === "intermediate",
-            }
-          : null,
-      is_sdp: meta?.is_sdp ?? null,
-      comparables,
-      disclaimer: VALUATION_DISCLAIMER,
-      model_version: "homeloop-comps-knn-v1",
-    });
-    aiExplanation = explanation.text;
-  } catch {
-    // This optional slot must never block the deterministic valuation result.
-  }
 
   return (
     <section className="flex w-full flex-col gap-8">
@@ -152,19 +192,9 @@ export default async function ValuationResultPage({
         </Card>
       )}
 
-      {aiExplanation ? (
-        <Card>
-          <CardHeader>
-            <CardDescription>AI-generated explanation</CardDescription>
-            <CardTitle className="text-lg">What this result means</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {aiExplanation}
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+      <Suspense fallback={<AiThinking />}>
+        <ValuationExplanation valuation={valuation} meta={meta} />
+      </Suspense>
 
       {!meta?.is_sdp ? (
         <Card>

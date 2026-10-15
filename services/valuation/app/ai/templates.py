@@ -1,32 +1,34 @@
 from __future__ import annotations
 
+from app.ai.facts import build_explanation_facts
 from app.schemas import AdminAssistRequest, ExplainValuationRequest
 
 
-def _rm(value: float) -> str:
-    return f"RM{round(value):,}"
-
-
 def explain_valuation_template(request: ExplainValuationRequest) -> str:
+    facts = build_explanation_facts(request)
     if request.status != "ok" or request.estimate is None:
         return (
-            "There are not enough recent comparable sales to produce a reliable price range. "
+            "There are not enough recent sales of similar homes to produce a reliable price range. "
             "The available records do not support a confident preliminary estimate for this home. "
-            "A registered valuer can inspect the property and assess it directly. "
-            "This is preliminary guidance, not a formal valuation under Act 242."
+            "This is preliminary guidance, not a formal valuation under Act 242, and a registered "
+            "valuer can inspect the property and confirm the final figure if you proceed."
         )
 
-    confidence_reason = {
-        "high": "the comparable prices form a relatively tight range",
-        "medium": "the comparable prices show some variation",
-        "low": "the comparable prices vary widely",
-    }[request.confidence or "low"]
+    sales = facts["sales_summary"]
+    area = facts["area_name"] or "the selected area"
+    earliest = sales["earliest_sale_month"] or "the earliest supplied month"
+    latest = sales["latest_sale_month"] or "the latest supplied month"
+    confidence_reason = str(facts["confidence_reason"])
+    confidence_reason = confidence_reason[:1].lower() + confidence_reason[1:]
     return (
-        f"The preliminary estimate is {_rm(request.estimate)}, with a range from "
-        f"{_rm(request.low or request.estimate)} to {_rm(request.high or request.estimate)}. "
-        f"Confidence is {request.confidence or 'low'} because {confidence_reason}. "
-        "The supplied comparable sales show what similar homes in the same area have recently achieved. "
-        "This is preliminary guidance, not a formal valuation under Act 242."
+        f"The preliminary estimate is {facts['estimate_rm']}, with a range from "
+        f"{facts['low_rm']} to {facts['high_rm']}. "
+        f"It is based on {sales['count']} recent sales of similar homes in {area} "
+        f"between {earliest} and {latest}. "
+        f"Confidence is {facts['confidence']} because "
+        f"{confidence_reason} "
+        "This is a preliminary estimate, not a formal valuation under Act 242, and a "
+        "registered valuer will confirm the final figure if you proceed."
     )
 
 

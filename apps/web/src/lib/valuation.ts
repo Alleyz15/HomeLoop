@@ -2,6 +2,17 @@ import "server-only";
 
 export type Confidence = "high" | "medium" | "low";
 export type UnitPosition = "intermediate" | "corner_end" | "custom";
+export type AiFallbackReason =
+  | "no_api_key"
+  | "api_error"
+  | "unavailable"
+  | "rate_limited"
+  | "timeout"
+  | "empty_response"
+  | "truncated"
+  | "sentence_count"
+  | "number_guard"
+  | "invalid_json";
 
 export type ValuationInput = {
   road_norm?: string | null;
@@ -37,6 +48,7 @@ export type ValuationResponse = {
   confidence: Confidence | null;
   range_width_pct: number | null;
   scheme: string | null;
+  property_type?: string | null;
   is_sdp: boolean | null;
   district: string | null;
   tenure: string | null;
@@ -56,6 +68,7 @@ export type ExplainValuationInput = Pick<
   | "confidence"
   | "range_width_pct"
   | "scheme"
+  | "property_type"
   | "district"
   | "sizes_used"
   | "is_sdp"
@@ -68,6 +81,8 @@ export type AiExplanationResponse = {
   text: string;
   source: "llm" | "template";
   model: string;
+  fallback_reason: AiFallbackReason | null;
+  fallback_detail: string | null;
 };
 
 export type AdminAssistInput = {
@@ -96,6 +111,8 @@ export type AdminAssistResponse = {
   draft_message: string;
   source: "llm" | "template";
   model: string;
+  fallback_reason: AiFallbackReason | null;
+  fallback_detail: string | null;
 };
 
 export type RoadPropertyType = {

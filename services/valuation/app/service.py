@@ -54,7 +54,9 @@ class SimulatorRepository(Protocol):
     def backtest_ratios(self) -> list[dict[str, Any]]: ...
 
 
-def _empty_response(status: str) -> dict[str, Any]:
+def _empty_response(
+    status: str, property_type: str | None = None
+) -> dict[str, Any]:
     return {
         "status": status,
         "estimate": None,
@@ -63,6 +65,7 @@ def _empty_response(status: str) -> dict[str, Any]:
         "confidence": None,
         "range_width_pct": None,
         "scheme": None,
+        "property_type": property_type,
         "is_sdp": None,
         "district": None,
         "tenure": None,
@@ -75,9 +78,11 @@ def _empty_response(status: str) -> dict[str, Any]:
 
 
 def _unsupported_response(
-    scheme: str, catalog: Mapping[str, Any] | None = None
+    scheme: str,
+    property_type: str,
+    catalog: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    response = _empty_response("unsupported_property_type")
+    response = _empty_response("unsupported_property_type", property_type)
     response.update(
         {
             "scheme": scheme,
@@ -112,15 +117,17 @@ def perform_valuation(
         if requested and repository.scheme_lacks_floor_area(
             requested, request.property_type
         ):
-            return _unsupported_response(requested)
-        return _empty_response("not_found")
+            return _unsupported_response(requested, request.property_type)
+        return _empty_response("not_found", request.property_type)
 
     # High-rise rows carry the unit size in land/area and leave floor empty, so
     # the catalog has no typical floor area and the comparables model has no
     # price-per-floor-sqm to work from. Say so instead of reporting the generic
     # insufficient-data result, which misstates the cause.
     if catalog.get("typical_floor_sqm") is None:
-        return _unsupported_response(str(catalog["scheme"]), catalog)
+        return _unsupported_response(
+            str(catalog["scheme"]), request.property_type, catalog
+        )
 
     scheme = str(catalog["scheme"])
     sizes = resolve_subject_sizes(
@@ -140,6 +147,7 @@ def perform_valuation(
     result.update(
         {
             "scheme": scheme,
+            "property_type": request.property_type,
             "is_sdp": is_sdp,
             "district": catalog.get("district"),
             "tenure": request.tenure,

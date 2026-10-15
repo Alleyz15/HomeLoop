@@ -18,6 +18,18 @@ ValuationStatus = Literal[
 ]
 Confidence = Literal["high", "medium", "low"]
 PlanPriceSource = Literal["from_price", "sales_quote"]
+AiFallbackReason = Literal[
+    "no_api_key",
+    "api_error",
+    "unavailable",
+    "rate_limited",
+    "timeout",
+    "empty_response",
+    "truncated",
+    "sentence_count",
+    "number_guard",
+    "invalid_json",
+]
 
 
 class ValuationRequest(BaseModel):
@@ -84,6 +96,7 @@ class ValuationResponse(BaseModel):
     confidence: Confidence | None
     range_width_pct: float | None
     scheme: str | None
+    property_type: str | None
     is_sdp: bool | None
     district: str | None
     tenure: str | None
@@ -103,6 +116,7 @@ class ExplainValuationRequest(BaseModel):
     range_width_pct: float | None = None
     scheme: str | None = None
     district: str | None = None
+    property_type: str | None = None
     sizes_used: SizesUsed | None = None
     is_sdp: bool | None = None
     comparables: list[Comparable] = Field(default_factory=list)
@@ -114,6 +128,8 @@ class AiExplanationResponse(BaseModel):
     text: str
     source: Literal["llm", "template"]
     model: str
+    fallback_reason: AiFallbackReason | None = None
+    fallback_detail: str | None = None
 
 
 class AdminSizePair(BaseModel):
@@ -141,6 +157,8 @@ class AdminAssistResponse(BaseModel):
     draft_message: str
     source: Literal["llm", "template"]
     model: str
+    fallback_reason: AiFallbackReason | None = None
+    fallback_detail: str | None = None
 
 
 class PlanValuationInput(BaseModel):

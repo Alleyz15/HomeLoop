@@ -2,10 +2,19 @@ from typing import Final
 
 
 DEFAULT_GEMINI_MODEL: Final = "gemini-3.8-flash"
+DEFAULT_GEMINI_FALLBACK_MODELS: Final = "gemini-3.7-flash,gemini-3.5-flash"
 DEFAULT_TEMPERATURE: Final = 0.3
-DEFAULT_MAX_OUTPUT_TOKENS: Final = 400
+DEFAULT_MAX_OUTPUT_TOKENS: Final = 4096
 DEFAULT_TOP_P: Final = 0.9
-DEFAULT_TIMEOUT_SECONDS: Final = 8.0
+DEFAULT_TIMEOUT_SECONDS: Final = 20.0
+DEFAULT_ATTEMPT_TIMEOUT_SECONDS: Final = 8.0
+# Google rejects manually configured request deadlines below 10 seconds:
+# "Manually set deadline 8s is too short. Minimum allowed deadline is 10s."
+GEMINI_MIN_HTTP_DEADLINE_SECONDS: Final = 10.0
+DEFAULT_THINKING_BUDGET: Final = 0
+THINKING_RETRY_BUDGET: Final = 128
+TRANSIENT_RETRY_DELAY_SECONDS: Final = 1.5
 AI_CACHE_SIZE: Final = 500
 SIZE_MISMATCH_THRESHOLD: Final = 0.25
 VALUE_GAP_THRESHOLD: Final = 0.10
+VALUATION_LOOKBACK_YEARS: Final = 3

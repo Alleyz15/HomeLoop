@@ -36,10 +36,13 @@ class ValuationApiSecurityTests(unittest.TestCase):
                 "internal_api_key",
                 "gemini_api_key",
                 "gemini_model",
+                "gemini_fallback_models",
+                "gemini_thinking_budget",
                 "gemini_temperature",
                 "gemini_max_output_tokens",
                 "gemini_top_p",
                 "gemini_timeout_seconds",
+                "gemini_attempt_timeout_seconds",
             },
         )
         self.assertNotIn("supabase_service_role_key", config.Settings.model_fields)

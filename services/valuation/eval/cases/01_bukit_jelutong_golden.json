@@ -10,9 +10,21 @@
     "range_width_pct": 17.3,
     "scheme": "BUKIT JELUTONG, SHAH ALAM",
     "district": "PETALING",
+    "property_type": "2 - 2 1/2 Storey Terraced",
     "sizes_used": {"land_sqm": 164, "floor_sqm": 180, "land_auto_filled": false, "floor_auto_filled": false},
     "is_sdp": true,
-    "comparables": [{"date": "2026-01", "land_sqm": 164, "floor_sqm": 180, "price": 786000, "price_per_sqm": 4366.67, "distance": 0.02}],
+    "comparables": [
+      {"date": "2026-01", "land_sqm": 165, "floor_sqm": 181, "price": 700000, "price_per_sqm": 3867.403314917127, "distance": 0.01655819806128793},
+      {"date": "2024-08", "land_sqm": 166, "floor_sqm": 181, "price": 745000, "price_per_sqm": 4116.022099447514, "distance": 0.04999411877686112},
+      {"date": "2024-09", "land_sqm": 168, "floor_sqm": 181, "price": 675000, "price_per_sqm": 3729.281767955801, "distance": 0.05972621262344508},
+      {"date": "2026-04", "land_sqm": 175, "floor_sqm": 176, "price": 960000, "price_per_sqm": 5454.545454545455, "distance": 0.07203250884431608},
+      {"date": "2024-02", "land_sqm": 169, "floor_sqm": 181, "price": 750000, "price_per_sqm": 4143.646408839779, "distance": 0.07720568870378795},
+      {"date": "2026-03", "land_sqm": 153, "floor_sqm": 175, "price": 860000, "price_per_sqm": 4914.285714285715, "distance": 0.07992606899082683},
+      {"date": "2023-07", "land_sqm": 160, "floor_sqm": 181, "price": 862000, "price_per_sqm": 4762.4309392265195, "distance": 0.0836398288460004},
+      {"date": "2025-07", "land_sqm": 167, "floor_sqm": 194, "price": 1100000, "price_per_sqm": 5670.103092783505, "distance": 0.09539699557573561},
+      {"date": "2022-04", "land_sqm": 166, "floor_sqm": 181, "price": 800000, "price_per_sqm": 4419.889502762431, "distance": 0.09666078544352628},
+      {"date": "2022-07", "land_sqm": 167, "floor_sqm": 181, "price": 780000, "price_per_sqm": 4309.39226519337, "distance": 0.09728842950193338}
+    ],
     "disclaimer": "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, Estate Agents and Property Managers Act 1981 (Act 242).",
     "model_version": "homeloop-comps-knn-v1"
   }

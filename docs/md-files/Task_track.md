@@ -180,12 +180,14 @@
 
 ### B5. AI
 
-完成日期：2026-10-15｜commit `1a93777`
+完成日期：2026-10-15｜commits `1a93777`, `3474211`, `850a632`, `1fb3620`
 
 - [x] 估价白话解说：Gemini 可选、无 key/API 错误/超时/额度/数字 guard 失败时用完整 deterministic template；所有输出数字必须来自输入（原则 14）
 - [x] Admin 辅助：Python 先确定面积、低可信度及 AI/确认市值差异，LLM 只能措辞；输出一段摘要与注明需 admin review 的屋主讯息草稿
-- [x] AI 只辅助，不自动批准或拒绝；`google-genai` 固定版本、8 秒 timeout、500 笔记忆体 LRU、结构化 admin 输出及约 10 个 eval cases
-- [x] `/valuation/result/[id]` 的既有 AI slot 已由 Server Component 串接；失败时静默隐藏，不影响确定性估价结果
+- [x] AI 只辅助，不自动批准或拒绝；`google-genai` 固定版本、500 笔记忆体 LRU、结构化 admin 输出及约 10 个 eval cases
+- [x] 2026-10-15 Gemini 模型链改为每次尝试最多 8 秒（`GEMINI_ATTEMPT_TIMEOUT_SECONDS`，可覆盖），整条链仍以 `GEMINI_TIMEOUT_SECONDS=20` 为上限；timeout 直接换 fallback，只有 429/503 会重试同一模型；`eval/smoke_explain.py --runs N` 可检查真实成功率与平均延迟（commit `850a632`）
+- [x] 2026-10-15 `/valuation/result/[id]` 的 AI slot 已拆成独立 async Server Component + Suspense；估价数字和参考成交先显示，AI 后续串流，失败时静默隐藏（commit `1fb3620`）
+- [x] 2026-10-15 `AiThinking` 无图标 loading card 已完成：轮换短句、三点错开跳动、admin 文案 preset、reduced-motion 静态显示及 status accessibility（commit `1fb3620`）
 
 ### B6. 风险模拟 API
 
@@ -211,7 +213,7 @@
 - [x] 2026-10-15 ① 估价输入（`/valuation`）：路名搜索（JALAN/JLN 同字、自动带出期数、县与是否 SDP 标签）→ 屋型（只列这条路真实成交过的，附近 3 年笔数与常见面积）→ 单位类型（中间单位自动带入常见面积并显示占比；角头/自填则手动输入）→ 地契；m² / sq ft 切换会换算已输入的数字；排屋 20×70 / 22×75 / 22×80 尺快捷按钮；搜不到路名时提示改用期数或 township（第 4 节）
   - [ ] **还没做**：照片上传（第 4 节标为可选）。需要 Supabase Storage `photos` bucket 的本人目录上传
 - [x] 2026-10-15 ② 估价结果（`/valuation/result/[id]`）：区间与中间值、可信度（三档各自的白话说明）、10 笔参考成交表（月份、地段、建筑、价格、每平方米）、Act 242 免责声明在页脚；资料不足时不显示数字、改为说明少于 10 笔并建议人工估价；非 SDP 旧屋显示「只适用方案 B」卡片
-  - [x] 2026-10-15 AI 白话解说已串接 server-only B5 helper；服务失败时隐藏 slot，不阻断结果页
+  - [x] 2026-10-15 AI 白话解说已串接 server-only B5 helper，并以 Suspense 串流；服务失败时隐藏 slot，不阻断估价数字、可信度与参考成交先显示
 - [ ] ③ 选新屋（`/new-home`）：在售项目卡片 + 「即将推出」分页（登记兴趣）→ 项目详情 → 选户型 → 价格默认起价、可填销售报价 → 显示差额与价格来源（第 5.1、5.3 节）
 - [ ] ④ 选方案（`/plans`）：方案 A / B 两张卡片 + 引导问题（能否先付 10% 订金）→ 详细计算 → 确认；不符合资格时方案 A 变灰并说明原因（第 5.3 节）
 - [ ] ⑤ 换屋计划书 + 提交申请（`/apply`，同一页）：时间线、资金进出、订金缺口提醒、要准备的东西、RPGT 提醒；下半部填门牌、地契号码（可选）、PDPA 同意（第 5.3、5.4 节）
