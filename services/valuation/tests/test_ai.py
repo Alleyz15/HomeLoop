@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 from google.genai.errors import ClientError
 
+import app.ai.service as ai_service_module
 from app.ai.guard import numbers_are_grounded, ungrounded_numbers
 from app.ai.service import AiService, detect_mismatches
 from app.ai.templates import explain_valuation_template
@@ -26,15 +27,17 @@ def explain_payload(
     *, confidence: str = "high", status: str = "ok"
 ) -> dict[str, object]:
     priced = status == "ok"
+    width_by_confidence = {"high": 17.3, "medium": 25.0, "low": 40.0}
     return {
         "status": status,
         "estimate": 785_635 if priced else None,
         "low": 742_127 if priced else None,
         "high": 877_738 if priced else None,
         "confidence": confidence if priced else None,
-        "range_width_pct": 17.3 if priced else None,
+        "range_width_pct": width_by_confidence[confidence] if priced else None,
         "scheme": "BUKIT JELUTONG, SHAH ALAM",
         "district": "PETALING",
+        "property_type": "2 - 2 1/2 Storey Terraced",
         "sizes_used": {
             "land_sqm": 164,
             "floor_sqm": 180,
@@ -44,13 +47,28 @@ def explain_payload(
         "is_sdp": True,
         "comparables": [
             {
-                "date": "2026-01",
-                "land_sqm": 164,
-                "floor_sqm": 180,
-                "price": 786_000,
-                "price_per_sqm": 4_366.67,
-                "distance": 0.02,
+                "date": date,
+                "land_sqm": 160 + index,
+                "floor_sqm": 176 + index,
+                "price": price,
+                "price_per_sqm": price / (176 + index),
+                "distance": index / 100,
             }
+            for index, (date, price) in enumerate(
+                [
+                    ("2024-03", 720_000),
+                    ("2024-06", 750_000),
+                    ("2024-09", 770_000),
+                    ("2025-01", 780_000),
+                    ("2025-04", 785_000),
+                    ("2025-08", 795_000),
+                    ("2025-11", 810_000),
+                    ("2026-01", 825_000),
+                    ("2026-03", 850_000),
+                    ("2026-06", 880_000),
+                ],
+                start=1,
+            )
         ]
         if priced
         else [],
@@ -69,8 +87,21 @@ def admin_payload() -> dict[str, object]:
             "low": 700_000,
             "high": 900_000,
             "confidence": "low",
+            "comparables": [
+                {
+                    "price": 790_000,
+                    "price_per_sqm": 4_388.89,
+                    "distance": 0.02,
+                }
+            ],
         },
-        "plan_quote_snapshot": {"plan_b": {"floor": 600_000}},
+        "plan_quote_snapshot": {
+            "plan_b": {
+                "floor": 600_000,
+                "floor_low": 550_000.25,
+                "agent_fee_rate": 0.032,
+            }
+        },
         "road_typical_sizes": {"land_sqm": 164, "floor_sqm": 180},
         "entered_sizes": {"land_sqm": 220, "floor_sqm": 230},
         "unit_type": "custom",
@@ -84,10 +115,147 @@ def admin_payload() -> dict[str, object]:
 def generated_explanation() -> str:
     return (
         "The preliminary estimate is RM785,635, with a range from RM742,127 to "
-        "RM877,738. Confidence is high because the supplied comparable is close "
-        "to the entered home size. The comparable sale was RM786,000. This is "
-        "preliminary, not a formal valuation under Act 242."
+        "RM877,738. It is based on 10 recent sales of similar homes in Bukit "
+        "Jelutong, Shah Alam between March 2024 and June 2026. Confidence is high "
+        "because the range is narrow and those sale prices are closely grouped. "
+        "This is preliminary, not a formal valuation under Act 242, and a "
+        "registered valuer will confirm the final figure if you proceed."
     )
+
+
+def _contains_float(value: object) -> bool:
+    if isinstance(value, float):
+        return True
+    if isinstance(value, dict):
+        return any(_contains_float(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_float(item) for item in value)
+    return False
+
+
+def test_explanation_facts_format_money_and_summarize_comparables() -> None:
+    request = ExplainValuationRequest.model_validate(explain_payload())
+
+    facts = ai_service_module.build_explanation_facts(request)
+
+    assert facts == {
+        "status": "ok",
+        "estimate_rm": "RM785,635",
+        "low_rm": "RM742,127",
+        "high_rm": "RM877,738",
+        "range_width_pct": "17%",
+        "confidence": "high",
+        "confidence_reason": (
+            "A 17% range is narrow (under 20%), so recent sale prices are "
+            "closely grouped."
+        ),
+        "sales_summary": {
+            "count": 10,
+            "earliest_sale_month": "March 2024",
+            "latest_sale_month": "June 2026",
+            "lowest_price_rm": "RM720,000",
+            "highest_price_rm": "RM880,000",
+            "median_price_rm": "RM790,000",
+        },
+        "area_name": "Bukit Jelutong, Shah Alam",
+        "property_type": "two- to two-and-a-half-storey terraced home",
+        "is_sdp": True,
+        "subject_sizes": {"land": "164 m²", "floor": "180 m²"},
+        "legal_note": "Act 242",
+    }
+    serialized = json.dumps(facts).casefold()
+    assert "distance" not in serialized
+    assert "price_per_sqm" not in serialized
+    assert _contains_float(facts) is False
+
+
+def test_admin_facts_format_numbers_and_remove_model_mechanics() -> None:
+    request = AdminAssistRequest.model_validate(admin_payload())
+    mismatches = detect_mismatches(request)
+
+    facts = ai_service_module.build_admin_facts(request, mismatches)
+
+    assert facts["valuation"]["estimate_rm"] == "RM800,000"
+    assert facts["plan_quote"]["plan_b"]["floor"] == "RM600,000"
+    assert facts["plan_quote"]["plan_b"]["floor_low"] == "RM550,000"
+    assert facts["plan_quote"]["plan_b"]["agent_fee_rate"] == "3%"
+    assert facts["confirmed_value_rm"] == "RM680,000"
+    assert facts["road_typical_sizes"] == {
+        "land": "164 m²",
+        "floor": "180 m²",
+    }
+    serialized = json.dumps(facts).casefold()
+    assert "distance" not in serialized
+    assert "price_per_sqm" not in serialized
+    assert _contains_float(facts) is False
+
+
+def test_number_guard_accepts_formatted_explanation_facts() -> None:
+    facts = ai_service_module.build_explanation_facts(
+        ExplainValuationRequest.model_validate(explain_payload())
+    )
+
+    assert numbers_are_grounded(generated_explanation(), facts) is True
+
+
+def test_prompt_files_never_expose_knn_distance() -> None:
+    prompt_dir = Path(ai_service_module.__file__).parent / "prompts"
+
+    assert "distance" not in (prompt_dir / "explain_valuation.md").read_text(
+        encoding="utf-8"
+    ).casefold()
+    assert "distance" not in (prompt_dir / "admin_assist.md").read_text(
+        encoding="utf-8"
+    ).casefold()
+
+
+def test_explanation_prompt_bans_model_jargon_and_requires_plain_style() -> None:
+    prompt = (
+        Path(ai_service_module.__file__).parent / "prompts" / "explain_valuation.md"
+    ).read_text(encoding="utf-8").casefold()
+
+    for forbidden in ("knn", "comparables", "percentile", "distance"):
+        assert forbidden not in prompt
+    assert "malaysian homeowner" in prompt
+    assert "3–4 sentences" in prompt
+    assert "registered valuer" in prompt
+
+
+@pytest.mark.parametrize(
+    ("width_pct", "confidence", "reason_fragment"),
+    [
+        (19.9, "high", "under 20%"),
+        (20.0, "medium", "20% to under 35%"),
+        (34.9, "medium", "20% to under 35%"),
+        (35.0, "low", "35% or more"),
+    ],
+)
+def test_explanation_confidence_reason_uses_documented_thresholds(
+    width_pct: float,
+    confidence: str,
+    reason_fragment: str,
+) -> None:
+    payload = explain_payload()
+    payload["range_width_pct"] = width_pct
+
+    facts = ai_service_module.build_explanation_facts(
+        ExplainValuationRequest.model_validate(payload)
+    )
+
+    assert facts["confidence"] == confidence
+    assert reason_fragment in facts["confidence_reason"]
+
+
+def test_explanation_facts_find_date_bounds_when_nearest_sales_are_unsorted() -> None:
+    payload = explain_payload()
+    payload["comparables"] = list(reversed(payload["comparables"]))
+
+    facts = ai_service_module.build_explanation_facts(
+        ExplainValuationRequest.model_validate(payload)
+    )
+
+    assert facts["sales_summary"]["earliest_sale_month"] == "March 2024"
+    assert facts["sales_summary"]["latest_sale_month"] == "June 2026"
 
 
 def sdk_response(
@@ -117,8 +285,14 @@ def test_template_explains_each_confidence_level_without_gemini(
     assert "RM785,635" in text
     assert "RM742,127" in text
     assert "RM877,738" in text
+    assert "10 recent sales of similar homes" in text
+    assert "March 2024" in text
+    assert "June 2026" in text
+    assert "because a " in text.casefold()
+    assert "registered valuer" in text.casefold()
+    assert "comparable" not in text.casefold()
     assert "Act 242" in text
-    assert 3 <= text.count(".") <= 5
+    assert 3 <= text.count(".") <= 4
 
 
 def test_template_handles_insufficient_data_without_showing_a_price() -> None:
@@ -128,7 +302,7 @@ def test_template_handles_insufficient_data_without_showing_a_price() -> None:
 
     text = explain_valuation_template(request)
 
-    assert "not enough recent comparable sales" in text.casefold()
+    assert "not enough recent sales of similar homes" in text.casefold()
     assert "RM" not in text
     assert "Act 242" in text
 

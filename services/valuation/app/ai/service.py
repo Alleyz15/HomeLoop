@@ -22,8 +22,8 @@ from app.ai.constants import (
     THINKING_RETRY_BUDGET,
     TRANSIENT_RETRY_DELAY_SECONDS,
     VALUE_GAP_THRESHOLD,
-    VALUATION_LOOKBACK_YEARS,
 )
+from app.ai.facts import build_admin_facts, build_explanation_facts
 from app.ai.guard import ungrounded_numbers
 from app.ai.templates import admin_assist_template, explain_valuation_template
 from app.config import Settings
@@ -227,15 +227,6 @@ def _error_contains_html(error: BaseException) -> bool:
         return True
     response = getattr(error, "response", None)
     return _looks_like_html(getattr(response, "text", None))
-
-
-def _explain_payload(request: ExplainValuationRequest) -> dict[str, Any]:
-    payload = request.model_dump(mode="json")
-    payload["derived_context"] = {
-        "comparable_count": len(request.comparables),
-        "lookback_years": VALUATION_LOOKBACK_YEARS,
-    }
-    return payload
 
 
 class AiService:
@@ -503,7 +494,7 @@ class AiService:
     def _explain_valuation(
         self, request: ExplainValuationRequest
     ) -> tuple[dict[str, Any], GenerationOutcome]:
-        payload = _explain_payload(request)
+        payload = build_explanation_facts(request)
         key = self._cache_key("explain-valuation", payload)
         cached = self._cache.get(key)
         if cached is not None:
@@ -520,11 +511,11 @@ class AiService:
         )
         if outcome.fallback_reason is None and outcome.text is not None:
             count = _sentence_count(outcome.text)
-            if not 3 <= count <= 5:
+            if not 3 <= count <= 4:
                 outcome = replace(
                     outcome,
                     fallback_reason="sentence_count",
-                    fallback_detail=f"count={count} expected=3-5",
+                    fallback_detail=f"count={count} expected=3-4",
                 )
             else:
                 offending = ungrounded_numbers(outcome.text, payload)
@@ -573,8 +564,7 @@ class AiService:
 
     def admin_assist(self, request: AdminAssistRequest) -> dict[str, Any]:
         mismatches = detect_mismatches(request)
-        payload = request.model_dump(mode="json")
-        payload["deterministic_mismatches"] = mismatches
+        payload = build_admin_facts(request, mismatches)
         key = self._cache_key("admin-assist", payload)
         cached = self._cache.get(key)
         if cached is not None:

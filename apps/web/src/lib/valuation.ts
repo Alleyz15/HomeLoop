@@ -48,6 +48,7 @@ export type ValuationResponse = {
   confidence: Confidence | null;
   range_width_pct: number | null;
   scheme: string | null;
+  property_type?: string | null;
   is_sdp: boolean | null;
   district: string | null;
   tenure: string | null;
@@ -67,6 +68,7 @@ export type ExplainValuationInput = Pick<
   | "confidence"
   | "range_width_pct"
   | "scheme"
+  | "property_type"
   | "district"
   | "sizes_used"
   | "is_sdp"

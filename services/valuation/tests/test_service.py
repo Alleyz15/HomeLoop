@@ -213,6 +213,7 @@ def test_valuation_resolves_scheme_and_auto_fills_intermediate_sizes() -> None:
     assert repository.requested_scheme is None
     assert result["status"] == "ok"
     assert result["scheme"] == "SELECTED SCHEME"
+    assert result["property_type"] == "Terrace"
     assert result["sizes_used"] == {
         "land_sqm": 164.0,
         "floor_sqm": 180.0,

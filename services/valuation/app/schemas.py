@@ -96,6 +96,7 @@ class ValuationResponse(BaseModel):
     confidence: Confidence | None
     range_width_pct: float | None
     scheme: str | None
+    property_type: str | None
     is_sdp: bool | None
     district: str | None
     tenure: str | None
@@ -115,6 +116,7 @@ class ExplainValuationRequest(BaseModel):
     range_width_pct: float | None = None
     scheme: str | None = None
     district: str | None = None
+    property_type: str | None = None
     sizes_used: SizesUsed | None = None
     is_sdp: bool | None = None
     comparables: list[Comparable] = Field(default_factory=list)
