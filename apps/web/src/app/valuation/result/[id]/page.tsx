@@ -12,7 +12,11 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatArea, formatRm } from "@/lib/units";
+import { explainValuation } from "@/lib/valuation";
 import { getRoadMeta, getValuation } from "@/lib/valuations";
+
+const VALUATION_DISCLAIMER =
+  "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, Estate Agents and Property Managers Act 1981 (Act 242).";
 
 const CONFIDENCE_COPY = {
   high: "High — the comparable sales are close in size and recent.",
@@ -41,6 +45,38 @@ export default async function ValuationResultPage({
     valuation.low != null &&
     valuation.high != null;
   const comparables = valuation.comps ?? [];
+  let aiExplanation: string | null = null;
+  try {
+    const explanation = await explainValuation({
+      status: priced ? "ok" : "insufficient_data",
+      estimate: valuation.estimate,
+      low: valuation.low,
+      high: valuation.high,
+      confidence: valuation.confidence,
+      range_width_pct:
+        priced && valuation.estimate
+          ? ((valuation.high! - valuation.low!) / valuation.estimate) * 100
+          : null,
+      scheme: valuation.scheme,
+      district: meta?.district ?? null,
+      sizes_used:
+        valuation.land_sqm && valuation.floor_sqm
+          ? {
+              land_sqm: valuation.land_sqm,
+              floor_sqm: valuation.floor_sqm,
+              land_auto_filled: valuation.unit_position === "intermediate",
+              floor_auto_filled: valuation.unit_position === "intermediate",
+            }
+          : null,
+      is_sdp: meta?.is_sdp ?? null,
+      comparables,
+      disclaimer: VALUATION_DISCLAIMER,
+      model_version: "homeloop-comps-knn-v1",
+    });
+    aiExplanation = explanation.text;
+  } catch {
+    // This optional slot must never block the deterministic valuation result.
+  }
 
   return (
     <section className="flex w-full flex-col gap-8">
@@ -115,6 +151,20 @@ export default async function ValuationResultPage({
           </CardContent>
         </Card>
       )}
+
+      {aiExplanation ? (
+        <Card>
+          <CardHeader>
+            <CardDescription>AI-generated explanation</CardDescription>
+            <CardTitle className="text-lg">What this result means</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {aiExplanation}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {!meta?.is_sdp ? (
         <Card>

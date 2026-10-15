@@ -1,0 +1,13 @@
+{
+  "name": "admin confirmed value gap and low confidence",
+  "endpoint": "admin_assist",
+  "input": {
+    "plan": "B", "status": "inspected",
+    "valuation_snapshot": {"status": "ok", "estimate": 800000, "low": 700000, "high": 900000, "confidence": "low"},
+    "plan_quote_snapshot": {"plan_b": {"floor": 600000}},
+    "road_typical_sizes": {"land_sqm": 164, "floor_sqm": 180},
+    "entered_sizes": {"land_sqm": 164, "floor_sqm": 180},
+    "unit_type": "custom", "confidence": "low", "confirmed_value": 680000,
+    "events": [{"action": "record_inspection", "to_status": "inspected"}], "flags": ["valuation_gap", "low_confidence"]
+  }
+}

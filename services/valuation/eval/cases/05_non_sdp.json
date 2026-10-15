@@ -1,0 +1,12 @@
+{
+  "name": "non-SDP home",
+  "endpoint": "explain_valuation",
+  "input": {
+    "status": "ok", "estimate": 520000, "low": 460000, "high": 590000,
+    "confidence": "medium", "range_width_pct": 25, "scheme": "OTHER SCHEME",
+    "district": "KLANG", "sizes_used": {"land_sqm": 150, "floor_sqm": 140, "land_auto_filled": false, "floor_auto_filled": false},
+    "is_sdp": false, "comparables": [],
+    "disclaimer": "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, Estate Agents and Property Managers Act 1981 (Act 242).",
+    "model_version": "homeloop-comps-knn-v1"
+  }
+}

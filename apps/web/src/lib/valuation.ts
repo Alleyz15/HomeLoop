@@ -47,6 +47,57 @@ export type ValuationResponse = {
   note: string | null;
 };
 
+export type ExplainValuationInput = Pick<
+  ValuationResponse,
+  | "status"
+  | "estimate"
+  | "low"
+  | "high"
+  | "confidence"
+  | "range_width_pct"
+  | "scheme"
+  | "district"
+  | "sizes_used"
+  | "is_sdp"
+  | "comparables"
+  | "disclaimer"
+  | "model_version"
+>;
+
+export type AiExplanationResponse = {
+  text: string;
+  source: "llm" | "template";
+  model: string;
+};
+
+export type AdminAssistInput = {
+  plan: "A" | "B";
+  status?: string | null;
+  valuation_snapshot: Record<string, unknown>;
+  plan_quote_snapshot: Record<string, unknown>;
+  road_typical_sizes: {
+    land_sqm?: number | null;
+    floor_sqm?: number | null;
+  };
+  entered_sizes: {
+    land_sqm?: number | null;
+    floor_sqm?: number | null;
+  };
+  unit_type: string;
+  confidence: Confidence;
+  confirmed_value?: number | null;
+  events: Array<Record<string, unknown>>;
+  flags: string[];
+};
+
+export type AdminAssistResponse = {
+  summary: string;
+  mismatches: string[];
+  draft_message: string;
+  source: "llm" | "template";
+  model: string;
+};
+
 export type RoadPropertyType = {
   property_type: string;
   typical_land_sqm: number | null;
@@ -251,6 +302,24 @@ export function searchRoads(q: string, limit = 10): Promise<RoadResult[]> {
 
 export function quotePlans(input: PlanQuoteInput): Promise<PlanQuoteResponse> {
   return valuationApi<PlanQuoteResponse>("/plans/quote", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function explainValuation(
+  input: ExplainValuationInput,
+): Promise<AiExplanationResponse> {
+  return valuationApi<AiExplanationResponse>("/ai/explain-valuation", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminAssist(
+  input: AdminAssistInput,
+): Promise<AdminAssistResponse> {
+  return valuationApi<AdminAssistResponse>("/ai/admin-assist", {
     method: "POST",
     body: JSON.stringify(input),
   });

@@ -1,0 +1,19 @@
+{
+  "name": "golden Bukit Jelutong",
+  "endpoint": "explain_valuation",
+  "input": {
+    "status": "ok",
+    "estimate": 785635,
+    "low": 742127,
+    "high": 877738,
+    "confidence": "high",
+    "range_width_pct": 17.3,
+    "scheme": "BUKIT JELUTONG, SHAH ALAM",
+    "district": "PETALING",
+    "sizes_used": {"land_sqm": 164, "floor_sqm": 180, "land_auto_filled": false, "floor_auto_filled": false},
+    "is_sdp": true,
+    "comparables": [{"date": "2026-01", "land_sqm": 164, "floor_sqm": 180, "price": 786000, "price_per_sqm": 4366.67, "distance": 0.02}],
+    "disclaimer": "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, Estate Agents and Property Managers Act 1981 (Act 242).",
+    "model_version": "homeloop-comps-knn-v1"
+  }
+}

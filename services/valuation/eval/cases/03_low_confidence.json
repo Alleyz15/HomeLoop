@@ -1,0 +1,12 @@
+{
+  "name": "low confidence valuation",
+  "endpoint": "explain_valuation",
+  "input": {
+    "status": "ok", "estimate": 650000, "low": 480000, "high": 790000,
+    "confidence": "low", "range_width_pct": 47.7, "scheme": "TEST SCHEME",
+    "district": "KLANG", "sizes_used": {"land_sqm": 200, "floor_sqm": 190, "land_auto_filled": false, "floor_auto_filled": false},
+    "is_sdp": false, "comparables": [],
+    "disclaimer": "Preliminary estimate, not a formal valuation under the Valuers, Appraisers, Estate Agents and Property Managers Act 1981 (Act 242).",
+    "model_version": "homeloop-comps-knn-v1"
+  }
+}

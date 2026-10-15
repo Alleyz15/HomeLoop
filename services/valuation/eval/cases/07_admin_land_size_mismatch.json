@@ -1,0 +1,13 @@
+{
+  "name": "admin land size mismatch",
+  "endpoint": "admin_assist",
+  "input": {
+    "plan": "B", "status": "under_review",
+    "valuation_snapshot": {"status": "ok", "estimate": 800000, "low": 720000, "high": 880000, "confidence": "medium"},
+    "plan_quote_snapshot": {"plan_b": {"floor": 600000}},
+    "road_typical_sizes": {"land_sqm": 164, "floor_sqm": 180},
+    "entered_sizes": {"land_sqm": 230, "floor_sqm": 180},
+    "unit_type": "custom", "confidence": "medium", "confirmed_value": null,
+    "events": [], "flags": []
+  }
+}

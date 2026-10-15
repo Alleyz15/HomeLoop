@@ -1,0 +1,13 @@
+{
+  "name": "admin floor size mismatch",
+  "endpoint": "admin_assist",
+  "input": {
+    "plan": "B", "status": "info_requested",
+    "valuation_snapshot": {"status": "ok", "estimate": 800000, "low": 720000, "high": 880000, "confidence": "medium"},
+    "plan_quote_snapshot": {"plan_b": {"floor": 600000}},
+    "road_typical_sizes": {"land_sqm": 164, "floor_sqm": 180},
+    "entered_sizes": {"land_sqm": 164, "floor_sqm": 250},
+    "unit_type": "custom", "confidence": "medium", "confirmed_value": null,
+    "events": [{"action": "request_info", "to_status": "info_requested"}], "flags": []
+  }
+}

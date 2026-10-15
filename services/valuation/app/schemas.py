@@ -94,6 +94,55 @@ class ValuationResponse(BaseModel):
     note: str | None
 
 
+class ExplainValuationRequest(BaseModel):
+    status: ValuationStatus
+    estimate: float | None = None
+    low: float | None = None
+    high: float | None = None
+    confidence: Confidence | None = None
+    range_width_pct: float | None = None
+    scheme: str | None = None
+    district: str | None = None
+    sizes_used: SizesUsed | None = None
+    is_sdp: bool | None = None
+    comparables: list[Comparable] = Field(default_factory=list)
+    disclaimer: str
+    model_version: str
+
+
+class AiExplanationResponse(BaseModel):
+    text: str
+    source: Literal["llm", "template"]
+    model: str
+
+
+class AdminSizePair(BaseModel):
+    land_sqm: float | None = Field(default=None, gt=0)
+    floor_sqm: float | None = Field(default=None, gt=0)
+
+
+class AdminAssistRequest(BaseModel):
+    plan: Literal["A", "B"]
+    status: str | None = None
+    valuation_snapshot: dict[str, object]
+    plan_quote_snapshot: dict[str, object]
+    road_typical_sizes: AdminSizePair
+    entered_sizes: AdminSizePair
+    unit_type: str
+    confidence: Confidence
+    confirmed_value: float | None = Field(default=None, gt=0)
+    events: list[dict[str, object]] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
+
+
+class AdminAssistResponse(BaseModel):
+    summary: str
+    mismatches: list[str]
+    draft_message: str
+    source: Literal["llm", "template"]
+    model: str
+
+
 class PlanValuationInput(BaseModel):
     estimate: float = Field(gt=0, allow_inf_nan=False)
     low: float = Field(gt=0, allow_inf_nan=False)

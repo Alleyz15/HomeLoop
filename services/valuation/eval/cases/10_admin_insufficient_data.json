@@ -1,0 +1,13 @@
+{
+  "name": "admin insufficient valuation data",
+  "endpoint": "admin_assist",
+  "input": {
+    "plan": "B", "status": "submitted",
+    "valuation_snapshot": {"status": "insufficient_data", "estimate": null, "low": null, "high": null, "confidence": null},
+    "plan_quote_snapshot": {},
+    "road_typical_sizes": {"land_sqm": null, "floor_sqm": null},
+    "entered_sizes": {"land_sqm": 164, "floor_sqm": 180},
+    "unit_type": "custom", "confidence": "low", "confirmed_value": null,
+    "events": [{"action": "submit_application", "to_status": "submitted"}], "flags": ["manual_valuation_required"]
+  }
+}
