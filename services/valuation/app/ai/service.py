@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -17,8 +19,9 @@ from app.ai.constants import (
     AI_CACHE_SIZE,
     SIZE_MISMATCH_THRESHOLD,
     VALUE_GAP_THRESHOLD,
+    VALUATION_LOOKBACK_YEARS,
 )
-from app.ai.guard import numbers_are_grounded
+from app.ai.guard import ungrounded_numbers
 from app.ai.templates import admin_assist_template, explain_valuation_template
 from app.config import Settings
 from app.schemas import AdminAssistRequest, ExplainValuationRequest
@@ -26,12 +29,30 @@ from app.schemas import AdminAssistRequest, ExplainValuationRequest
 
 logger = logging.getLogger(__name__)
 PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
+FallbackReason = Literal[
+    "no_api_key",
+    "api_error",
+    "timeout",
+    "empty_response",
+    "truncated",
+    "sentence_count",
+    "number_guard",
+    "invalid_json",
+]
 
 
 class AdminGenerated(BaseModel):
     summary: str
     mismatches: list[str]
     draft_message: str
+
+
+@dataclass(frozen=True)
+class GenerationOutcome:
+    text: str | None = None
+    fallback_reason: FallbackReason | None = None
+    fallback_detail: str | None = None
+    thought_tokens: int | None = None
 
 
 class _ResultCache:
@@ -98,7 +119,9 @@ def detect_mismatches(request: AdminAssistRequest) -> list[str]:
 
 
 def _sentence_count(text: str) -> int:
-    return sum(text.count(mark) for mark in (".", "!", "?"))
+    return len(
+        [part for part in re.split(r"(?<=[.!?])\s+", text.strip()) if part]
+    )
 
 
 def _suggests_decision(text: str) -> bool:
@@ -114,6 +137,63 @@ def _suggests_decision(text: str) -> bool:
             "recommend rejection",
         )
     )
+
+
+def _finish_reason(response: Any) -> str | None:
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        return None
+    reason = getattr(candidates[0], "finish_reason", None)
+    if reason is None:
+        return None
+    return str(getattr(reason, "value", reason))
+
+
+def _thought_tokens(response: Any) -> int | None:
+    usage = getattr(response, "usage_metadata", None)
+    value = getattr(usage, "thoughts_token_count", None)
+    return value if isinstance(value, int) else None
+
+
+def _http_status(error: BaseException) -> int | None:
+    code = getattr(error, "code", None)
+    if isinstance(code, int):
+        return code
+    response = getattr(error, "response", None)
+    status_code = getattr(response, "status_code", None)
+    return status_code if isinstance(status_code, int) else None
+
+
+def _is_timeout_error(error: BaseException) -> bool:
+    return (
+        isinstance(error, TimeoutError)
+        or "timeout" in type(error).__name__.casefold()
+    )
+
+
+def _is_thinking_config_rejection(error: BaseException) -> bool:
+    if _http_status(error) not in {400, 422}:
+        return False
+    safe_message = " ".join(
+        str(value)
+        for value in (getattr(error, "message", None), getattr(error, "status", None))
+        if value
+    )
+    return "thinking" in safe_message.casefold()
+
+
+def _api_error_detail(error: BaseException) -> str:
+    status = _http_status(error)
+    return f"{type(error).__name__} status={status if status is not None else 'unknown'}"
+
+
+def _explain_payload(request: ExplainValuationRequest) -> dict[str, Any]:
+    payload = request.model_dump(mode="json")
+    payload["derived_context"] = {
+        "comparable_count": len(request.comparables),
+        "lookback_years": VALUATION_LOOKBACK_YEARS,
+    }
+    return payload
 
 
 class AiService:
@@ -141,17 +221,24 @@ class AiService:
             )
         return self._client
 
-    def _config(self, prompt: str, *, structured: bool) -> types.GenerateContentConfig:
+    def _config(
+        self,
+        prompt: str,
+        *,
+        structured: bool,
+        include_thinking: bool,
+    ) -> types.GenerateContentConfig:
         values: dict[str, Any] = {
             "system_instruction": prompt,
             "temperature": self.settings.gemini_temperature,
             "max_output_tokens": self.settings.gemini_max_output_tokens,
             "top_p": self.settings.gemini_top_p,
-            "thinking_config": types.ThinkingConfig(
+        }
+        if include_thinking:
+            values["thinking_config"] = types.ThinkingConfig(
                 thinking_level=types.ThinkingLevel.MINIMAL,
                 include_thoughts=False,
-            ),
-        }
+            )
         if structured:
             values.update(
                 response_mime_type="application/json",
@@ -162,62 +249,141 @@ class AiService:
     def _generate(
         self,
         *,
+        endpoint: str,
         prompt_name: str,
         payload: dict[str, Any],
         structured: bool,
-    ) -> str | None:
+    ) -> GenerationOutcome:
         if not self.settings.gemini_api_key:
-            return None
+            return GenerationOutcome(fallback_reason="no_api_key")
 
-        def call() -> str:
-            response = self._get_client().models.generate_content(
+        prompt = _load_prompt(prompt_name)
+
+        def invoke(*, include_thinking: bool) -> Any:
+            return self._get_client().models.generate_content(
                 model=self.settings.gemini_model,
                 contents=json.dumps(payload, sort_keys=True, ensure_ascii=False),
-                config=self._config(_load_prompt(prompt_name), structured=structured),
+                config=self._config(
+                    prompt,
+                    structured=structured,
+                    include_thinking=include_thinking,
+                ),
             )
-            if not response.text:
-                raise ValueError("Gemini returned an empty response")
-            return str(response.text).strip()
+
+        def call() -> Any:
+            try:
+                return invoke(include_thinking=True)
+            except Exception as error:
+                if not _is_thinking_config_rejection(error):
+                    raise
+                logger.info(
+                    "AI thinking retry endpoint=%s model=%s",
+                    endpoint,
+                    self.settings.gemini_model,
+                )
+                return invoke(include_thinking=False)
 
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gemini")
         future = executor.submit(call)
         try:
-            return future.result(timeout=self.settings.gemini_timeout_seconds)
-        except (TimeoutError, Exception):
+            response = future.result(timeout=self.settings.gemini_timeout_seconds)
+        except Exception as error:
             future.cancel()
-            return None
+            if _is_timeout_error(error):
+                return GenerationOutcome(
+                    fallback_reason="timeout",
+                    fallback_detail=(
+                        f"timeout_seconds={self.settings.gemini_timeout_seconds:g}"
+                    ),
+                )
+            return GenerationOutcome(
+                fallback_reason="api_error",
+                fallback_detail=_api_error_detail(error),
+            )
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
 
-    def _log(self, endpoint: str, source: Literal["llm", "template"]) -> None:
+        thought_tokens = _thought_tokens(response)
         logger.info(
-            "AI response endpoint=%s source=%s model=%s",
+            "AI usage endpoint=%s thought_tokens=%s model=%s",
             endpoint,
-            source,
+            thought_tokens if thought_tokens is not None else "unknown",
+            self.settings.gemini_model,
+        )
+        finish_reason = _finish_reason(response)
+        if finish_reason == "MAX_TOKENS":
+            return GenerationOutcome(
+                fallback_reason="truncated",
+                fallback_detail="finish_reason=MAX_TOKENS",
+                thought_tokens=thought_tokens,
+            )
+        text = getattr(response, "text", None)
+        if not text or not str(text).strip():
+            return GenerationOutcome(
+                fallback_reason="empty_response",
+                thought_tokens=thought_tokens,
+            )
+        return GenerationOutcome(
+            text=str(text).strip(),
+            thought_tokens=thought_tokens,
+        )
+
+    def _log_result(
+        self,
+        endpoint: str,
+        source: Literal["llm", "template"],
+        outcome: GenerationOutcome,
+    ) -> None:
+        if source == "template":
+            logger.warning(
+                "AI fallback endpoint=%s reason=%s detail=%s model=%s",
+                endpoint,
+                outcome.fallback_reason,
+                outcome.fallback_detail,
+                self.settings.gemini_model,
+            )
+            return
+        logger.info(
+            "AI response endpoint=%s source=llm model=%s",
+            endpoint,
             self.settings.gemini_model,
         )
 
-    def explain_valuation(
+    def _explain_valuation(
         self, request: ExplainValuationRequest
-    ) -> dict[str, Any]:
-        payload = request.model_dump(mode="json")
+    ) -> tuple[dict[str, Any], GenerationOutcome]:
+        payload = _explain_payload(request)
         key = self._cache_key("explain-valuation", payload)
         cached = self._cache.get(key)
         if cached is not None:
-            return cached
+            return cached, GenerationOutcome(text=str(cached["text"]))
 
-        generated = self._generate(
+        outcome = self._generate(
+            endpoint="explain-valuation",
             prompt_name="explain_valuation.md",
             payload=payload,
             structured=False,
         )
-        if (
-            generated
-            and 3 <= _sentence_count(generated) <= 5
-            and numbers_are_grounded(generated, payload)
-        ):
+        if outcome.fallback_reason is None and outcome.text is not None:
+            count = _sentence_count(outcome.text)
+            if not 3 <= count <= 5:
+                outcome = replace(
+                    outcome,
+                    fallback_reason="sentence_count",
+                    fallback_detail=f"count={count} expected=3-5",
+                )
+            else:
+                offending = ungrounded_numbers(outcome.text, payload)
+                if offending:
+                    outcome = replace(
+                        outcome,
+                        fallback_reason="number_guard",
+                        fallback_detail="offending_numbers=" + ", ".join(offending),
+                    )
+
+        if outcome.fallback_reason is None and outcome.text is not None:
             source: Literal["llm", "template"] = "llm"
-            text = generated
+            text = outcome.text
         else:
             source = "template"
             text = explain_valuation_template(request)
@@ -226,10 +392,27 @@ class AiService:
             "text": text,
             "source": source,
             "model": self.settings.gemini_model,
+            "fallback_reason": outcome.fallback_reason,
+            "fallback_detail": outcome.fallback_detail,
         }
-        self._cache.put(key, result)
-        self._log("explain-valuation", source)
+        if source == "llm":
+            self._cache.put(key, result)
+        self._log_result("explain-valuation", source, outcome)
+        return result, outcome
+
+    def explain_valuation(
+        self, request: ExplainValuationRequest
+    ) -> dict[str, Any]:
+        result, _ = self._explain_valuation(request)
         return result
+
+    def explain_valuation_with_diagnostics(
+        self, request: ExplainValuationRequest
+    ) -> tuple[dict[str, Any], GenerationOutcome]:
+        """Run an explanation and return sanitized diagnostics for manual evaluation."""
+
+        return self._explain_valuation(request)
+
     def admin_assist(self, request: AdminAssistRequest) -> dict[str, Any]:
         mismatches = detect_mismatches(request)
         payload = request.model_dump(mode="json")
@@ -239,27 +422,44 @@ class AiService:
         if cached is not None:
             return cached
 
-        generated = self._generate(
+        outcome = self._generate(
+            endpoint="admin-assist",
             prompt_name="admin_assist.md",
             payload=payload,
             structured=True,
         )
         parsed: AdminGenerated | None = None
-        if generated:
+        if outcome.fallback_reason is None and outcome.text is not None:
             try:
-                parsed = AdminGenerated.model_validate_json(generated)
+                parsed = AdminGenerated.model_validate_json(outcome.text)
             except ValueError:
-                parsed = None
+                outcome = replace(
+                    outcome,
+                    fallback_reason="invalid_json",
+                    fallback_detail="response was not valid structured admin JSON",
+                )
 
-        generated_text = "" if parsed is None else " ".join(
-            [parsed.summary, *parsed.mismatches, parsed.draft_message]
-        )
-        if (
-            parsed is not None
-            and numbers_are_grounded(generated_text, payload)
-            and not _suggests_decision(generated_text)
-            and "draft for admin review" in parsed.draft_message.casefold()
-        ):
+        if parsed is not None and outcome.fallback_reason is None:
+            generated_text = " ".join(
+                [parsed.summary, *parsed.mismatches, parsed.draft_message]
+            )
+            offending = ungrounded_numbers(generated_text, payload)
+            if offending:
+                outcome = replace(
+                    outcome,
+                    fallback_reason="number_guard",
+                    fallback_detail="offending_numbers=" + ", ".join(offending),
+                )
+            elif _suggests_decision(generated_text) or (
+                "draft for admin review" not in parsed.draft_message.casefold()
+            ):
+                outcome = replace(
+                    outcome,
+                    fallback_reason="invalid_json",
+                    fallback_detail="structured response failed the admin safety contract",
+                )
+
+        if parsed is not None and outcome.fallback_reason is None:
             source: Literal["llm", "template"] = "llm"
             body: dict[str, Any] = {
                 "summary": parsed.summary,
@@ -274,7 +474,10 @@ class AiService:
             **body,
             "source": source,
             "model": self.settings.gemini_model,
+            "fallback_reason": outcome.fallback_reason,
+            "fallback_detail": outcome.fallback_detail,
         }
-        self._cache.put(key, result)
-        self._log("admin-assist", source)
+        if source == "llm":
+            self._cache.put(key, result)
+        self._log_result("admin-assist", source, outcome)
         return result

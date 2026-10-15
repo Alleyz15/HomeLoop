@@ -4,8 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from google.genai.errors import ClientError
 
-from app.ai.guard import numbers_are_grounded
+from app.ai.guard import numbers_are_grounded, ungrounded_numbers
 from app.ai.service import AiService, detect_mismatches
 from app.ai.templates import explain_valuation_template
 from app.config import Settings
@@ -78,6 +79,28 @@ def admin_payload() -> dict[str, object]:
     }
 
 
+def generated_explanation() -> str:
+    return (
+        "The preliminary estimate is RM785,635, with a range from RM742,127 to "
+        "RM877,738. Confidence is high because the supplied comparable is close "
+        "to the entered home size. The comparable sale was RM786,000. This is "
+        "preliminary, not a formal valuation under Act 242."
+    )
+
+
+def sdk_response(
+    text: str | None,
+    *,
+    finish_reason: str = "STOP",
+    thought_tokens: int = 0,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        text=text,
+        candidates=[SimpleNamespace(finish_reason=finish_reason)],
+        usage_metadata=SimpleNamespace(thoughts_token_count=thought_tokens),
+    )
+
+
 @pytest.mark.parametrize("confidence", ["high", "medium", "low"])
 def test_template_explains_each_confidence_level_without_gemini(
     confidence: str,
@@ -129,6 +152,26 @@ def test_number_guard_rejects_a_fabricated_number() -> None:
     )
 
 
+def test_number_guard_reports_offending_numbers_without_response_text() -> None:
+    assert ungrounded_numbers(
+        "The estimate could reach RM999,000 or 42%.",
+        {"estimate": 785_635},
+    ) == ["RM999,000", "42%"]
+
+
+def test_number_guard_allows_counts_and_documented_lookback_derived_from_payload() -> None:
+    payload = explain_payload()
+
+    assert numbers_are_grounded(
+        "The 1 comparable is considered alongside the documented 3-year lookback.",
+        payload,
+    ) is True
+    assert numbers_are_grounded(
+        "The 3-year lookback applies.",
+        {"comparables": []},
+    ) is False
+
+
 def test_missing_key_uses_complete_template_fallback() -> None:
     service = AiService(
         Settings(
@@ -144,20 +187,19 @@ def test_missing_key_uses_complete_template_fallback() -> None:
 
     assert result["source"] == "template"
     assert result["model"] == "gemini-3.8-flash"
+    assert result["fallback_reason"] == "no_api_key"
+    assert result["fallback_detail"] is None
     assert "RM785,635" in result["text"]
     assert "Act 242" in result["text"]
 
 
 def test_mocked_sdk_success_returns_grounded_llm_text() -> None:
-    generated = (
-        "The preliminary estimate is RM785,635, with a range from RM742,127 to "
-        "RM877,738. Confidence is high because the supplied comparable is close "
-        "to the entered home size. The comparable sale was RM786,000. This is "
-        "preliminary, not a formal valuation under Act 242."
-    )
+    generated = generated_explanation()
     client = SimpleNamespace(
         models=SimpleNamespace(
-            generate_content=lambda **_: SimpleNamespace(text=generated)
+            generate_content=lambda **_: sdk_response(
+                generated, thought_tokens=171
+            )
         )
     )
 
@@ -176,6 +218,8 @@ def test_mocked_sdk_success_returns_grounded_llm_text() -> None:
         "text": generated,
         "source": "llm",
         "model": "gemini-3.8-flash",
+        "fallback_reason": None,
+        "fallback_detail": None,
     }
 
 
@@ -200,7 +244,170 @@ def test_sdk_timeout_falls_back_to_template() -> None:
         )
 
     assert result["source"] == "template"
+    assert result["fallback_reason"] == "timeout"
     assert "RM785,635" in result["text"]
+
+
+def test_api_error_records_exception_class_and_http_status() -> None:
+    def raise_quota_error(**_: object) -> None:
+        raise ClientError(
+            429,
+            {"message": "quota exceeded", "status": "RESOURCE_EXHAUSTED"},
+        )
+
+    client = SimpleNamespace(
+        models=SimpleNamespace(generate_content=raise_quota_error)
+    )
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["fallback_reason"] == "api_error"
+    assert result["fallback_detail"] == "ClientError status=429"
+
+
+@pytest.mark.parametrize(
+    ("response", "reason", "detail_fragment"),
+    [
+        (sdk_response(None), "empty_response", None),
+        (
+            sdk_response("A partial response.", finish_reason="MAX_TOKENS"),
+            "truncated",
+            "MAX_TOKENS",
+        ),
+        (
+            sdk_response(
+                "The preliminary estimate is RM785,635. This is preliminary under Act 242."
+            ),
+            "sentence_count",
+            "count=2",
+        ),
+        (
+            sdk_response(
+                "The estimate is RM999,000. Confidence is high. The comparable sale was "
+                "RM786,000. This is preliminary under Act 242."
+            ),
+            "number_guard",
+            "RM999,000",
+        ),
+    ],
+)
+def test_explanation_fallback_reasons_are_specific(
+    response: SimpleNamespace,
+    reason: str,
+    detail_fragment: str | None,
+) -> None:
+    client = SimpleNamespace(
+        models=SimpleNamespace(generate_content=lambda **_: response)
+    )
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == reason
+    if detail_fragment is None:
+        assert result["fallback_detail"] is None
+    else:
+        assert detail_fragment in result["fallback_detail"]
+
+
+def test_invalid_admin_json_has_specific_fallback_reason() -> None:
+    client = SimpleNamespace(
+        models=SimpleNamespace(
+            generate_content=lambda **_: sdk_response("not json")
+        )
+    )
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).admin_assist(AdminAssistRequest.model_validate(admin_payload()))
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == "invalid_json"
+    assert result["fallback_detail"] is not None
+
+
+def test_template_fallbacks_are_not_cached() -> None:
+    responses: list[object] = [
+        RuntimeError("temporary failure"),
+        sdk_response(generated_explanation()),
+    ]
+
+    def generate(**_: object) -> object:
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    service = AiService(
+        Settings(
+            internal_api_key="internal",
+            gemini_api_key="test-only-key",
+            _env_file=None,
+        )
+    )
+    request = ExplainValuationRequest.model_validate(explain_payload())
+    with patch("app.ai.service.genai.Client", return_value=client):
+        first = service.explain_valuation(request)
+        second = service.explain_valuation(request)
+
+    assert first["source"] == "template"
+    assert second["source"] == "llm"
+    assert responses == []
+
+
+def test_thinking_config_rejection_retries_once_without_thinking() -> None:
+    configs: list[object] = []
+
+    def generate(**kwargs: object) -> SimpleNamespace:
+        config = kwargs["config"]
+        configs.append(config)
+        if len(configs) == 1:
+            raise ClientError(
+                400,
+                {
+                    "message": "Thinking config is not supported by this model",
+                    "status": "INVALID_ARGUMENT",
+                },
+            )
+        return sdk_response(generated_explanation(), thought_tokens=12)
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "llm"
+    assert len(configs) == 2
+    assert configs[0].thinking_config is not None
+    assert configs[1].thinking_config is None
 
 
 def test_admin_mismatches_are_deterministic_and_cover_all_thresholds() -> None:

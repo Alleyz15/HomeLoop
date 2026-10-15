@@ -18,6 +18,16 @@ ValuationStatus = Literal[
 ]
 Confidence = Literal["high", "medium", "low"]
 PlanPriceSource = Literal["from_price", "sales_quote"]
+AiFallbackReason = Literal[
+    "no_api_key",
+    "api_error",
+    "timeout",
+    "empty_response",
+    "truncated",
+    "sentence_count",
+    "number_guard",
+    "invalid_json",
+]
 
 
 class ValuationRequest(BaseModel):
@@ -114,6 +124,8 @@ class AiExplanationResponse(BaseModel):
     text: str
     source: Literal["llm", "template"]
     model: str
+    fallback_reason: AiFallbackReason | None = None
+    fallback_detail: str | None = None
 
 
 class AdminSizePair(BaseModel):
@@ -141,6 +153,8 @@ class AdminAssistResponse(BaseModel):
     draft_message: str
     source: Literal["llm", "template"]
     model: str
+    fallback_reason: AiFallbackReason | None = None
+    fallback_detail: str | None = None
 
 
 class PlanValuationInput(BaseModel):

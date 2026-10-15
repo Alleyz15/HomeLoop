@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
+from app.ai.constants import VALUATION_LOOKBACK_YEARS
+
 
 NUMBER_PATTERN = re.compile(
     r"(?<![A-Za-z0-9])"
@@ -57,9 +59,11 @@ def _collect_numbers(value: Any) -> list[Decimal]:
         numbers: list[Decimal] = []
         for item in value.values():
             numbers.extend(_collect_numbers(item))
+        if value.get("model_version") == "homeloop-comps-knn-v1":
+            numbers.append(Decimal(VALUATION_LOOKBACK_YEARS))
         return numbers
     if isinstance(value, Sequence):
-        numbers = []
+        numbers = [Decimal(len(value))]
         for item in value:
             numbers.extend(_collect_numbers(item))
         return numbers
@@ -94,15 +98,16 @@ def _matches_allowed(
     )
 
 
-def numbers_are_grounded(text: str, payload: Any) -> bool:
-    """Return true only when every output number comes from the model input.
-
-    Currency formatting, k/m abbreviations, and nearest-RM1,000 rounding are
-    accepted. Percentages may also be rounded to a whole number or one decimal.
-    """
+def ungrounded_numbers(text: str, payload: Any) -> list[str]:
+    """Return the rendered output numbers that cannot be grounded in the input."""
 
     allowed = _collect_numbers(payload)
-    for candidate, is_percent, abbreviation_tolerance in _numbers_in_text(text):
+    offending: list[str] = []
+    for match in NUMBER_PATTERN.finditer(text):
+        try:
+            candidate, is_percent, abbreviation_tolerance = _parse_match(match)
+        except InvalidOperation:
+            continue
         if not any(
             _matches_allowed(
                 candidate,
@@ -112,5 +117,15 @@ def numbers_are_grounded(text: str, payload: Any) -> bool:
             )
             for value in allowed
         ):
-            return False
-    return True
+            offending.append(match.group(0).strip())
+    return offending
+
+
+def numbers_are_grounded(text: str, payload: Any) -> bool:
+    """Return true only when every output number comes from the model input.
+
+    Currency formatting, k/m abbreviations, and nearest-RM1,000 rounding are
+    accepted. Percentages may also be rounded to a whole number or one decimal.
+    """
+
+    return not ungrounded_numbers(text, payload)

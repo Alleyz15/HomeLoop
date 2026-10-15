@@ -2,6 +2,15 @@ import "server-only";
 
 export type Confidence = "high" | "medium" | "low";
 export type UnitPosition = "intermediate" | "corner_end" | "custom";
+export type AiFallbackReason =
+  | "no_api_key"
+  | "api_error"
+  | "timeout"
+  | "empty_response"
+  | "truncated"
+  | "sentence_count"
+  | "number_guard"
+  | "invalid_json";
 
 export type ValuationInput = {
   road_norm?: string | null;
@@ -68,6 +77,8 @@ export type AiExplanationResponse = {
   text: string;
   source: "llm" | "template";
   model: string;
+  fallback_reason: AiFallbackReason | null;
+  fallback_detail: string | null;
 };
 
 export type AdminAssistInput = {
@@ -96,6 +107,8 @@ export type AdminAssistResponse = {
   draft_message: string;
   source: "llm" | "template";
   model: string;
+  fallback_reason: AiFallbackReason | null;
+  fallback_detail: string | null;
 };
 
 export type RoadPropertyType = {

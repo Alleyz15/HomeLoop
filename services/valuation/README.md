@@ -26,20 +26,25 @@ Required variables:
 
 `GEMINI_API_KEY` is optional. Without it, both AI endpoints return complete,
 deterministic template text. `GEMINI_MODEL` defaults to `gemini-3.8-flash`, so a
-future model switch needs only an environment-variable change. Temperature,
-maximum output tokens, and top-p also have the safe defaults shown in
-`.env.example`.
+future model switch needs only an environment-variable change. Generation uses
+temperature `0.3`, top-p `0.9`, a 1,024-token output limit, and a 20-second
+timeout unless their corresponding environment variables override them.
 
 `GET /health` is public and does not initialize a Supabase client. `GET /roads`,
 `POST /valuate`, `POST /plans/quote`, `POST /ai/explain-valuation`, and
 `POST /ai/admin-assist` require `X-Internal-Key`. The service is server-to-server
 and does not enable CORS.
 
-The AI layer sends only the supplied JSON, rejects generated numbers that are
-not grounded in that JSON, and falls back to deterministic text on a missing
+The AI layer sends only the supplied JSON plus explicitly derived context such
+as the comparable count and documented lookback, rejects generated numbers that
+are not grounded in that data, and falls back to deterministic text on a missing
 key, timeout, API/quota error, malformed structured output, or guard failure.
 Admin mismatches are always computed in Python; the model cannot add a mismatch
 or make an approval/rejection decision.
+
+Template responses include a sanitized `fallback_reason` and `fallback_detail`.
+The service logs those fields without logging the prompt, response body, or key.
+Only successful LLM responses are cached.
 
 `POST /plans/quote` accepts a successful valuation result plus an SDP launch ID.
 It rejects launches whose tier is not `selling`, uses a supplied sales quote in
@@ -67,6 +72,16 @@ python eval/run_eval.py
 The evaluator prints the source, number-guard result, sentence count, and text
 for each case. It never prints the key. Without a key it evaluates the template
 fallback instead.
+
+For a focused real-model smoke check of the golden explanation case, provide
+`GEMINI_API_KEY` through the process environment and run:
+
+```bash
+python eval/smoke_explain.py
+```
+
+It prints the source, sanitized fallback diagnostics, thought-token count,
+latency, and visible answer. It never prints the key or prompt.
 
 The golden integration test runs automatically only when `SUPABASE_URL` and
 `SUPABASE_ANON_KEY` are present in the process environment. It never needs the
