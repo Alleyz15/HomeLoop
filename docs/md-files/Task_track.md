@@ -1,6 +1,6 @@
 # HomeLoop Task Track
 
-最后更新：2026-10-14｜截止：**10/23 23:59**
+最后更新：2026-10-16｜截止：**10/23 23:59**
 
 本文件记录整个系统的任务进度，分为**后端**与**前端**两部分。
 
@@ -166,6 +166,29 @@
 
 ---
 
+### 1.11 后端本机运行验证（2026-10-15）
+
+- 环境：建立 gitignored `services/valuation/.venv`，使用本机 Python 3.13 安装 `requirements-dev.txt` 中的固定版本依赖；`pip check` 通过。README 建议 Python 3.11，本次未验证 3.11。
+- 配置：`services/valuation/.env` 必需值均存在且可由 Settings 加载；未输出 key。未改动环境文件或业务代码。
+- 离线测试：在 repo root 使用 `.venv` 的 Python 执行 `-m pytest -q -m 'not integration' --tb=short`，**165 passed，10 deselected**。
+- 真实 Supabase 集成测试：从 Settings 将 URL/anon key 载入测试进程，执行 `tests/test_golden.py`、`tests/test_simulator_golden.py` 的 integration tests，**10 passed**。
+- 启动：在 `services/valuation` 执行 `.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`，成功启动；本机地址 `http://127.0.0.1:8000`。
+- HTTP 验证：`/health` 200；无 internal key 的 `/roads` 401；带 key 的 `/roads`、`/valuate`、`/plans/quote`、`/simulator/run`、`/ai/explain-valuation`、`/ai/admin-assist` 全部 200。
+- 真实估价：Bukit Jelutong / 双层排屋 / 地 164 m² / 建筑 180 m²，回传 **RM785,635.3591160221**、10 笔参考成交；报价请求先按获批准规则取整数 RM 后，方案 A **RM616,723**、方案 B **RM589,226**；风险模拟读取 **187** 个回测案例。
+- Gemini：估价解说与 admin 辅助两次检查均为 `source=llm`、无 fallback，约 13.78 秒 / 5.57 秒；这两次成功不代表持续可用性或延迟保证。
+- 初次 sandbox 测试受临时目录权限与本机网络隔离影响，重新在获批权限下运行后通过；未将这些环境失败当作业务 bug。测试只读线上参考资料，无导入、migration 或申请写入。
+- 限制：有第三方弃用警告；未运行 PostgreSQL pgTAP 状态机测试、真实账号写入/完整申请流程、前端 build 或线上部署检查。诊断脚本放在 gitignored `.venv/check_backend.py`，本节是验证结果记录，待 commit。
+
+### 1.12 前端 Welcome 页设计与 EffectCraft 动画（2026-10-16，待 commit）
+
+- [x] 完成获批准的 ivory / forest-green Welcome 设计：主视觉、介绍、三项优点、四步流程、A/B 简介及估价 CTA；guest 顶部导航可跳至页面区块，owner/admin 保留角色导航；Act 242 原文保留。
+- [x] 用 EffectCraft 0.10.0 CLI 制作原生房屋/花园动画，保留 `.jsx`、可编辑 `.ecproj`、重建说明及静态 poster；后续获批升级为 13 秒版本（约 1.45 MiB），包括房屋分层组装、路径绘制、抵达高光、镜头推进及 9–13 秒花园循环；暂停/播放/独立重播、reduced-motion 与视频失败 fallback 均保留。
+- [x] 最终 production build（含 lint / TypeScript）通过；Edge 实测 1440 / 768 / 390 / 320 px 无横向溢出；估价按钮正确进入 `/login?next=/valuation`，区块导航、视频解码/控制、键盘 skip link、静态 fallback 通过，无浏览器 runtime error。
+- [x] 视觉检查修正初版 hero opacity 过淡，并增大辅助文字；详细变更、文件与验证见 `Frontend_Implementation_Log.md` 的 F2-01a。未改后端或 auth 实现；未 commit / deploy；真实 owner/admin session 验证仍待做。
+- [x] 2026-10-16 动效升级（F2-01b）：新增指针景深、标签/浮卡不同幅度移动、滚动渐入、四步连接线、方案卡 hover 与 CTA 路径绘制。最终 build（含 lint / TypeScript）及扩展 Edge 检查通过，涵盖五个不同剧情帧、循环/暂停/重播、运行时 reduced-motion 切换、无 JS 内容与 320px 响应式；主题与内容保持不变，待 commit。
+
+- [x] 2026-10-16 Welcome 精简（F2-01c）：按用户要求移除 How it works / Our plans / See how it works / Sign in 导航链接及动画暂停/播放/重播按钮；动画继续自动播放，其他内容、样式与估价 CTA 保留。此项取代以上旧记录中的导航/控制行为；production build（含 lint / TypeScript）及 Edge 浏览器复验通过，待 commit。
+
 ## 2. 待做：后端
 
 按顺序做。每一项都以《HomeLoop_更新_页面与流程.md》为准，括号内是对应章节。
@@ -211,7 +234,7 @@
 
 ### F2. 屋主端
 
-- [x] 2026-10-15 Welcome 页（`/`）：普通版（标题、一句话介绍、按钮）；已登入时直接显示「去我的 Dashboard」
+- [x] 2026-10-16 Welcome 页（`/`）：完成获批准的现代介绍页与 EffectCraft 原创动画；guest 可登入并继续估价，owner/admin 显示对应入口；详见 1.12 与前端记录 F2-01a（待 commit）。
 - [ ] Dashboard（`/dashboard`）：8 格进度条 + 依状态变化的简略卡片 → 点进去看详细页；方案 B 显示挂牌子进度（第 5.6 节）
 - [x] 2026-10-15 ① 估价输入（`/valuation`）：路名搜索（JALAN/JLN 同字、自动带出期数、县与是否 SDP 标签）→ 屋型（只列这条路真实成交过的，附近 3 年笔数与常见面积）→ 单位类型（中间单位自动带入常见面积并显示占比；角头/自填则手动输入）→ 地契；m² / sq ft 切换会换算已输入的数字；排屋 20×70 / 22×75 / 22×80 尺快捷按钮；搜不到路名时提示改用期数或 township（第 4 节）
   - [ ] **还没做**：照片上传（第 4 节标为可选）。需要 Supabase Storage `photos` bucket 的本人目录上传
@@ -241,7 +264,7 @@
 
 | 问题 | 说明 |
 |---|---|
-| 前端待处理的整合问题（2026-10-15） | 详见前端记录 FE-BUG-02 至 FE-BUG-05：资料不足结果页承诺可申请，但 SQL 拒绝；地契自动带入未接线；valuation Server Actions 导出状态对象需重跑 build 核实；无常见面积的中间单位手填面积未随表单提交。当前仅记录发现，尚未修复。 |
+| 前端待处理的整合问题（更新 2026-10-16） | 前端记录 FE-BUG-02、03、05 仍待处理：资料不足结果页承诺可申请，但 SQL 拒绝；地契自动带入未接线；无常见面积的中间单位手填面积未随表单提交。FE-BUG-04 的 Server Actions export/build 疑虑在本次完整 production build 未重现，未为此改动源码；估价真实 session 流程仍待验证。 |
 | 部分网络的路由器 DNS 查不到 `*.supabase.co` | 改用 1.1.1.1 / 8.8.8.8，或在 hosts 文件加 `104.18.38.10 qcuzvdkrqzxogigsxisk.supabase.co`（Supabase IP 改变时要更新） |
 | `transactions` 只能导入一次 | 重新导入前要先 `truncate` 6 张参考表（见 README） |
 | 大部分新屋项目只公布起价 | 第 ③ 步用起价，允许用户填销售报价 |

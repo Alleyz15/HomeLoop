@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist } from "next/font/google";
+import { House } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -16,7 +17,7 @@ const geist = Geist({
 
 const NAVIGATION: Record<Role | "guest", Array<{ href: string; label: string }>> =
   {
-    guest: [{ href: "/", label: "Home" }],
+    guest: [],
     owner: [
       { href: "/dashboard", label: "Dashboard" },
       { href: "/valuation", label: "Valuation" },
@@ -45,13 +46,15 @@ export default async function RootLayout({
   return (
     <html lang="en" className={geist.variable}>
       <body className="flex min-h-screen flex-col">
-        <header>
+        <a className="skip-link" href="#main-content">Skip to content</a>
+        <header className="site-header">
           <nav
             aria-label="Primary navigation"
-            className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-5"
+            className="site-nav mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-5"
           >
-            <Link href="/" className="text-sm font-semibold">
-              HomeLoop
+            <Link href="/" className="site-brand" aria-label="HomeLoop home">
+              <span className="site-brand-mark"><House size={19} strokeWidth={1.6} aria-hidden="true" /></span>
+              HomeLoop<span className="brand-period">.</span>
             </Link>
 
             {links.map((item) => (
@@ -77,22 +80,22 @@ export default async function RootLayout({
                     </Button>
                   </form>
                 </>
-              ) : (
-                <Link href="/login" className="text-sm font-medium">
-                  Sign in
-                </Link>
-              )}
+              ) : null}
             </div>
           </nav>
           <Separator />
         </header>
 
-        <main className="mx-auto flex w-full max-w-6xl flex-1 px-6 py-12">
+        <main id="main-content" className="site-main mx-auto flex w-full max-w-6xl flex-1 px-6 py-12">
           {children}
         </main>
 
-        <footer>
+        <footer className="site-footer">
           <Separator />
+          <div className="footer-heading mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pt-6">
+            <Link href="/" className="text-sm font-semibold">HomeLoop.</Link>
+            <span>Home trade-in service prototype · A clearer way forward</span>
+          </div>
           <p className="mx-auto max-w-6xl px-6 py-6 text-sm text-muted-foreground">
             HomeLoop prices are preliminary estimates based on public NAPIC transaction data, not a formal valuation. Formal valuations are performed by a registered valuer (Act 242).
           </p>
