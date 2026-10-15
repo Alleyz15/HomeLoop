@@ -229,6 +229,9 @@
 
 - [x] 2026-10-15 版面：顶部导航按角色切换（未登录 Home｜屋主 Dashboard/Valuation/New home/Plans｜admin Applications/Risk simulator）、显示登入的邮箱与登出按钮、底部 Act 242 免责声明原文不变
 - [x] 2026-10-15 登录 / 注册（邮箱 + 密码，Server Actions）；登录后按 `profiles.role` 导向 `/dashboard` 或 `/admin`；支援 `?next=` 回到原本要去的页面（只允许站内相对路径）
+- [x] 2026-10-16 Sign in 视觉升级（F1-02a）：沿用 Welcome 的 ivory / forest-green / sage 与 serif 字体，双栏房屋/花园插画、背景网格/光晕、轻动效、tab 滑动、密码显隐、focus/点击反馈、提交载入与错误状态；保留现有 Create account / Server Actions / next / 密码规则，不新增认证功能。最终 production build（含 lint / TypeScript）、Edge 双模式 1440/768/390/320 px 与 Welcome regression 检查通过；修正手机标题空格，未创建账号，真实成功登入仍待验证，待 commit。
+- [x] 2026-10-16 Sign in 动效升级（F1-02b）：以独立 EffectCraft 14 秒立体房屋/花园场景替换旧平面插画，含分层组装、路径/光点、镜头与 8–14 秒循环；扩大建筑轮廓、sage 光晕及前景叶片，新增指针多层景深，表单不跟随移动。主题/文案/认证不变；保留 reduced-motion、视频/无 JS fallback；build（含 lint / TypeScript）、扩展 Edge 与 Welcome regression 检查通过，详见前端记录，待 commit。
+- [x] 2026-10-16 Sign in 门廊动效（F1-02c，取代上项房屋模型）：依获批预览改为层叠拱门；真实 3D 门板与把手绕左铰链约 5 秒缓慢向内打开，地面光线/阴影同步变化；保持开启并循环轻光影，不自动关门。移除花园/叶片与旧插画说明，主文案、表单、配色及认证不变。最终边缘融合 build（含 lint / TypeScript）、扩展 Edge 双模式 1440/768/390/320 px 与 Welcome regression 检查通过；变更/文件/验证详见前端记录，待 commit。
 - [x] 2026-10-15 未登录访问受保护页面时导向 `/login?next=…`；受保护前缀为 `/dashboard`、`/valuation`、`/new-home`、`/plans`、`/apply`、`/admin`（原则 2：要登录才能估价）
 - [ ] **待验证**：demo 帐号已建立；仍要实测屋主登入 → `/dashboard`、admin 登入 → `/admin`、屋主手动输入 `/admin` → 被送回 `/dashboard`
 

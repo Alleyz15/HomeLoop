@@ -131,6 +131,12 @@
 /* Scope the landing-page palette to the Welcome route. */
 body:has([data-welcome-page]) { background: #f7f7ef; }
 .site-main:has([data-welcome-page]) { padding-top: 0; padding-bottom: 0; }
+/* Reuse the Welcome shell palette on authentication without affecting other routes. */
+body:has([data-auth-page]) { background: #f7f7ef; }
+.site-main:has([data-auth-page]) { padding-top: 0; padding-bottom: 0; }
+body:has([data-auth-page]) .site-nav { padding-top: 22px; padding-bottom: 22px; }
+body:has([data-auth-page]) .site-header [data-slot="separator"], body:has([data-auth-page]) .site-footer [data-slot="separator"] { background: #dfe3d5; }
+body:has([data-auth-page]) .site-footer { color: #5e6e56; }
 .site-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 600; letter-spacing: -.8px; margin-right: auto; }
 .site-brand-mark { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 50%; background: #e5ebd9; color: #36553d; }
 .brand-period { color: #7a9656; margin-left: -8px; }
