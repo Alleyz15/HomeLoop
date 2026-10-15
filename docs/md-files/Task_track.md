@@ -248,7 +248,7 @@
 | 方案 A/B 报价公式有两处来源 | `private.application_offer` 写死 `0.785` / `0.75`，`services/valuation/app/plans/constants.py` 则由 11.5% + 10% / 75% 推导。目前两边一致（RM786,000 都得出 617,010 / 589,500），但改任何一个比率都要同时改 Python **和新增一个 migration**（规则 4 不准改已套用的 migration） |
 | `net_at_floor` 保底净额（已解决） | commit `0388866` 已按《商业模式》第 0.2、4 节改为保底价本身；RM786,000 对应 RM589,500。公开市场的 `expected_net` 仍保留 3.2% 代理费及 1.2% 律师费假设。 |
 | `create_demo_users.py` role 验证（已解决） | commit `0388866` 会检查 update 回传确实包含目标 profile；未命中时非零退出，不再误报 admin role 已设定。 |
-| 每月额度按 UTC 月份计算（待推送） | 新 migration `20261015084351_fix_monthly_limit_timezone.sql`（commit `93faa61`）统一以 `Asia/Kuala_Lumpur` 计算报价月份；本机重建与 59 项 pgTAP 已通过，待 linked project dry-run/确认 push。 |
+| 每月额度月份归属（已解决） | Migration `20261015084351_fix_monthly_limit_timezone.sql`（commit `93faa61`）已于 2026-10-15 套用线上，统一以 `Asia/Kuala_Lumpur` 计算报价月份；本机重建与 59 项 pgTAP 已通过，远端 migration list 已对齐，linked database lint 无错误。 |
 | `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
 | 风险模拟的 RM 金额要标明估价基准 | 《商业模式》第 5 节算的是**占估价的百分比**；RM3,500 / RM26,000 是套在示例的 RM786,000 上。187 笔的平均估价是 RM944,511，所以按每笔自己估价平均会得到 RM7,354 / RM36,953。`/simulator/run` 三种基准都回传，A3 优先显示百分比 |
 | B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此这些数值只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额 |
