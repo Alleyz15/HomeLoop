@@ -5,6 +5,8 @@ export type UnitPosition = "intermediate" | "corner_end" | "custom";
 export type AiFallbackReason =
   | "no_api_key"
   | "api_error"
+  | "unavailable"
+  | "rate_limited"
   | "timeout"
   | "empty_response"
   | "truncated"

@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import threading
+import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, replace
@@ -18,6 +19,8 @@ from pydantic import BaseModel
 from app.ai.constants import (
     AI_CACHE_SIZE,
     SIZE_MISMATCH_THRESHOLD,
+    THINKING_RETRY_BUDGET,
+    TRANSIENT_RETRY_DELAY_SECONDS,
     VALUE_GAP_THRESHOLD,
     VALUATION_LOOKBACK_YEARS,
 )
@@ -32,6 +35,8 @@ PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
 FallbackReason = Literal[
     "no_api_key",
     "api_error",
+    "unavailable",
+    "rate_limited",
     "timeout",
     "empty_response",
     "truncated",
@@ -187,6 +192,24 @@ def _api_error_detail(error: BaseException) -> str:
     return f"{type(error).__name__} status={status if status is not None else 'unknown'}"
 
 
+def _looks_like_html(value: object) -> bool:
+    if isinstance(value, str):
+        lowered = value.lstrip().casefold()
+        return lowered.startswith("<!doctype html") or lowered.startswith("<html")
+    if isinstance(value, dict):
+        return any(_looks_like_html(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_looks_like_html(item) for item in value)
+    return False
+
+
+def _error_contains_html(error: BaseException) -> bool:
+    if _looks_like_html(getattr(error, "details", None)):
+        return True
+    response = getattr(error, "response", None)
+    return _looks_like_html(getattr(response, "text", None))
+
+
 def _explain_payload(request: ExplainValuationRequest) -> dict[str, Any]:
     payload = request.model_dump(mode="json")
     payload["derived_context"] = {
@@ -226,7 +249,7 @@ class AiService:
         prompt: str,
         *,
         structured: bool,
-        include_thinking: bool,
+        thinking_budget: int | None,
     ) -> types.GenerateContentConfig:
         values: dict[str, Any] = {
             "system_instruction": prompt,
@@ -234,9 +257,9 @@ class AiService:
             "max_output_tokens": self.settings.gemini_max_output_tokens,
             "top_p": self.settings.gemini_top_p,
         }
-        if include_thinking:
+        if thinking_budget is not None:
             values["thinking_config"] = types.ThinkingConfig(
-                thinking_level=types.ThinkingLevel.MINIMAL,
+                thinking_budget=thinking_budget,
                 include_thoughts=False,
             )
         if structured:
@@ -259,29 +282,61 @@ class AiService:
 
         prompt = _load_prompt(prompt_name)
 
-        def invoke(*, include_thinking: bool) -> Any:
+        def invoke(*, thinking_budget: int | None) -> Any:
             return self._get_client().models.generate_content(
                 model=self.settings.gemini_model,
                 contents=json.dumps(payload, sort_keys=True, ensure_ascii=False),
                 config=self._config(
                     prompt,
                     structured=structured,
-                    include_thinking=include_thinking,
+                    thinking_budget=thinking_budget,
                 ),
             )
 
+        def invoke_with_thinking_fallback() -> Any:
+            budgets: list[int | None] = [self.settings.gemini_thinking_budget]
+            if self.settings.gemini_thinking_budget != THINKING_RETRY_BUDGET:
+                budgets.append(THINKING_RETRY_BUDGET)
+            budgets.append(None)
+
+            for index, budget in enumerate(budgets):
+                try:
+                    return invoke(thinking_budget=budget)
+                except Exception as error:
+                    if (
+                        not _is_thinking_config_rejection(error)
+                        or index == len(budgets) - 1
+                    ):
+                        raise
+                    next_budget = budgets[index + 1]
+                    logger.warning(
+                        "AI thinking config rejected endpoint=%s status=%s "
+                        "current_budget=%s retry_budget=%s model=%s",
+                        endpoint,
+                        _http_status(error),
+                        budget,
+                        next_budget,
+                        self.settings.gemini_model,
+                    )
+            raise RuntimeError("thinking fallback chain exhausted")
+
         def call() -> Any:
             try:
-                return invoke(include_thinking=True)
+                return invoke_with_thinking_fallback()
             except Exception as error:
-                if not _is_thinking_config_rejection(error):
+                status = _http_status(error)
+                if status not in {429, 503}:
                     raise
-                logger.info(
-                    "AI thinking retry endpoint=%s model=%s",
+                logger.warning(
+                    "AI transient retry endpoint=%s status=%s "
+                    "delay_seconds=%s model=%s",
                     endpoint,
+                    status,
+                    TRANSIENT_RETRY_DELAY_SECONDS,
                     self.settings.gemini_model,
                 )
-                return invoke(include_thinking=False)
+                time.sleep(TRANSIENT_RETRY_DELAY_SECONDS)
+                return invoke_with_thinking_fallback()
 
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gemini")
         future = executor.submit(call)
@@ -295,6 +350,25 @@ class AiService:
                     fallback_detail=(
                         f"timeout_seconds={self.settings.gemini_timeout_seconds:g}"
                     ),
+                )
+            status = _http_status(error)
+            if _error_contains_html(error):
+                return GenerationOutcome(
+                    fallback_reason="api_error",
+                    fallback_detail=(
+                        "request rejected before reaching the model — "
+                        "check API key format"
+                    ),
+                )
+            if status == 503:
+                return GenerationOutcome(
+                    fallback_reason="unavailable",
+                    fallback_detail=_api_error_detail(error),
+                )
+            if status == 429:
+                return GenerationOutcome(
+                    fallback_reason="rate_limited",
+                    fallback_detail=_api_error_detail(error),
                 )
             return GenerationOutcome(
                 fallback_reason="api_error",
@@ -318,6 +392,14 @@ class AiService:
                 thought_tokens=thought_tokens,
             )
         text = getattr(response, "text", None)
+        if _looks_like_html(text):
+            return GenerationOutcome(
+                fallback_reason="api_error",
+                fallback_detail=(
+                    "request rejected before reaching the model — check API key format"
+                ),
+                thought_tokens=thought_tokens,
+            )
         if not text or not str(text).strip():
             return GenerationOutcome(
                 fallback_reason="empty_response",

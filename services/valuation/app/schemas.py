@@ -21,6 +21,8 @@ PlanPriceSource = Literal["from_price", "sales_quote"]
 AiFallbackReason = Literal[
     "no_api_key",
     "api_error",
+    "unavailable",
+    "rate_limited",
     "timeout",
     "empty_response",
     "truncated",

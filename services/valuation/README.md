@@ -27,8 +27,11 @@ Required variables:
 `GEMINI_API_KEY` is optional. Without it, both AI endpoints return complete,
 deterministic template text. `GEMINI_MODEL` defaults to `gemini-3.8-flash`, so a
 future model switch needs only an environment-variable change. Generation uses
-temperature `0.3`, top-p `0.9`, a 1,024-token output limit, and a 20-second
-timeout unless their corresponding environment variables override them.
+temperature `0.3`, top-p `0.9`, a 4,096-token output limit, a 20-second timeout,
+and `GEMINI_THINKING_BUDGET=0` unless their corresponding environment variables
+override them. If a model rejects that thinking budget, the service explicitly
+retries with budget `128`, then once without a thinking config. HTTP 429 and 503
+responses receive one delayed retry within the overall timeout.
 
 `GET /health` is public and does not initialize a Supabase client. `GET /roads`,
 `POST /valuate`, `POST /plans/quote`, `POST /ai/explain-valuation`, and
@@ -73,8 +76,9 @@ The evaluator prints the source, number-guard result, sentence count, and text
 for each case. It never prints the key. Without a key it evaluates the template
 fallback instead.
 
-For a focused real-model smoke check of the golden explanation case, provide
-`GEMINI_API_KEY` through the process environment and run:
+For a focused real-model smoke check of the golden explanation case, configure
+`GEMINI_API_KEY` in `services/valuation/.env` (the same settings path used by the
+app) or in the process environment and run:
 
 ```bash
 python eval/smoke_explain.py
@@ -96,9 +100,10 @@ service-role key.
    Render's `$PORT` value.
 5. Add `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `INTERNAL_API_KEY` as Render
    environment variables. Add `GEMINI_API_KEY` to enable LLM phrasing and set
-   `GEMINI_MODEL=gemini-3.8-flash` (or the approved replacement model). Generate
-   a strong, independent internal key; do not reuse a Supabase key. Do not add a
-   Supabase service-role key.
+   `GEMINI_MODEL=gemini-3.8-flash` (or the approved replacement model). Set
+   `GEMINI_THINKING_BUDGET=0` unless real-model evaluation supports a different
+   budget. Generate a strong, independent internal key; do not reuse a Supabase
+   key. Do not add a Supabase service-role key.
 6. Set the health-check path to `/health`, select the free plan, and deploy.
 7. Confirm `https://<render-service>/health` returns `{"status":"ok"}`.
 

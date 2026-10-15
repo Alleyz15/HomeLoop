@@ -19,9 +19,12 @@ GOLDEN_CASE = Path(__file__).parent / "cases" / "01_bukit_jelutong_golden.json"
 
 
 def main() -> None:
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=SERVICE_ROOT / ".env")
     if not settings.gemini_api_key:
-        raise SystemExit("GEMINI_API_KEY is not set in the process environment")
+        raise SystemExit(
+            "GEMINI_API_KEY is not configured in services/valuation/.env "
+            "or the process environment"
+        )
 
     case = json.loads(GOLDEN_CASE.read_text(encoding="utf-8"))
     request = ExplainValuationRequest.model_validate(case["input"])

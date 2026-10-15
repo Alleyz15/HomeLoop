@@ -223,6 +223,32 @@ def test_mocked_sdk_success_returns_grounded_llm_text() -> None:
     }
 
 
+def test_generation_uses_zero_thinking_budget_and_large_visible_output_budget() -> None:
+    configs: list[object] = []
+
+    def generate(**kwargs: object) -> SimpleNamespace:
+        configs.append(kwargs["config"])
+        return sdk_response(generated_explanation())
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "llm"
+    assert len(configs) == 1
+    assert configs[0].thinking_config.thinking_budget == 0
+    assert configs[0].thinking_config.thinking_level is None
+    assert configs[0].max_output_tokens == 4096
+
+
 def test_sdk_timeout_falls_back_to_template() -> None:
     def slow_generation(**_: object) -> SimpleNamespace:
         time.sleep(0.05)
@@ -249,14 +275,14 @@ def test_sdk_timeout_falls_back_to_template() -> None:
 
 
 def test_api_error_records_exception_class_and_http_status() -> None:
-    def raise_quota_error(**_: object) -> None:
+    def raise_bad_request(**_: object) -> None:
         raise ClientError(
-            429,
-            {"message": "quota exceeded", "status": "RESOURCE_EXHAUSTED"},
+            400,
+            {"message": "bad request", "status": "INVALID_ARGUMENT"},
         )
 
     client = SimpleNamespace(
-        models=SimpleNamespace(generate_content=raise_quota_error)
+        models=SimpleNamespace(generate_content=raise_bad_request)
     )
     with patch("app.ai.service.genai.Client", return_value=client):
         result = AiService(
@@ -270,7 +296,7 @@ def test_api_error_records_exception_class_and_http_status() -> None:
         )
 
     assert result["fallback_reason"] == "api_error"
-    assert result["fallback_detail"] == "ClientError status=429"
+    assert result["fallback_detail"] == "ClientError status=400"
 
 
 @pytest.mark.parametrize(
@@ -376,13 +402,15 @@ def test_template_fallbacks_are_not_cached() -> None:
     assert responses == []
 
 
-def test_thinking_config_rejection_retries_once_without_thinking() -> None:
+def test_thinking_config_rejection_retries_budget_128_then_without_thinking(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     configs: list[object] = []
 
     def generate(**kwargs: object) -> SimpleNamespace:
         config = kwargs["config"]
         configs.append(config)
-        if len(configs) == 1:
+        if len(configs) <= 2:
             raise ClientError(
                 400,
                 {
@@ -398,6 +426,7 @@ def test_thinking_config_rejection_retries_once_without_thinking() -> None:
             Settings(
                 internal_api_key="internal",
                 gemini_api_key="test-only-key",
+                gemini_thinking_budget=64,
                 _env_file=None,
             )
         ).explain_valuation(
@@ -405,9 +434,146 @@ def test_thinking_config_rejection_retries_once_without_thinking() -> None:
         )
 
     assert result["source"] == "llm"
-    assert len(configs) == 2
-    assert configs[0].thinking_config is not None
-    assert configs[1].thinking_config is None
+    assert len(configs) == 3
+    assert configs[0].thinking_config.thinking_budget == 64
+    assert configs[1].thinking_config.thinking_budget == 128
+    assert configs[2].thinking_config is None
+    assert "current_budget=64 retry_budget=128" in caplog.text
+    assert "current_budget=128 retry_budget=None" in caplog.text
+
+
+def test_high_demand_retries_once_after_delay() -> None:
+    responses: list[object] = [
+        ClientError(
+            503,
+            {"message": "high demand", "status": "UNAVAILABLE"},
+        ),
+        sdk_response(generated_explanation()),
+    ]
+
+    def generate(**_: object) -> object:
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+    with (
+        patch("app.ai.service.genai.Client", return_value=client),
+        patch("app.ai.service.time.sleep") as sleep,
+    ):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "llm"
+    sleep.assert_called_once_with(1.5)
+    assert responses == []
+
+
+@pytest.mark.parametrize(
+    ("status_code", "status", "reason"),
+    [
+        (503, "UNAVAILABLE", "unavailable"),
+        (429, "RESOURCE_EXHAUSTED", "rate_limited"),
+    ],
+)
+def test_transient_api_failure_after_retry_has_specific_reason(
+    status_code: int,
+    status: str,
+    reason: str,
+) -> None:
+    def fail(**_: object) -> None:
+        raise ClientError(
+            status_code,
+            {"message": "temporarily unavailable", "status": status},
+        )
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=fail))
+    with (
+        patch("app.ai.service.genai.Client", return_value=client),
+        patch("app.ai.service.time.sleep") as sleep,
+    ):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == reason
+    assert result["fallback_detail"] == f"ClientError status={status_code}"
+    sleep.assert_called_once_with(1.5)
+
+
+def test_settings_strip_whitespace_and_surrounding_quotes_from_gemini_values() -> None:
+    settings = Settings(
+        gemini_api_key='  "test-only-key"  ',
+        gemini_model="  'gemini-test-model'  ",
+        _env_file=None,
+    )
+
+    assert settings.gemini_api_key == "test-only-key"
+    assert settings.gemini_model == "gemini-test-model"
+
+
+def test_html_error_response_reports_key_format_hint() -> None:
+    client = SimpleNamespace(
+        models=SimpleNamespace(
+            generate_content=lambda **_: sdk_response(
+                "<!doctype html><html><body>request rejected</body></html>"
+            )
+        )
+    )
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == "api_error"
+    assert result["fallback_detail"] == (
+        "request rejected before reaching the model — check API key format"
+    )
+
+
+def test_html_api_error_reports_key_format_hint_without_body() -> None:
+    def reject(**_: object) -> None:
+        raise ClientError(400, "<!doctype html><html>rejected</html>")
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=reject))
+    with patch("app.ai.service.genai.Client", return_value=client):
+        result = AiService(
+            Settings(
+                internal_api_key="internal",
+                gemini_api_key="test-only-key",
+                _env_file=None,
+            )
+        ).explain_valuation(
+            ExplainValuationRequest.model_validate(explain_payload())
+        )
+
+    assert result["source"] == "template"
+    assert result["fallback_reason"] == "api_error"
+    assert result["fallback_detail"] == (
+        "request rejected before reaching the model — check API key format"
+    )
 
 
 def test_admin_mismatches_are_deterministic_and_cover_all_thresholds() -> None:
