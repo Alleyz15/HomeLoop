@@ -39,12 +39,13 @@ export function catalogueView(launches: CatalogueLaunch[], params: Record<string
   } };
 }
 
-export function catalogueHref(filters: CatalogueFilters) {
+export function catalogueHref(filters: CatalogueFilters, valuationId?: string) {
   const params = new URLSearchParams();
   if (filters.tier === "upcoming") params.set("tier", "upcoming");
   if (filters.query) params.set("q", filters.query);
   if (filters.location) params.set("location", filters.location);
   if (filters.type !== "all") params.set("type", filters.type);
+  if (valuationId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(valuationId)) params.set("valuation", valuationId);
   return "/new-home" + (params.size ? "?" + params.toString() : "");
 }
 

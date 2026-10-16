@@ -13,6 +13,7 @@ import { checkOwnerHome } from "./owner_home_checks.mjs";
 import { checkOwnerRecords } from "./owner_records_checks.mjs";
 import { checkCatalogue } from "./catalogue_checks.mjs";
 import { catalogueFixtures } from "./catalogue_fixtures.mjs";
+import { checkDevelopment } from "./development_checks.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const webDir = path.join(root, "apps/web");
@@ -77,7 +78,8 @@ const auth = createServer(async (request,response) => {
   if (["/rest/v1/applications","/rest/v1/valuation_requests"].includes(url.pathname) && url.searchParams.get("user_id") !== `eq.${accounts[email].id}`) { errors.push("Missing owner filter"); return reply(403,{}); }
   if (url.pathname === "/rest/v1/valuation_requests") {
     if(scenario==="failure")return reply(500,{message:"Test database failure"});
-    return replyRows(rowsForScenario().valuations);
+    const id=url.searchParams.get("id");
+    return replyRows(rowsForScenario().valuations.filter(row=>!id || id===`eq.${row.id}`));
   }
   if (url.pathname === "/rest/v1/applications") return replyRows(rowsForScenario().applications);
   if (url.pathname === "/rest/v1/application_events") {
@@ -128,6 +130,7 @@ try {
   await page.waitForURL(baseUrl+"/dashboard");
   await checkOwnerHome(page,{baseUrl,artifacts});
   await checkCatalogue(page,{baseUrl,artifacts,setScenario:(state)=>{catalogueScenario=state;}});
+  await checkDevelopment(page,{baseUrl,artifacts,valuation,setScenario:(state)=>{scenario=state;},setCatalogueScenario:(state)=>{catalogueScenario=state;}});
   if(process.env.OWNER_HOME_ONLY!=="1") {
     await checkOwnerRecords(page,{baseUrl,artifacts,setScenario:(state)=>{scenario=state;},application,caseId});
     await page.getByRole("button",{name:"Sign out",exact:true}).click();await page.waitForURL((url)=>url.pathname==="/login");
@@ -135,7 +138,7 @@ try {
     await page.goto(baseUrl+"/login");
     await page.getByLabel("Email address").fill("admin@dashboard.test");await page.getByLabel("Password",{exact:true}).fill("dashboard-test-password");await page.getByRole("button",{name:"Sign in",exact:true}).click();await page.waitForURL(baseUrl+"/admin");
     const before=queries.length;
-    for(const route of ["/home","/dashboard","/new-home"]) {await page.goto(baseUrl+route);await page.waitForURL(baseUrl+"/admin");}
+    for(const route of ["/home","/dashboard","/new-home","/new-home/2"]) {await page.goto(baseUrl+route);await page.waitForURL(baseUrl+"/admin");}
     assert.equal(queries.slice(before).some((query)=>query.email==="admin@dashboard.test"),false);
     console.log("PASS owner/admin guards and owner-scoped records; no foreign event reads");
   }
