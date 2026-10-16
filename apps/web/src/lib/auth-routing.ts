@@ -1,6 +1,6 @@
 export type Role = "owner" | "admin";
 
-const OWNER_ROUTES = ["/dashboard", "/valuation", "/new-home", "/plans", "/apply"];
+const OWNER_ROUTES = ["/home", "/dashboard", "/valuation", "/new-home", "/plans", "/apply"];
 
 function matchesRoute(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
@@ -11,7 +11,7 @@ export function isApplicationPath(pathname: string): boolean {
 }
 
 export function landingPathFor(role: Role): string {
-  return role === "admin" ? "/admin" : "/dashboard";
+  return role === "admin" ? "/admin" : "/home";
 }
 
 /** Resolve navigation only; authorization still uses server-side role checks. */
@@ -21,7 +21,7 @@ export function postAuthPathFor(role: Role, next = ""): string {
   // Only homeowners' in-app destinations may override their landing page.
   // Normalizing the URL also prevents dot segments from escaping that scope.
   if (!next.startsWith("/") || next.startsWith("//") || /[\\\u0000-\u0020\u007f]/.test(next)) {
-    return "/dashboard";
+    return "/home";
   }
   try {
     const target = new URL(next, "https://homeloop.invalid");
@@ -31,7 +31,7 @@ export function postAuthPathFor(role: Role, next = ""): string {
   } catch {
     // A malformed destination must never prevent a successful login.
   }
-  return "/dashboard";
+  return "/home";
 }
 
 export function brandPathFor(pathname: string, role?: Role): string {

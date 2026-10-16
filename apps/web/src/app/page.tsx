@@ -21,7 +21,7 @@ export default async function HomePage() {
   const user = await getSessionUser();
   const startHref = user ? landingPathFor(user.role) : "/login?next=/valuation";
   const startLabel = user
-    ? user.role === "admin" ? "Open applications" : "Go to my Dashboard"
+    ? user.role === "admin" ? "Open applications" : "Go to my HomeLoop"
     : "Value my home for free";
 
   return (

@@ -18,7 +18,7 @@ export default async function AdminLayout({
     redirect("/login?next=/admin");
   }
   if (user.role !== "admin") {
-    redirect("/dashboard");
+    redirect("/home");
   }
 
   return <>{children}</>;

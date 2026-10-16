@@ -11,12 +11,7 @@ import { brandPathFor, isApplicationPath, type Role } from "@/lib/auth-routing";
 type NavigationUser = { email: string | null; role: Role };
 
 const NAVIGATION: Record<Role, Array<{ href: string; label: string }>> = {
-  owner: [
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/valuation", label: "Valuation" },
-    { href: "/new-home", label: "New home" },
-    { href: "/plans", label: "Plans" },
-  ],
+  owner: [],
   admin: [
     { href: "/admin", label: "Applications" },
     { href: "/admin/simulator", label: "Risk simulator" },

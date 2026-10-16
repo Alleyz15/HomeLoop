@@ -18,11 +18,11 @@ test("admin role wins over every requested destination", () => {
 });
 
 test("owner retains only permitted, normalized in-app destinations", () => {
-  for (const next of ["/valuation", "/valuation/result/123?view=details#top", "/new-home/project-1", "/plans?home=42", "/apply", "/dashboard"]) {
+  for (const next of ["/home", "/valuation", "/valuation/result/123?view=details#top", "/new-home/project-1", "/plans?home=42", "/apply", "/dashboard"]) {
     assert.equal(postAuthPathFor("owner", next), next);
   }
   for (const next of [undefined, "", "/", "/login", "/admin", "/admin/simulator", "/administrator", "/guide", "https://example.test", "//example.test", "/\\example.test", "/valuation/../admin", "/valuation/../../admin", "/valuation-extra", "/%61dmin", "/\n/example.test"]) {
-    assert.equal(postAuthPathFor("owner", next), "/dashboard", String(next));
+    assert.equal(postAuthPathFor("owner", next), "/home", String(next));
   }
 });
 
@@ -34,7 +34,8 @@ test("public-page brand stays public; application brands return to the role land
   }
   assert.equal(brandPathFor("/admin", "admin"), "/admin");
   assert.equal(brandPathFor("/admin/applications/123", "admin"), "/admin");
-  assert.equal(brandPathFor("/valuation", "owner"), "/dashboard");
+  assert.equal(brandPathFor("/valuation", "owner"), "/home");
+  assert.equal(brandPathFor("/dashboard", "owner"), "/home");
   assert.equal(brandPathFor("/admin"), "/");
 });
 

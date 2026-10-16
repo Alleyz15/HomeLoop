@@ -50,6 +50,8 @@ const auth = createServer(async (request, response) => {
   if (url.pathname === "/auth/v1/user") return accounts[email] ? reply(200, userFor(email)) : reply(401, {message:"No test session"});
   if (url.pathname === "/auth/v1/logout") return reply(204);
   if (url.pathname === "/rest/v1/profiles") return accounts[email] ? reply(200, [{role:accounts[email].role}]) : reply(401, {message:"No test session"});
+  // The owner landing page now reads its saved records; this account is new.
+  if (request.method === "GET" && ["/rest/v1/valuation_requests", "/rest/v1/applications"].includes(url.pathname)) return accounts[email] ? reply(200, []) : reply(401, {message:"No test session"});
   errors.push(`Unexpected local auth request: ${request.method} ${url.pathname}`);
   reply(404, {message:"No test endpoint"});
 });
@@ -116,7 +118,7 @@ try {
       await page.getByText("Type at least two characters.",{exact:true}).waitFor();
     }
     assert.match(await page.locator("header").innerText(), new RegExp(email.replaceAll(".","\\.")));
-    const landing = role === "admin" ? "/admin" : "/dashboard";
+    const landing = role === "admin" ? "/admin" : "/home";
     assert.equal(await page.getByRole("link",{name:"HomeLoop home",exact:true}).getAttribute("href"), landing);
     assert.equal(await page.locator("footer a").getAttribute("href"), landing);
     await page.locator("footer a").click();
@@ -129,7 +131,7 @@ try {
     assert.equal((await header.innerText()).includes(email),false);
     assert.equal(await header.getByRole("link").getAttribute("href"),"/");
     assert.equal(await page.locator("footer a").getAttribute("href"),"/");
-    const returnLink = page.getByRole("link",{name:role === "admin" ? "Open applications" : "Go to my Dashboard",exact:true}).first();
+    const returnLink = page.getByRole("link",{name:role === "admin" ? "Open applications" : "Go to my HomeLoop",exact:true}).first();
     await returnLink.click();
     await page.waitForURL(baseUrl+landing);
     await page.getByRole("button",{name:"Sign out",exact:true}).waitFor();
@@ -145,9 +147,9 @@ try {
     await page.waitForURL(baseUrl+destination);
     if (role === "owner") {
       await page.goto(baseUrl+"/admin");
-      await page.waitForURL(baseUrl+"/dashboard");
+      await page.waitForURL(baseUrl+"/home");
       await page.goto(baseUrl+"/login?next=/admin");
-      await page.waitForURL(baseUrl+"/dashboard");
+      await page.waitForURL(baseUrl+"/home");
     }
     await page.getByRole("button",{name:"Sign out",exact:true}).click();
     await page.waitForURL(baseUrl+"/login");
