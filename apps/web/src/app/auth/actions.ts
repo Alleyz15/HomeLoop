@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 
 import type { AuthState } from "@/app/auth/state";
-import { getSessionUser, landingPathFor } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth";
+import { postAuthPathFor } from "@/lib/auth-routing";
 import { createClient } from "@/lib/supabase/server";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -14,11 +15,6 @@ function readCredentials(formData: FormData) {
     password: String(formData.get("password") ?? ""),
     next: String(formData.get("next") ?? "").trim(),
   };
-}
-
-/** Only allow in-app relative paths, so `next` cannot send users off-site. */
-function safeNext(next: string): string | null {
-  return next.startsWith("/") && !next.startsWith("//") ? next : null;
 }
 
 export async function signIn(
@@ -38,7 +34,7 @@ export async function signIn(
   }
 
   const user = await getSessionUser();
-  redirect(safeNext(next) ?? landingPathFor(user?.role ?? "owner"));
+  redirect(postAuthPathFor(user?.role ?? "owner", next));
 }
 
 export async function register(
@@ -73,7 +69,7 @@ export async function register(
   }
 
   const user = await getSessionUser();
-  redirect(safeNext(next) ?? landingPathFor(user?.role ?? "owner"));
+  redirect(postAuthPathFor(user?.role ?? "owner", next));
 }
 
 export async function signOut(): Promise<void> {

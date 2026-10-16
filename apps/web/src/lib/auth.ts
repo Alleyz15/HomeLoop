@@ -1,8 +1,9 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import type { Role } from "@/lib/auth-routing";
 
-export type Role = "owner" | "admin";
+export { landingPathFor, type Role } from "@/lib/auth-routing";
 
 export type SessionUser = {
   id: string;
@@ -38,9 +39,4 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     email: user.email ?? null,
     role: data?.role === "admin" ? "admin" : "owner",
   };
-}
-
-/** Where a role lands after signing in. */
-export function landingPathFor(role: Role): string {
-  return role === "admin" ? "/admin" : "/dashboard";
 }

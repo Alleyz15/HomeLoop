@@ -2,22 +2,9 @@
 
 import { redirect } from "next/navigation";
 
-import { searchRoads, valuate, type RoadResult } from "@/lib/valuation";
+import { searchRoads, valuate } from "@/lib/valuation";
 import { getRoadMeta, saveValuation } from "@/lib/valuations";
-
-export type RoadSearchState = {
-  query: string;
-  results: RoadResult[];
-  error: string | null;
-  searched: boolean;
-};
-
-export const emptyRoadSearch: RoadSearchState = {
-  query: "",
-  results: [],
-  error: null,
-  searched: false,
-};
+import type { RoadSearchState, ValuationFormState } from "./state";
 
 /**
  * Search the road catalog, falling back to township or scheme names, which is
@@ -49,10 +36,6 @@ export async function findRoads(
     };
   }
 }
-
-export type ValuationFormState = { error: string | null };
-
-export const emptyValuationForm: ValuationFormState = { error: null };
 
 function optionalNumber(value: FormDataEntryValue | null): number | null {
   const text = String(value ?? "").trim();

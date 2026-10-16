@@ -318,9 +318,21 @@ export function searchRoads(q: string, limit = 10): Promise<RoadResult[]> {
 }
 
 export function quotePlans(input: PlanQuoteInput): Promise<PlanQuoteResponse> {
+  // Calculate from the whole-RM valuation shown to owners. The API rounds
+  // the resulting offers separately; retaining cents here can shift them by RM1.
+  const roundedInput: PlanQuoteInput = {
+    ...input,
+    valuation: {
+      ...input.valuation,
+      estimate: Math.round(input.valuation.estimate),
+      low: Math.round(input.valuation.low),
+      high: Math.round(input.valuation.high),
+    },
+  };
+
   return valuationApi<PlanQuoteResponse>("/plans/quote", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(roundedInput),
   });
 }
 
