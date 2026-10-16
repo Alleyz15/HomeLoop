@@ -8,7 +8,20 @@ export async function checkOwnerRecords(page,{baseUrl,artifacts,setScenario,appl
   await page.getByText("Your next chapter starts with one estimate.",{exact:true}).waitFor();
   assert.equal(await page.locator("[data-summary='Total records'] > strong").innerText(),"0");
   assert.equal(await page.locator("[aria-label=\"This application's home-moving progress\"]").count(),0);
-  for(const state of ["valued","unpriced"]) {await load(state);assert.equal(await page.locator("[data-record]").count(),1);await page.getByText("Valuation only",{exact:true}).waitFor();assert.equal(await page.getByRole("link",{name:"View progress"}).count(),0);await page.getByRole("link",{name:"View result"}).waitFor();}
+  for(const state of ["valued","unpriced"]) {
+    await load(state);assert.equal(await page.locator("[data-record]").count(),1);
+    await page.getByText("Valuation only",{exact:true}).waitFor();
+    assert.equal(await page.getByRole("link",{name:"View progress"}).count(),0);
+    await page.getByText(state==="valued"?"Valuation saved":"Estimate unavailable",{exact:true}).waitFor();
+    const action=page.getByRole("link",{name:state==="valued"?"View valuation":"View explanation",exact:true});
+    assert.equal(await action.getAttribute("href"),`/valuation/result/${application.valuation_id}`);
+    assert.equal(await page.getByText("More data needed",{exact:true}).count(),0);
+    assert.equal(await page.getByRole("link",{name:/Continue valuation|Complete form|View result/}).count(),0);
+    assert.equal(await page.locator("[data-summary='Total records'] > strong").innerText(),"1");
+    assert.equal(await page.locator("[data-summary='Needs your attention'] > strong").innerText(),"0");
+    await page.getByText("Submitted valuations and applications only. An unavailable estimate is a saved result, not an unfinished form.",{exact:true}).waitFor();
+    if(state==="unpriced") await screenshot("records-estimate-unavailable.png");
+  }
   const expected={under_review:"Your application is with our team.",info_requested:"A little more detail, a clearer next step.",indicative_sent:"A first look at your way forward.",inspection_scheduled:"Your home visit is arranged.",offer_sent:"Your formal offer is ready.",overdue:"This offer’s response period has ended.",listed:"Your home is finding its next owner.",rejected:"An update on your application.",handover:"Welcome to your next chapter."};
   for(const [state,title] of Object.entries(expected)) {
     await load(state,`?case=${application.id}`);await page.getByRole("heading",{name:title,exact:true}).waitFor();

@@ -29,6 +29,16 @@ export function recordReference(record: Pick<OwnerRecord, "kind" | "id">) {
   return `${record.kind === "application" ? "APP" : "VAL"}-${record.id.replaceAll("-", "").slice(-8).toUpperCase()}`;
 }
 
+/** A saved unpriced response is not an unfinished form or a resumable draft. */
+export function valuationPresentation(valuation: DashboardValuation | null) {
+  const available = !!valuation && [valuation.estimate, valuation.low, valuation.high]
+    .every((amount) => amount != null && Number.isFinite(Number(amount)) && Number(amount) > 0);
+  return {
+    statusLabel: available ? "Valuation saved" : "Estimate unavailable",
+    actionLabel: available ? "View valuation" : "View explanation",
+  };
+}
+
 /** No new case entity or draft is invented: applications plus unlinked valuations. */
 export function buildOwnerRecords(valuations: DashboardValuation[], applications: ApplicationRecord[], now = Date.now()): OwnerRecord[] {
   const byId = new Map(valuations.map((valuation) => [valuation.id, valuation]));
@@ -48,7 +58,7 @@ export function buildOwnerRecords(valuations: DashboardValuation[], applications
     if (linked.has(valuation.id)) continue;
     records.push({ key: `valuation:${valuation.id}`, kind: "valuation", id: valuation.id,
       property: valuation.scheme || "Your saved property", location: valuation.road_norm || valuation.ptype || "Location not recorded",
-      project: null, updatedAt: valuation.created_at, status: "valuation", statusLabel: Number(valuation.estimate) > 0 ? "Valuation saved" : "More data needed",
+      project: null, updatedAt: valuation.created_at, status: "valuation", statusLabel: valuationPresentation(valuation).statusLabel,
       group: "valuation", application: null, valuation });
   }
   return records.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.key.localeCompare(b.key));

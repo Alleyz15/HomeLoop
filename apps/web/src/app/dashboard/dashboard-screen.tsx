@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Files, Activity, CircleCheck, CircleAlert, Search, Inbox } from "lucide-react";
 import { dateLabel } from "@/lib/dashboard-model";
-import { recordReference, recordSummary, recordsHref, selectRecordPage, type OwnerRecord } from "@/lib/owner-records-model";
+import { recordReference, recordSummary, recordsHref, selectRecordPage, valuationPresentation, type OwnerRecord } from "@/lib/owner-records-model";
 import { getRecordProgress } from "@/lib/owner-records";
 import { CaseProgress } from "./case-progress";
 import styles from "./dashboard.module.css";
@@ -36,7 +36,7 @@ export async function DashboardScreen({ data, params }: {
         </article>)}
       </section>
       <section className={styles.recordsCard} aria-labelledby="all-records-heading">
-        <div className={styles.tableHeading}><div><h2 id="all-records-heading">Your records, in one place.</h2><p>Valuations are estimates. Applications are submitted requests to the SDP team.</p></div><span className={styles.countPill}>{summary.total} {summary.total === 1 ? "record" : "records"}</span></div>
+        <div className={styles.tableHeading}><div><h2 id="all-records-heading">Your records, in one place.</h2><p>Submitted valuations and applications only. An unavailable estimate is a saved result, not an unfinished form.</p></div><span className={styles.countPill}>{summary.total} {summary.total === 1 ? "record" : "records"}</span></div>
         <form key={page.query+"|"+page.filter} className={styles.filters} action="/dashboard" method="get" role="search">
           <div className={styles.searchField}><label htmlFor="record-search">Search records</label><div><Search size={15} aria-hidden="true" /><input id="record-search" name="q" type="search" maxLength={100} defaultValue={page.query} placeholder="Property, project or reference" /></div></div>
           <div className={styles.filterField}><label htmlFor="record-filter">Show</label><select id="record-filter" name="filter" defaultValue={page.filter}>
@@ -58,7 +58,7 @@ export async function DashboardScreen({ data, params }: {
                 <td data-label="Plan">{record.application ? <span className={styles.plan}>Plan {record.application.plan}</span> : <span className={styles.muted}>Not selected</span>}</td>
                 <td data-label="Status"><span className={styles.pill} data-group={record.group}>{record.statusLabel}</span></td>
                 <td data-label="Updated" className={styles.date}>{dateLabel(record.updatedAt)}</td>
-                <td data-label="Action">{record.kind === "application" ? <a className={styles.rowAction} aria-expanded={expanded} aria-controls={`progress-${record.id}`} href={expanded ? `${baseHref}#record-${record.id}` : `${recordsHref(page.query, page.filter, page.page, record.id)}#progress-${record.id}`}>{expanded ? "Hide progress" : "View progress"}<span aria-hidden="true">{expanded ? "−" : "+"}</span></a> : <Link prefetch={false} className={styles.rowAction} href={`/valuation/result/${record.id}`}>View result<ArrowUpRight size={14} aria-hidden="true" /></Link>}</td>
+                <td data-label="Action">{record.kind === "application" ? <a className={styles.rowAction} aria-expanded={expanded} aria-controls={`progress-${record.id}`} href={expanded ? `${baseHref}#record-${record.id}` : `${recordsHref(page.query, page.filter, page.page, record.id)}#progress-${record.id}`}>{expanded ? "Hide progress" : "View progress"}<span aria-hidden="true">{expanded ? "−" : "+"}</span></a> : <Link prefetch={false} className={styles.rowAction} href={`/valuation/result/${record.id}`}>{valuationPresentation(record.valuation).actionLabel}<ArrowUpRight size={14} aria-hidden="true" /></Link>}</td>
               </tr>{expanded && progress && <tr className={styles.progressRow} id={`progress-${record.id}`}><td colSpan={7}><CaseProgress data={progress} /></td></tr>}</Fragment>;
             })}</tbody>
           </table>

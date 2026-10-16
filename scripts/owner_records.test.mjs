@@ -4,10 +4,47 @@ import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 
 const modelSource=await readFile(new URL("../apps/web/src/lib/owner-records-model.ts",import.meta.url),"utf8");
-const {buildOwnerRecords,recordSummary,selectRecordPage,recordReference,recordsHref}=await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(modelSource)).toString("base64")}`);
+const {buildOwnerRecords,recordSummary,selectRecordPage,recordReference,recordsHref,valuationPresentation}=await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(modelSource)).toString("base64")}`);
 const now=Date.parse("2026-10-16T12:00:00Z");
 const value=(id)=>({id,scheme:`Property ${id}`,road_norm:`Road ${id}`,ptype:"Terrace",estimate:785635.36,low:720000,high:840000,created_at:"2026-10-01T00:00:00Z"});
 const app=(id,status="under_review",valuationId="v1")=>({id,valuation_id:valuationId,launch_id:7,plan:"A",status,address_line:`Address ${id}`,unit_type:"Type A",offer_amount:616723,offer_expires_at:"2026-10-30T00:00:00Z",created_at:"2026-10-02T00:00:00Z",updated_at:"2026-10-03T00:00:00Z",launch:{project:`Project ${id}`}});
+
+test("saved unpriced submissions remain records, not unfinished forms or attention tasks",()=>{
+  const priced=value("priced"), unpriced={...value("unpriced"),estimate:null,low:null,high:null};
+  const records=buildOwnerRecords([priced,unpriced],[],now);
+  assert.equal(records.length,2);
+  assert.equal(records.find((record)=>record.id==="unpriced").statusLabel,"Estimate unavailable");
+  assert.equal(records.find((record)=>record.id==="priced").statusLabel,"Valuation saved");
+  assert.deepEqual(recordSummary(records),{total:2,progress:0,attention:0,completed:0});
+  assert.equal(selectRecordPage(records,"","valuation","1").total,2);
+  assert.equal(selectRecordPage(records,"Estimate unavailable","all","1").total,1);
+  assert.deepEqual(valuationPresentation(priced),{statusLabel:"Valuation saved",actionLabel:"View valuation"});
+  assert.deepEqual(valuationPresentation(unpriced),{statusLabel:"Estimate unavailable",actionLabel:"View explanation"});
+  for(const amount of [null,undefined,0,-1,NaN,Infinity]) {
+    for(const field of ["estimate","low","high"]) assert.equal(valuationPresentation({...priced,[field]:amount}).actionLabel,"View explanation");
+  }
+  assert.equal(valuationPresentation(null).actionLabel,"View explanation");
+});
+
+test("invalid or failed valuation submissions are not saved; unpriced responses are saved only after submission",async()=>{
+  const source=(await readFile(new URL("../apps/web/src/app/valuation/actions.ts",import.meta.url),"utf8"))
+    .replace('import { redirect } from "next/navigation";', 'const redirect=(url)=>{throw new Error("redirect:"+url);};')
+    .replace('import { searchRoads, valuate } from "@/lib/valuation";', 'const searchRoads=()=>[];const valuate=(input)=>globalThis.__valuationSubmitTest.valuate(input);')
+    .replace('import { getRoadMeta, saveValuation } from "@/lib/valuations";', 'const getRoadMeta=()=>null;const saveValuation=(input)=>globalThis.__valuationSubmitTest.save(input);');
+  const {createValuation}=await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`);
+  let reads=0,saves=0;
+  globalThis.__valuationSubmitTest={valuate:async()=>{reads++;return {estimate:null,low:null,high:null,comparables:[]};},save:async(input)=>{saves++;assert.equal(input.estimate,null);return "saved-unpriced";}};
+  const form=(fields)=>{const data=new FormData();for(const [key,value] of Object.entries(fields))data.set(key,value);return data;};
+  for(const fields of [{},{scheme:"Town",property_type:"Terrace"},{scheme:"Town",property_type:"Terrace",unit_position:"corner_end"}]) {
+    assert.ok((await createValuation({},form(fields))).error);
+  }
+  assert.equal(reads,0);assert.equal(saves,0);
+  const complete={scheme:"Town",property_type:"Terrace",unit_position:"custom",land_sqm:"200",floor_sqm:"150"};
+  await assert.rejects(createValuation({},form(complete)),/redirect:\/valuation\/result\/saved-unpriced/);
+  assert.equal(reads,1);assert.equal(saves,1);
+  globalThis.__valuationSubmitTest.valuate=async()=>{throw new Error("service unavailable");};
+  assert.equal((await createValuation({},form(complete))).error,"service unavailable");assert.equal(saves,1);
+});
 
 test("all records retained without double-counting valuations linked to applications",()=>{
   const records=buildOwnerRecords([value("v1"),value("v2"),value("v3"),value("v3")],[app("a1"),app("a2","rejected","v1"),app("a2","rejected","v1")],now);
