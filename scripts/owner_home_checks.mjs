@@ -31,7 +31,7 @@ export async function checkOwnerHome(page, { baseUrl, artifacts }) {
   assert.equal(await page.getByRole("link",{name:"HomeLoop home",exact:true}).getAttribute("href"),"/home");
   assert.equal(await page.getByRole("link",{name:"Manage Dashboard"}).getAttribute("href"),"/dashboard");
   assert.equal(await page.getByRole("link",{name:"Start Free Valuation"}).getAttribute("href"),"/valuation");
-  assert.equal(await page.getByRole("button",{name:"Explore SDP Homes"}).isDisabled(),true);
+  assert.equal(await page.getByRole("link",{name:"Explore SDP Homes"}).getAttribute("href"),"/new-home");
   await page.waitForFunction(()=>[...document.querySelectorAll("[data-film] video")].length===2 && [...document.querySelectorAll("[data-film] video")].every((video)=>video.readyState>=2 && !video.paused));
   for(const name of ["journey","gallery"]) {
     const film=page.locator(`[data-film='${name}'] video`);

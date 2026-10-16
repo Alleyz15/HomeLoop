@@ -35,7 +35,7 @@ export default async function OwnerHomePage() {
       <section className={`${styles.actionCard} ${styles.galleryCard}`} aria-labelledby="new-home-heading" data-home-card="gallery">
         <div className={styles.cardCopy}><p className={styles.eyebrow}>ROOM FOR WHAT’S NEXT</p><h2 id="new-home-heading">Find your <em>next address.</em></h2><p className={styles.description}>Explore new Sime Darby Property developments.</p></div>
         <DecorativeFilm name="gallery" className={styles.film} src="/animations/homeloop-gallery.mp4?v=1" poster="/animations/homeloop-gallery-poster.png?v=1" />
-        <div className={styles.cardBottom}><button type="button" className={styles.button} disabled aria-describedby="catalogue-availability">Explore SDP Homes<ArrowUpRight size={17} aria-hidden="true" /></button><p id="catalogue-availability" className={styles.comingNext}>Property catalogue · coming in its own phase</p></div>
+        <div className={styles.cardBottom}><Link href="/new-home" className={styles.button}>Explore SDP Homes<ArrowUpRight size={17} aria-hidden="true" /></Link><p className={styles.comingNext}>Browse developments. Imagine what’s next.</p></div>
       </section>
     </div>
   </div>;

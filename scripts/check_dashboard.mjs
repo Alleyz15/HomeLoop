@@ -11,6 +11,8 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkOwnerHome } from "./owner_home_checks.mjs";
 import { checkOwnerRecords } from "./owner_records_checks.mjs";
+import { checkCatalogue } from "./catalogue_checks.mjs";
+import { catalogueFixtures } from "./catalogue_fixtures.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const webDir = path.join(root, "apps/web");
@@ -36,6 +38,7 @@ function rowsForScenario() {
   return {valuations:[{...valuation,...(scenario==="unpriced"?{estimate:null,low:null,high:null}:{})}],applications:["valued","unpriced"].includes(scenario)?[]:[{...application,status:scenario==="overdue"?"offer_sent":scenario,plan:["listed","buyer_found","guarantee_triggered"].includes(scenario)?"B":"A",launch:{project:"Saved test SDP project"},...(scenario==="overdue"?{offer_expires_at:"2020-01-01T00:00:00Z"}:{})}]};
 }
 let scenario = "new";
+let catalogueScenario = "normal";
 let authUrl;
 let qaProcess;
 let browser;
@@ -84,7 +87,14 @@ const auth = createServer(async (request,response) => {
     const statuses=record.status==="handover"?["submitted","indicative_sent","inspected","offer_sent","espa_signed","old_home_completed","handover"]:["submitted",record.status];
     return replyRows(statuses.map((status,index)=>({to_status:status,action:"record_"+status,reason:status==="info_requested"?"Please confirm your property address.":null,created_at:new Date(Date.UTC(2026,9,11+index)).toISOString()})));
   }
-  if (url.pathname === "/rest/v1/sdp_launches") return reply(200,[{project:"Saved test SDP project"}]);
+  if (url.pathname === "/rest/v1/sdp_launches") {
+    if (!url.searchParams.has("tier")) return reply(200,[{project:"Saved test SDP project"}]);
+    if (url.searchParams.get("tier") !== "in.(selling,upcoming)") {errors.push("Missing catalogue tier filter");return reply(403,{});}
+    if (catalogueScenario === "failure") return reply(500,{message:"Local catalogue read failure"});
+    let rows=catalogueScenario === "empty" ? [] : catalogueFixtures.filter(row=>["selling","upcoming"].includes(row.tier));
+    if(catalogueScenario === "unsafe")rows=[{...rows[0],project:"Unverified image",project_url:"javascript:alert(1)"}];
+    return replyRows(rows);
+  }
   errors.push(`Unexpected request ${url.pathname}`); reply(404,{});
 });
 function startNext(args,env) { return spawn(process.execPath,[nextCli,...args],{cwd:webDir,env,stdio:["ignore","pipe","pipe"],windowsHide:true}); }
@@ -117,6 +127,7 @@ try {
   await page.getByLabel("Email address").fill("owner@dashboard.test");await page.getByLabel("Password",{exact:true}).fill("dashboard-test-password");await page.getByRole("button",{name:"Sign in",exact:true}).click();
   await page.waitForURL(baseUrl+"/dashboard");
   await checkOwnerHome(page,{baseUrl,artifacts});
+  await checkCatalogue(page,{baseUrl,artifacts,setScenario:(state)=>{catalogueScenario=state;}});
   if(process.env.OWNER_HOME_ONLY!=="1") {
     await checkOwnerRecords(page,{baseUrl,artifacts,setScenario:(state)=>{scenario=state;},application,caseId});
     await page.getByRole("button",{name:"Sign out",exact:true}).click();await page.waitForURL((url)=>url.pathname==="/login");
@@ -124,7 +135,7 @@ try {
     await page.goto(baseUrl+"/login");
     await page.getByLabel("Email address").fill("admin@dashboard.test");await page.getByLabel("Password",{exact:true}).fill("dashboard-test-password");await page.getByRole("button",{name:"Sign in",exact:true}).click();await page.waitForURL(baseUrl+"/admin");
     const before=queries.length;
-    for(const route of ["/home","/dashboard"]) {await page.goto(baseUrl+route);await page.waitForURL(baseUrl+"/admin");}
+    for(const route of ["/home","/dashboard","/new-home"]) {await page.goto(baseUrl+route);await page.waitForURL(baseUrl+"/admin");}
     assert.equal(queries.slice(before).some((query)=>query.email==="admin@dashboard.test"),false);
     console.log("PASS owner/admin guards and owner-scoped records; no foreign event reads");
   }
