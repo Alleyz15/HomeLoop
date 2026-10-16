@@ -5,6 +5,7 @@ import { ArrowUpRight, Check, Files } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { DecorativeFilm } from "@/components/decorative-film";
 import styles from "./home.module.css";
+import { ArchitecturalBackground } from "./architectural-background";
 
 export const metadata: Metadata = { title: "Your HomeLoop | HomeLoop" };
 
@@ -13,7 +14,7 @@ export default async function OwnerHomePage() {
   if (!user) redirect("/login?next=/home");
   if (user.role === "admin") redirect("/admin");
   return <div className={styles.home} data-owner-home>
-    <div className={styles.contours} aria-hidden="true"><i /><i /><i /></div>
+    <ArchitecturalBackground />
     <section className={styles.intro} aria-labelledby="owner-home-heading">
       <p className={styles.eyebrow}><span className={styles.dot} />YOUR NEXT CHAPTER</p>
       <h1 id="owner-home-heading">Your move, <em>at a glance.</em></h1>
