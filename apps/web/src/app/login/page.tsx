@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { getSessionUser, landingPathFor } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth";
+import { postAuthPathFor } from "@/lib/auth-routing";
 
 import { AuthForm } from "./auth-form";
 import { AuthScene } from "./auth-scene";
@@ -11,12 +12,11 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
+  const { next } = await searchParams;
   const user = await getSessionUser();
   if (user) {
-    redirect(landingPathFor(user.role));
+    redirect(postAuthPathFor(user.role, next));
   }
-
-  const { next } = await searchParams;
 
   return (
     <section className={styles.page} data-auth-page aria-label="HomeLoop account">

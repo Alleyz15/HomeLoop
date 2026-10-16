@@ -233,6 +233,7 @@
 - [x] 2026-10-16 Sign in 动效升级（F1-02b）：以独立 EffectCraft 14 秒立体房屋/花园场景替换旧平面插画，含分层组装、路径/光点、镜头与 8–14 秒循环；扩大建筑轮廓、sage 光晕及前景叶片，新增指针多层景深，表单不跟随移动。主题/文案/认证不变；保留 reduced-motion、视频/无 JS fallback；build（含 lint / TypeScript）、扩展 Edge 与 Welcome regression 检查通过，详见前端记录，待 commit。
 - [x] 2026-10-16 Sign in 门廊动效（F1-02c，取代上项房屋模型）：依获批预览改为层叠拱门；真实 3D 门板与把手绕左铰链约 5 秒缓慢向内打开，地面光线/阴影同步变化；保持开启并循环轻光影，不自动关门。移除花园/叶片与旧插画说明，主文案、表单、配色及认证不变。最终边缘融合 build（含 lint / TypeScript）、扩展 Edge 双模式 1440/768/390/320 px 与 Welcome regression 检查通过；变更/文件/验证详见前端记录，待 commit。
 - [x] 2026-10-15 未登录访问受保护页面时导向 `/login?next=…`；受保护前缀为 `/dashboard`、`/valuation`、`/new-home`、`/plans`、`/apply`、`/admin`（原则 2：要登录才能估价）
+- [x] 2026-10-16 定向修复（F1-04 / F2-02a）：估价初始 state 移出 `use server`，修复登入后 `results.length` 浏览器崩溃；admin 登入固定至 `/admin`，屋主只恢复允许的站内目的地；Welcome 隐藏应用导航/邮箱/登出但保留 session；应用内顶部/底部 Logo 回角色首页。4 个新 Node 测试 + 既有 rounding regression、本地 auth stub 的 owner/admin 成功登入/导航/返回/登出通过；正常 production build（含 lint / TypeScript）已恢复，Sign in / Welcome 回归通过。未改设计/动画、数据库或其他估价功能；真实账号密码未配置，仍需用户重试，待 commit。
 - [ ] **待验证**：demo 帐号已建立；仍要实测屋主登入 → `/dashboard`、admin 登入 → `/admin`、屋主手动输入 `/admin` → 被送回 `/dashboard`
 
 ### F2. 屋主端
@@ -267,7 +268,7 @@
 
 | 问题 | 说明 |
 |---|---|
-| 前端待处理的整合问题（更新 2026-10-16） | 前端记录 FE-BUG-02、03、05 仍待处理：资料不足结果页承诺可申请，但 SQL 拒绝；地契自动带入未接线；无常见面积的中间单位手填面积未随表单提交。FE-BUG-04 的 Server Actions export/build 疑虑在本次完整 production build 未重现，未为此改动源码；估价真实 session 流程仍待验证。 |
+| 前端待处理的整合问题（更新 2026-10-16） | 前端记录 FE-BUG-02、03、05 仍待处理：资料不足结果页承诺可申请，但 SQL 拒绝；地契自动带入未接线；无常见面积的中间单位手填面积未随表单提交。FE-BUG-04 已由用户提供的 production chunk 确认为浏览器 state 边界错误，移至独立 state 模块修复；FE-BUG-06/07 的角色跳转及公开页导航也已定向修复，本地隔离 auth 浏览器验证通过，真实账号流程仍待用户重试。 |
 | 部分网络的路由器 DNS 查不到 `*.supabase.co` | 改用 1.1.1.1 / 8.8.8.8，或在 hosts 文件加 `104.18.38.10 qcuzvdkrqzxogigsxisk.supabase.co`（Supabase IP 改变时要更新） |
 | `transactions` 只能导入一次 | 重新导入前要先 `truncate` 6 张参考表（见 README） |
 | 大部分新屋项目只公布起价 | 第 ③ 步用起价，允许用户填销售报价 |
