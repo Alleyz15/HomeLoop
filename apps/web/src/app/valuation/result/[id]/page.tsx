@@ -247,13 +247,14 @@ export default async function ValuationResultPage({
       <Separator />
 
       <div className="flex flex-wrap gap-3">
-        <Button render={<Link href="/new-home" />} size="lg">
-          Next: choose a new home
+        <Button render={<Link href={`/new-home?valuation=${encodeURIComponent(valuation.id)}`} />} size="lg">
+          {priced ? "Next: choose a new home" : "Browse SDP homes"}
         </Button>
         <Button render={<Link href="/valuation" />} size="lg" variant="outline">
           Value another home
         </Button>
       </div>
+      {!priced && <p className="text-sm text-muted-foreground">You can browse developments, but plan comparison requires an available valuation estimate.</p>}
     </section>
   );
 }
