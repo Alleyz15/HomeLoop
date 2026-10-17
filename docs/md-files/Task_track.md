@@ -100,6 +100,8 @@
 
 完成日期：2026-10-14｜commits `3ed7275`、`4a77305`、`dc9316e`、`f772eaf`
 
+人工估价路径补充：2026-10-17｜commits `83f88e3`、`2014084`
+
 - [x] 提交时执行第 1 关资格、必填资料与 PDPA 检查；每位屋主同一时间只允许一份活跃申请
 - [x] PostgreSQL SECURITY DEFINER RPC 状态机：锁定申请、验证调用者与合法转换，并在同一交易写入一笔 `application_events`
 - [x] Admin 操作：开始审核、要求补件、初步范围、拒绝、安排/记录上门、发正式报价、回应复核及接受后追踪
@@ -107,12 +109,19 @@
 - [x] 正式报价由数据库按确认市值重算；14 天到期采用 lazy expiry，方案切换与发报价均检查月度额度
 - [x] Admin flags：正式估价低于 AI low 超过 10%、AI 低可信度、月度额度达到 80%
 - [x] server-only Next.js RPC helpers、pgTAP 状态机测试；本地重建后 56 项测试通过
+- [x] `valuation_requests.valuation_status` 保存 `ok / insufficient_data / not_found / unsupported_property_type`；旧资料保守回填。只有经保存记录及 `road_catalog` 近 3 年少于 10 笔双重验证的 `insufficient_data` 可进入人工估价，另外两种失败状态不可送申请
+- [x] 人工估价状态 `manual_valuation_pending`：admin `request_manual_valuation` 后，屋主必须明确执行 `proceed_manual_valuation` 才能安排上门；也可从该状态撤回。人工路径在上门前没有 indicative RM 区间，也没有 admin 桌面估价步骤
+- [x] 人工 `record_inspection` 必须有正数 `confirmed_value`，并在 note 写注册估价师与估价依据；不使用 AI adjustment reason，同时记录 `manual_valuation_resolved_at / by`
+- [x] 方案 A 的 SDP township 与「确认市值不高于新屋价格」规则在 `issue_offer`、`respond_review`、`switch_plan` 再检查。人工估价后若方案 A 不合格，屋主可在正式报价前改方案 B，且不消耗一次正式 `plan_switch_count`
+- [x] `admin_application_flags` 增加 `manual_valuation_required`；新 RPC 维持 SECURITY DEFINER、空 search path、owner/admin 检查、`FOR UPDATE`、每动作一笔 event、只授权 authenticated。全新本地 reset 后 pgTAP 94 项通过，schema lint 无警告
 
 已确定的状态机决定：
 
 - 补件可以从 `under_review` 或 `inspected` 发起；`info_return_status` 记录来源，屋主补件后回到原关卡并清空该字段。
 - 正式报价阶段每份申请只可换方案一次（`plan_switch_count`，与一次复核分开计算）：B → A 重新检查方案 A 资格、清空报价并回到 `inspection_scheduled` 等注册估价师；A → B 用已确认市价重新计算 75% 保底、检查额度并发出新的 14 天报价。
 - 屋主从 `accepted` 标记 e-SPA 已签后进入 `espa_signed`；admin 以 `espa_confirmed_at` / `espa_confirmed_by` 确认，不新增状态。所有挂牌及之后的追踪动作必须等 admin 确认。
+- `insufficient_data` 不制造临时价格：屋主选择方案时只看结构/公式；方案 A 仅先检查 SDP township，金额资格等注册估价师确认市值后才决定。`not_found` 与 `unsupported_property_type` 不可沿用此路径。
+- 人工路径的正式转换为 `submitted → under_review → manual_valuation_pending → owner_proceed → inspection_scheduled → inspected → offer_sent`；其中 `manual_valuation_pending → withdrawn` 也是合法结束。
 
 ### 1.7 B2 估价 API 修正（2026-10-14，commit `d5056d7`）
 
@@ -155,6 +164,7 @@
 
 - [x] `src/lib/valuations.ts`：server-only `saveValuation()` / `getValuation()` / `getRoadMeta()`。**补上了之前缺的一环**：原本没有任何程式写入 `valuation_requests`，而 B4 的 `submit_application` 需要一个真实的 `p_valuation_id`，现在估价完成就会存一笔并取得 id
 - [x] 估不出价（资料不足）的请求也会存，金额留 null，屋主仍有纪录、之后也能据此送申请
+- [x] 2026-10-17 保存估价 API 的准确 `valuation_status`；结果页仅 `insufficient_data` 显示可继续申请说明，`not_found / unsupported_property_type` 不显示申请入口。新屋及方案页可继续人工估价路径，只显示方案结构与公式、不显示 RM 金额；非 SDP 的方案 A 停用，SDP 的方案 A 标示「Eligibility confirmed after valuation」（commit `2014084`）
 - [x] `src/lib/units.ts`：m² ↔ sq ft 换算、排屋尺寸快捷、RM 格式化
 - [x] `src/app/valuation/actions.ts`：`findRoads`（走 B2 `/roads`）与 `createValuation`（走 B2 `/valuate` → 存档 → 导向结果页），全部 server action，内部 key 不会进浏览器
 - [x] `is_sdp` / `district` / `tenure_mode` 直接读 `road_catalog`（authenticated 有 select 权限），**不新增 migration**；`valuation_requests` 没有 `is_sdp` 栏位，这样就不用改表
@@ -290,7 +300,7 @@
 | 每月额度月份归属（已解决） | Migration `20261015084351_fix_monthly_limit_timezone.sql`（commit `93faa61`）已于 2026-10-15 套用线上，统一以 `Asia/Kuala_Lumpur` 计算报价月份；本机重建与 59 项 pgTAP 已通过，远端 migration list 已对齐，linked database lint 无错误。 |
 | `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
 | 风险模拟的 RM 金额要标明估价基准 | 《商业模式》第 5 节算的是**占估价的百分比**；RM3,500 / RM26,000 是套在示例的 RM786,000 上。187 笔的平均估价是 RM944,511，所以按每笔自己估价平均会得到 RM7,354 / RM36,953。`/simulator/run` 三种基准都回传，A3 优先显示百分比 |
-| B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此这些数值只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额 |
+| B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此 priced snapshot 数值仍只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额。人工路径额外核对该屋主保存的 `valuation_status=insufficient_data` 与对应 `road_catalog.n_recent_3y < 10`，不接受单靠客户端自称资料不足。 |
 
 ## 5. 已确定的关键数字（不要随意改）
 

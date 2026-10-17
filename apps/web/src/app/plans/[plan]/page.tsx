@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Calculator, LockKeyhole, ArrowRight } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getPlanJourney } from "@/lib/plans";
-import { planHref, depositAnswer, type PlanParams } from "@/lib/plans-model";
+import { manualPlanPresentation, planHref, depositAnswer, type PlanParams } from "@/lib/plans-model";
 import { marketRm } from "@/lib/development-model";
 import { Backdrop, PlanError, ContextBar, EstimateNote } from "../shared";
 import styles from "../plans.module.css";
@@ -18,9 +18,24 @@ export default async function PlanCalculation({ params, searchParams }: { params
   if (plan !== "a" && plan !== "b") notFound();
   const result = await getPlanJourney(query, user.id);
   if (!result.journey) return <PlanError message={result.error} />;
-  const journey = result.journey, { quote, selection } = journey;
-  const isA = plan === "a", item = isA ? quote.plan_a : quote.plan_b;
+  const journey = result.journey, { selection } = journey;
+  const isA = plan === "a";
   const answer = depositAnswer(query.deposit), back = planHref(selection, undefined, answer);
+  if (journey.mode === "manual") {
+    const presentation = manualPlanPresentation(isA ? "A" : "B", journey.isSdp);
+    if (!presentation.available) return <section className={styles.page} data-plans-page><Backdrop /><Link className={styles.back} href={back}><ArrowLeft size={14} aria-hidden="true" />Back to comparison</Link><div className={styles.error} role="alert"><LockKeyhole size={26} aria-hidden="true" /><h1>Plan {plan.toUpperCase()} is unavailable.</h1><p>{presentation.eligibilityCopy}</p><Link className={styles.action} href={back}>Review the available option<ArrowRight size={15} /></Link></div></section>;
+    return <div className={styles.page} data-plans-page data-plan-calculation={plan} data-manual-valuation>
+      <Backdrop /><Link className={styles.back} href={back}><ArrowLeft size={14} aria-hidden="true" />Back to comparison</Link>
+      <header className={styles.detailHeading}><p className={styles.eyebrow}>STEP 4 · UNDERSTAND THE STRUCTURE</p><h1>Plan {plan.toUpperCase()}: {isA ? "Direct Purchase" : "Open Market Selling"}</h1><p>No indicative RM amount is shown until a registered valuer confirms the old-home value.</p></header>
+      <ContextBar journey={journey} />
+      <div className={styles.detailGrid}>
+        <section className={styles.calculation} aria-labelledby="manual-formula-heading"><div className={styles.sectionHeading}><Calculator size={20} strokeWidth={1.4} aria-hidden="true" /><h2 id="manual-formula-heading">Formula after valuation</h2></div><div className={styles.detailRange}><span>{isA ? "Direct-purchase formula" : "Open-market and floor formulas"}</span><strong>{presentation.formula}</strong><p>{presentation.eligibilityCopy}. The formal amount is calculated only from the confirmed value after inspection.</p></div></section>
+        <section className={styles.calculation} aria-labelledby="manual-next-heading"><div className={styles.sectionHeading}><h2 id="manual-next-heading">What happens next</h2></div><dl className={styles.math}><div><dt>1. Owner decision</dt><dd>Agree to proceed with manual valuation</dd></div><div><dt>2. Inspection</dt><dd>A registered valuer confirms the market value</dd></div><div><dt>3. Formal offer</dt><dd>The plan formula and monthly limit are applied</dd></div></dl><button type="button" className={styles.action} disabled aria-describedby="application-coming"><LockKeyhole size={15} aria-hidden="true" />Confirm this plan</button><p id="application-coming" className={styles.cardFoot}>Application submission wiring is handled separately. No application has been created from this page.</p></section>
+      </div><EstimateNote />
+    </div>;
+  }
+  const { quote } = journey;
+  const item = isA ? quote.plan_a : quote.plan_b;
   if (!item.eligible) return <section className={styles.page} data-plans-page><Backdrop /><Link className={styles.back} href={back}><ArrowLeft size={14} aria-hidden="true" />Back to comparison</Link><div className={styles.error} role="alert"><LockKeyhole size={26} aria-hidden="true" /><h1>Plan {plan.toUpperCase()} is unavailable.</h1>{(isA ? quote.plan_a.reasons : ["This plan is not available."]).map(reason => <p key={reason}>{reason}</p>)}<Link className={styles.action} href={back}>Review the available options<ArrowRight size={15} /></Link></div></section>;
   const breakdown = item.breakdown;
   return <div className={styles.page} data-plans-page data-plan-calculation={plan}>

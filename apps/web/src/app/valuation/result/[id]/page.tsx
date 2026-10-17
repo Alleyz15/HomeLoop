@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatArea, formatRm } from "@/lib/units";
+import { INSUFFICIENT_DATA_MESSAGE } from "@/lib/development-model";
 import { explainValuation } from "@/lib/valuation";
 import {
   getRoadMeta,
@@ -38,14 +39,12 @@ async function ValuationExplanation({
   valuation: StoredValuation;
   meta: RoadMeta | null;
 }) {
-  const priced =
-    valuation.estimate != null &&
-    valuation.low != null &&
-    valuation.high != null;
+  const priced = valuation.valuation_status === "ok" &&
+    valuation.estimate != null && valuation.low != null && valuation.high != null;
 
   try {
     const explanation = await explainValuation({
-      status: priced ? "ok" : "insufficient_data",
+      status: valuation.valuation_status,
       estimate: valuation.estimate,
       low: valuation.low,
       high: valuation.high,
@@ -112,10 +111,9 @@ export default async function ValuationResultPage({
     ? await getRoadMeta(valuation.scheme, valuation.ptype, valuation.road_norm)
     : null;
 
-  const priced =
-    valuation.estimate != null &&
-    valuation.low != null &&
-    valuation.high != null;
+  const priced = valuation.valuation_status === "ok" &&
+    valuation.estimate != null && valuation.low != null && valuation.high != null;
+  const manual = valuation.valuation_status === "insufficient_data";
   const comparables = valuation.comps ?? [];
 
   return (
@@ -174,27 +172,36 @@ export default async function ValuationResultPage({
             ) : null}
           </CardContent>
         </Card>
-      ) : (
+      ) : manual ? (
         <Card>
           <CardHeader>
             <CardTitle>Not enough recent sales to price this home</CardTitle>
-            <CardDescription>
-              Fewer than ten comparable sales in the last three years, so no
-              estimate is shown rather than a figure we cannot stand behind.
-            </CardDescription>
+            <CardDescription>{INSUFFICIENT_DATA_MESSAGE}</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              A registered valuer can still value this home manually. You can
-              submit an application and the trade-in team will arrange it.
+              No indicative RM range will be shown before inspection. You will
+              explicitly agree before the trade-in team schedules a registered
+              valuer.
             </p>
           </CardContent>
         </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>We couldn’t estimate this home</CardTitle>
+            <CardDescription>
+              The selected road or property type is not available for this
+              valuation path. Start a new valuation or choose another supported
+              landed home.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       )}
 
-      <Suspense fallback={<AiThinking />}>
-        <ValuationExplanation valuation={valuation} meta={meta} />
-      </Suspense>
+      {(priced || manual) ? <Suspense fallback={<AiThinking />}>
+          <ValuationExplanation valuation={valuation} meta={meta} />
+        </Suspense> : null}
 
       {!meta?.is_sdp ? (
         <Card>
@@ -247,14 +254,14 @@ export default async function ValuationResultPage({
       <Separator />
 
       <div className="flex flex-wrap gap-3">
-        <Button render={<Link href={`/new-home?valuation=${encodeURIComponent(valuation.id)}`} />} size="lg">
-          {priced ? "Next: choose a new home" : "Browse SDP homes"}
-        </Button>
+        {(priced || manual) ? <Button render={<Link href={`/new-home?valuation=${encodeURIComponent(valuation.id)}`} />} size="lg">
+          Next: choose a new home
+        </Button> : null}
         <Button render={<Link href="/valuation" />} size="lg" variant="outline">
           Value another home
         </Button>
       </div>
-      {!priced && <p className="text-sm text-muted-foreground">You can browse developments, but plan comparison requires an available valuation estimate.</p>}
+      {manual ? <p className="text-sm text-muted-foreground">Plan structures are available now; all RM amounts wait for the registered valuation.</p> : null}
     </section>
   );
 }

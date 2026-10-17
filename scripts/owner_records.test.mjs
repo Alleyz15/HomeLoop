@@ -33,7 +33,7 @@ test("invalid or failed valuation submissions are not saved; unpriced responses 
     .replace('import { getRoadMeta, saveValuation } from "@/lib/valuations";', 'const getRoadMeta=()=>null;const saveValuation=(input)=>globalThis.__valuationSubmitTest.save(input);');
   const {createValuation}=await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`);
   let reads=0,saves=0;
-  globalThis.__valuationSubmitTest={valuate:async()=>{reads++;return {estimate:null,low:null,high:null,comparables:[]};},save:async(input)=>{saves++;assert.equal(input.estimate,null);return "saved-unpriced";}};
+  globalThis.__valuationSubmitTest={valuate:async()=>{reads++;return {status:"insufficient_data",estimate:null,low:null,high:null,comparables:[]};},save:async(input)=>{saves++;assert.equal(input.valuationStatus,"insufficient_data");assert.equal(input.estimate,null);return "saved-unpriced";}};
   const form=(fields)=>{const data=new FormData();for(const [key,value] of Object.entries(fields))data.set(key,value);return data;};
   for(const fields of [{},{scheme:"Town",property_type:"Terrace"},{scheme:"Town",property_type:"Terrace",unit_position:"corner_end"}]) {
     assert.ok((await createValuation({},form(fields))).error);
@@ -55,11 +55,13 @@ test("all records retained without double-counting valuations linked to applicat
 });
 
 test("summary separates attention overlap, completed moves, closed cases and valuations",()=>{
-  const applications=[app("a1","info_requested"),app("a2","under_review"),app("a3","handover"),app("a4","declined"),app("a5","offer_sent")];
+  const applications=[app("a1","info_requested"),app("a2","under_review"),app("a3","handover"),app("a4","declined"),app("a5","offer_sent"),app("a6","manual_valuation_pending")];
   applications[4].offer_expires_at="2026-10-01T00:00:00Z";
   const records=buildOwnerRecords([value("v1"),value("v2")],applications,now);
-  assert.deepEqual(recordSummary(records),{total:6,progress:2,attention:1,completed:1});
+  assert.deepEqual(recordSummary(records),{total:7,progress:3,attention:2,completed:1});
   assert.equal(records.find((record)=>record.id==="a5").status,"expired");
+  assert.equal(records.find((record)=>record.id==="a6").statusLabel,"Manual valuation decision needed");
+  assert.equal(records.find((record)=>record.id==="a6").group,"attention");
   assert.equal(applications[4].status,"offer_sent");
 });
 

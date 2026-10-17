@@ -93,6 +93,7 @@ export async function createValuation(
     });
 
     id = await saveValuation({
+      valuationStatus: result.status,
       roadNorm,
       scheme: result.scheme ?? scheme,
       propertyType,

@@ -124,7 +124,8 @@ insert into public.valuation_requests (
   estimate,
   low,
   high,
-  confidence
+  confidence,
+  valuation_status
 )
 values
   (
@@ -138,7 +139,8 @@ values
     800000,
     700000,
     900000,
-    'low'
+    'low',
+    'ok'
   ),
   (
     '20000000-0000-0000-0000-000000000002',
@@ -151,7 +153,8 @@ values
     800000,
     700000,
     900000,
-    'medium'
+    'medium',
+    'ok'
   );
 
 set local role authenticated;

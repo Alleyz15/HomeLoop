@@ -18,6 +18,7 @@ export type OwnerRecord = {
 const LABELS: Record<string, string> = {
   submitted: "Submitted", under_review: "Under review", info_requested: "Information needed",
   indicative_sent: "Initial price range ready", owner_proceed: "Awaiting home visit",
+  manual_valuation_pending: "Manual valuation decision needed",
   inspection_scheduled: "Visit scheduled", inspected: "Preparing formal offer", offer_sent: "Formal offer ready",
   review_requested: "Offer under review", accepted: "Offer accepted", espa_signed: "Signing recorded",
   listed: "Listed for sale", buyer_found: "Buyer found", guarantee_triggered: "Fallback triggered",
@@ -48,7 +49,7 @@ export function buildOwnerRecords(valuations: DashboardValuation[], applications
     const project = Array.isArray(application.launch) ? application.launch[0]?.project : application.launch?.project;
     const expiry = application.offer_expires_at ? Date.parse(application.offer_expires_at) : NaN;
     const status = ["offer_sent", "review_requested"].includes(application.status) && expiry <= now ? "expired" : application.status;
-    const group = ["withdrawn", "declined", "rejected", "expired"].includes(status) ? "closed" : status === "handover" ? "completed" : ["info_requested", "indicative_sent", "offer_sent", "accepted"].includes(status) ? "attention" : "progress";
+    const group = ["withdrawn", "declined", "rejected", "expired"].includes(status) ? "closed" : status === "handover" ? "completed" : ["info_requested", "indicative_sent", "manual_valuation_pending", "offer_sent", "accepted"].includes(status) ? "attention" : "progress";
     return { key: `application:${application.id}`, kind: "application", id: application.id,
       property: valuation?.scheme || "Your saved property", location: application.address_line,
       project: project ?? null, updatedAt: application.updated_at, status, statusLabel: LABELS[status] ?? "Status unavailable",
