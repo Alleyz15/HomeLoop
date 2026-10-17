@@ -38,6 +38,27 @@ export function recommendation(answer: DepositAnswer, eligibleA: boolean, eligib
   return { plan: null, message: "This is guidance only. Review the amounts and conditions before choosing an eligible plan." };
 }
 
+export function manualPlanPresentation(plan: "A" | "B", isSdp: boolean) {
+  if (plan === "A") {
+    return {
+      available: isSdp,
+      eligibility: isSdp ? "pending" as const : "ineligible" as const,
+      eligibilityCopy: isSdp
+        ? "Eligibility confirmed after valuation"
+        : "Plan A requires an old home in an SDP township.",
+      formula:
+        "Confirmed market value × (1 − 11.5% − 10%) = confirmed market value × 78.5%",
+    };
+  }
+  return {
+    available: true,
+    eligibility: "available" as const,
+    eligibilityCopy: "Available after the registered valuation",
+    formula:
+      "Floor = confirmed market value × 75%; expected open-market net = confirmed market value × (1 − 3.2% − 1.2%)",
+  };
+}
+
 /** Reject malformed service replies rather than rendering undefined amounts. */
 export function validPlanQuote(value: unknown): value is PlanQuoteResponse {
   const object = (row: unknown): row is Record<string, unknown> => !!row && typeof row === "object" && !Array.isArray(row);

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ArrowUpRight, LockKeyhole, MoveRight, Sparkles } from "lucide-react";
 import type { CatalogueLaunch } from "@/lib/catalogue-model";
-import { marketRm, pricePreview, type PublishedLayout, type ValuationContext } from "@/lib/development-model";
+import { canContinueWithValuation, marketRm, pricePreview, type PublishedLayout, type ValuationContext } from "@/lib/development-model";
 import styles from "./development.module.css";
 
 export function PricePanel({ launch, layouts, layoutSource, context, initialType, initialQuotation = "" }: {
@@ -13,7 +13,7 @@ export function PricePanel({ launch, layouts, layoutSource, context, initialType
   const publishedPrice = pricePreview(launch.price_from_rm, "", null).price;
   const preview = pricePreview(publishedPrice, quotation, context.state === "ready" ? context.valuation : null);
   const selected = layouts.find(row => row.value === type)!;
-  const canCompare = context.state === "ready" && launch.tier === "selling" && preview.price != null && !preview.error;
+  const canCompare = canContinueWithValuation(context.state) && launch.tier === "selling" && preview.price != null && !preview.error;
   return <form action="/plans" method="get" className={styles.panel} aria-labelledby="selection-heading" data-price-panel>
     <input type="hidden" name="launch" value={launch.id} />
     {context.valuation && <input type="hidden" name="valuation" value={context.valuation.id} />}
@@ -38,7 +38,7 @@ export function PricePanel({ launch, layouts, layoutSource, context, initialType
       </div>
       {launch.tier === "upcoming" && <p className={styles.help}>Coming soon: this development is not open for selection or plan quoting.</p>}
       <button type="submit" disabled={!canCompare} className={styles.choose} aria-describedby="plan-coming">{!canCompare && <LockKeyhole size={15} aria-hidden="true" />}Choose this home<ArrowUpRight size={16} aria-hidden="true" /></button>
-      <p id="plan-coming" className={styles.coming}>{canCompare ? "Next: compare plans. This does not submit an application." : launch.tier === "upcoming" ? "Plan quoting is unavailable for upcoming developments." : context.state !== "ready" ? "A saved valuation with an available estimate is needed to compare plans." : "Enter a valid new-home price to compare plans."}</p>
+      <p id="plan-coming" className={styles.coming}>{canCompare ? context.state === "manual" ? "Next: compare each plan’s structure. RM amounts remain pending until a registered valuation." : "Next: compare plans. This does not submit an application." : launch.tier === "upcoming" ? "Plan quoting is unavailable for upcoming developments." : !canContinueWithValuation(context.state) ? "This saved valuation cannot continue to plan selection." : "Enter a valid new-home price to compare plans."}</p>
       <noscript><p className={styles.help}>Live quotation and layout previews require JavaScript. Published project information remains available.</p></noscript>
     </div>
   </form>;

@@ -2,6 +2,11 @@ import "server-only";
 
 export type Confidence = "high" | "medium" | "low";
 export type UnitPosition = "intermediate" | "corner_end" | "custom";
+export type ValuationStatus =
+  | "ok"
+  | "insufficient_data"
+  | "not_found"
+  | "unsupported_property_type";
 export type AiFallbackReason =
   | "no_api_key"
   | "api_error"
@@ -41,7 +46,7 @@ export type Comparable = {
 };
 
 export type ValuationResponse = {
-  status: "ok" | "insufficient_data" | "not_found" | "unsupported_property_type";
+  status: ValuationStatus;
   estimate: number | null;
   low: number | null;
   high: number | null;

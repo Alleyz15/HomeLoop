@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Handshake, ClipboardList, LockKeyhole, Check } from "lucide-react";
 import { marketRm } from "@/lib/development-model";
-import { planHref, selectionDevelopmentHref, recommendation, type DepositAnswer } from "@/lib/plans-model";
+import { manualPlanPresentation, planHref, selectionDevelopmentHref, recommendation, type DepositAnswer } from "@/lib/plans-model";
 import type { PlanJourney } from "@/lib/plans";
 import { Backdrop, ContextBar, EstimateNote } from "./shared";
 import { PlanAdviser } from "./adviser";
@@ -11,7 +11,32 @@ import styles from "./plans.module.css";
 
 export function PlansScreen({ journey, answer }: { journey: PlanJourney; answer: DepositAnswer }) {
   const [deposit, setDeposit] = useState<DepositAnswer>(answer);
-  const { selection, quote } = journey;
+  const { selection } = journey;
+  if (journey.mode === "manual") {
+    return <div className={styles.page} data-plans-page data-manual-valuation>
+      <Backdrop /><Link className={styles.back} href={selectionDevelopmentHref(selection)}><ArrowLeft size={14} aria-hidden="true" />Back to development</Link>
+      <header className={styles.hero}><div className={styles.heroCopy}><p className={styles.eyebrow}>STEP 4 · COMPARE YOUR OPTIONS</p><h1>Compare your<br />trade-in options</h1><p>See how each plan works while a registered valuation is still pending.</p></div><div className={styles.adviserStage}><PlanAdviser plan={null} /></div></header>
+      <ContextBar journey={journey} />
+      <section className={styles.question} role="status"><div><h2>No indicative RM amounts yet</h2><p>The owner must agree to proceed before inspection. A registered valuer then confirms the value used for eligibility and the formal offer.</p></div></section>
+      <p className={styles.guidance}>Choose a plan structure now. The application will not receive an indicative RM range before inspection.</p>
+      <div className={styles.grid}>
+        {(["A", "B"] as const).map(plan => {
+          const isA = plan === "A";
+          const presentation = manualPlanPresentation(plan, journey.isSdp);
+          return <div className={styles.cardShell} key={plan}><article className={styles.card} data-plan={plan} data-eligible={presentation.available}>
+            <div className={styles.planHeading}><span className={styles.icon}>{isA ? <Handshake size={30} strokeWidth={1.2} aria-hidden="true" /> : <ClipboardList size={30} strokeWidth={1.2} aria-hidden="true" />}</span><div><p className={styles.eyebrow}>PLAN {plan}</p><h2>{isA ? "Direct Purchase" : "Open Market Selling"}</h2><p>{isA ? "Sell directly to SDP. No buyer search." : "Seek a market sale, with a formal floor after valuation."}</p></div></div>
+            <div className={styles.amount}><span>Formula after registered valuation</span><strong>{presentation.formula}</strong><p>{presentation.eligibilityCopy}</p></div>
+            {!presentation.available && <div className={styles.ineligible} role="note"><LockKeyhole size={15} aria-hidden="true" /><div><strong>Not available for this selection</strong><p>{presentation.eligibilityCopy}</p></div></div>}
+            <dl className={styles.comparison}><div><dt>Old-home amount</dt><dd>{isA ? "Formal direct-purchase offer after inspection" : "Market-sale expectation and guarantee floor after inspection"}</dd></div><div><dt>New-home deposit</dt><dd>{isA ? "10% deposit; offset assumption assessed after valuation" : "10% deposit paid upfront; no booking fee"}</dd></div><div><dt>Eligibility</dt><dd>{presentation.eligibilityCopy}</dd></div><div><dt>Before inspection</dt><dd>No indicative RM range or formal offer</dd></div></dl>
+            {presentation.available ? <Link className={styles.action} href={planHref(selection, isA ? "a" : "b", deposit)}>View Plan {plan} structure<ArrowRight size={17} aria-hidden="true" /></Link> : <button type="button" disabled className={styles.action}><LockKeyhole size={15} aria-hidden="true" />Plan {plan} unavailable</button>}
+            <p className={styles.cardFoot}>All monetary amounts wait for a registered valuer’s confirmed value.</p>
+          </article></div>;
+        })}
+      </div>
+      <EstimateNote />
+    </div>;
+  }
+  const { quote } = journey;
   const guidance = recommendation(deposit, quote.plan_a.eligible, quote.plan_b.eligible);
   return <div className={styles.page} data-plans-page data-recommended={guidance.plan ?? "none"}>
     <Backdrop /><Link className={styles.back} href={selectionDevelopmentHref(selection)}><ArrowLeft size={14} aria-hidden="true" />Back to development</Link>
