@@ -7,10 +7,17 @@ import { hasValuationRange, publishedLayouts, pricePreview, type JourneyValuatio
 import { parsePlanSelection, validPlanQuote, type PlanParams, type PlanSelection } from "./plans-model";
 import { quotePlans, type Confidence, type PlanQuoteResponse } from "./valuation";
 
-export type PlanJourney = {
-  selection: PlanSelection; launch: CatalogueLaunch; valuation: JourneyValuation & { tenure: string | null };
-  isSdp: boolean; quote: PlanQuoteResponse; homeTypeNote: string | null;
+type PlanJourneyBase = {
+  selection: PlanSelection;
+  launch: CatalogueLaunch;
+  valuation: JourneyValuation & { tenure: string | null; ptype: string | null; confidence: Confidence | null };
+  isSdp: boolean;
+  newHome: { price: number; priceSource: "from_price" | "sales_quote" };
+  homeTypeNote: string | null;
 };
+export type PlanJourney =
+  | (PlanJourneyBase & { mode: "priced"; quote: PlanQuoteResponse })
+  | (PlanJourneyBase & { mode: "manual"; quote: null });
 export type PlanLoad = { journey: PlanJourney; error?: never } | { journey?: never; error: string };
 
 export async function getPlanJourney(params: PlanParams, ownerId: string): Promise<PlanLoad> {
@@ -19,13 +26,15 @@ export async function getPlanJourney(params: PlanParams, ownerId: string): Promi
   try {
     const client = await createClient();
     const saved = await client.from("valuation_requests")
-      .select("id,scheme,road_norm,ptype,tenure,estimate,low,high,confidence")
+      .select("id,scheme,road_norm,ptype,tenure,estimate,low,high,confidence,valuation_status")
       .eq("id", selection.valuation).eq("user_id", ownerId).maybeSingle();
     if (saved.error) return { error: "We couldn’t load your saved valuation. Please try again." };
     const valuation = saved.data;
     if (!valuation) return { error: "This valuation is unavailable for this account. No property details or plan amounts have been loaded." };
-    if (!hasValuationRange(valuation)) return { error: "This saved valuation has no usable estimate. You can browse developments, but plan comparison cannot be calculated." };
-    if (!valuation.scheme || !valuation.ptype || !valuation.road_norm || !["high", "medium", "low"].includes(valuation.confidence)) return { error: "This valuation is missing the property metadata needed for a plan quote. No eligibility or confidence has been assumed." };
+    const manual = valuation.valuation_status === "insufficient_data";
+    if (valuation.valuation_status !== "ok" && !manual) return { error: "This saved valuation cannot be used for an application. Start a new valuation before choosing a home." };
+    if (!manual && !hasValuationRange(valuation)) return { error: "This saved valuation has no usable estimate. You can browse developments, but plan comparison cannot be calculated." };
+    if (!valuation.scheme || !valuation.ptype || !valuation.road_norm || (!manual && !["high", "medium", "low"].includes(valuation.confidence))) return { error: "This valuation is missing the property metadata needed for a plan quote. No eligibility or confidence has been assumed." };
     const catalogue = await getCatalogue();
     if (catalogue.error) return { error: "We couldn’t load the current development details. Please try again." };
     const launch = catalogue.launches.find(row => row.id === selection.launch && row.tier === "selling");
@@ -40,11 +49,23 @@ export async function getPlanJourney(params: PlanParams, ownerId: string): Promi
       .order("n_total", { ascending: false }).limit(1);
     if (meta.error || typeof meta.data?.[0]?.is_sdp !== "boolean") return { error: "We couldn’t confirm the old home’s township eligibility. Please try again; it has not been assumed to be outside an SDP township." };
     const isSdp = meta.data[0].is_sdp;
+    const base = {
+      selection,
+      launch,
+      valuation: valuation as PlanJourneyBase["valuation"],
+      isSdp,
+      newHome: {
+        price: price.price,
+        priceSource: selection.salesQuote ? "sales_quote" as const : "from_price" as const,
+      },
+      homeTypeNote: homeType.note ?? null,
+    };
+    if (manual) return { journey: { ...base, mode: "manual", quote: null } };
     const quote = await quotePlans({ valuation: {
       estimate: Number(valuation.estimate), low: Number(valuation.low), high: Number(valuation.high),
       confidence: valuation.confidence as Confidence, scheme: valuation.scheme, is_sdp: isSdp, tenure: valuation.tenure,
     }, new_home: { launch_id: launch.id, ...(selection.salesQuote ? { sales_quote_rm: price.price } : {}) } });
     if (!validPlanQuote(quote)) throw new Error("Invalid quote");
-    return { journey: { selection, launch, valuation, isSdp, quote, homeTypeNote: homeType.note ?? null } };
+    return { journey: { ...base, mode: "priced", quote } };
   } catch { return { error: "We couldn’t calculate the plans right now. Please try again. No estimated amounts have been invented." }; }
 }

@@ -5,9 +5,9 @@ import test from "node:test";
 const file=(name)=>readFile(new URL("../apps/web/src/"+name,import.meta.url),"utf8");
 const moduleFor=(source)=>import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`);
 const model=await file("lib/development-model.ts");
-const {validValuationId,hasValuationRange,pricePreview,publishedLayouts,developmentHref,marketRm}=await moduleFor(model);
+const {validValuationId,hasValuationRange,valuationJourneyState,canContinueWithValuation,INSUFFICIENT_DATA_MESSAGE,pricePreview,publishedLayouts,developmentHref,marketRm}=await moduleFor(model);
 const id="20000000-0000-4000-8000-000000000001";
-const valuation={id,scheme:"Saved property",road_norm:"JLN TEST",estimate:785635.36,low:720000,high:840000};
+const valuation={id,scheme:"Saved property",road_norm:"JLN TEST",valuation_status:"ok",estimate:785635.36,low:720000,high:840000};
 test("valuation routes accept IDs only, and range validation rejects incomplete/unordered data",()=>{
   assert.ok(validValuationId(id));
   for(const invalid of [undefined,"","../../secret",id+"&x=1"])assert.equal(validValuationId(invalid),false);
@@ -15,6 +15,17 @@ test("valuation routes accept IDs only, and range validation rejects incomplete/
   assert.equal(developmentHref(2,"invalid"),"/new-home/2");
   assert.ok(hasValuationRange(valuation));
   for(const value of [null,{...valuation,low:null},{...valuation,estimate:0},{...valuation,estimate:Infinity},{...valuation,high:700000},{...valuation,low:800000}])assert.equal(hasValuationRange(value),false);
+});
+test("only priced and insufficient-data valuations may continue to home selection",()=>{
+  assert.equal(valuationJourneyState(valuation),"ready");
+  assert.equal(valuationJourneyState({...valuation,valuation_status:"insufficient_data",estimate:null,low:null,high:null}),"manual");
+  for(const valuation_status of ["not_found","unsupported_property_type"]){
+    const state=valuationJourneyState({...valuation,valuation_status,estimate:null,low:null,high:null});
+    assert.equal(state,"unavailable");assert.equal(canContinueWithValuation(state),false);
+  }
+  assert.equal(canContinueWithValuation("ready"),true);
+  assert.equal(canContinueWithValuation("manual"),true);
+  assert.equal(INSUFFICIENT_DATA_MESSAGE,"Not enough recent sales to estimate automatically. You can still apply — a registered valuer will value your home after you agree to proceed.");
 });
 test("preview uses published or overriding sales price, preserves cents and whole-RM old-home rounding",()=>{
   assert.equal(marketRm(720000),"RM720,000");assert.equal(marketRm(-40000.25),"-RM40,000.25");
@@ -37,15 +48,15 @@ test("verified published layouts are source-matched; all other projects use Stan
   for(const row of [...baleria.layouts,...serasi.layouts])assert.equal("price" in row,false);
   for(const result of [publishedLayouts("East 61",null),publishedLayouts("Serasi Residences","https://evil.test/")])assert.deepEqual(result,{source:null,layouts:[{value:"Standard home type",label:"Standard home type"}]});
 });
-const reader=(await file("lib/development.ts")).replace('import "server-only";',"").replace('import { createClient } from "@/lib/supabase/server";',"const createClient=()=>globalThis.__developmentClient;").replace(/import \{[^;]+from "\.\/development-model";/s,"const {hasValuationRange,validValuationId}=globalThis.__developmentModel;");
-globalThis.__developmentModel={hasValuationRange,validValuationId};
+const reader=(await file("lib/development.ts")).replace('import "server-only";',"").replace('import { createClient } from "@/lib/supabase/server";',"const createClient=()=>globalThis.__developmentClient;").replace(/import \{[^;]+from "\.\/development-model";/s,"const {validValuationId,valuationJourneyState}=globalThis.__developmentModel;");
+globalThis.__developmentModel={hasValuationRange,validValuationId,valuationJourneyState};
 const {getJourneyValuation}=await moduleFor(reader);
 function clientFor(result){const calls=[];return {calls,from(table){calls.push(["from",table]);const chain={};for(const method of ["select","eq"])chain[method]=(...args)=>{calls.push([method,...args]);return chain;};chain.maybeSingle=()=>{calls.push(["maybeSingle"]);return result;};return chain;}};}
-test("valuation reader uses explicit ID + owner filters, and distinguishes ready, unpriced, missing and failure",async()=>{
-  for(const [result,state] of [[{data:valuation,error:null},"ready"],[{data:{...valuation,estimate:null},error:null},"unpriced"],[{data:null,error:null},"missing"],[{data:null,error:{}},"error"]]){
+test("valuation reader uses explicit ID + owner filters, and distinguishes ready, manual, unavailable, missing and failure",async()=>{
+  for(const [result,state] of [[{data:valuation,error:null},"ready"],[{data:{...valuation,valuation_status:"insufficient_data",estimate:null,low:null,high:null},error:null},"manual"],[{data:{...valuation,valuation_status:"not_found",estimate:null,low:null,high:null},error:null},"unavailable"],[{data:null,error:null},"missing"],[{data:null,error:{}},"error"]]){
     const client=clientFor(result);globalThis.__developmentClient=client;const context=await getJourneyValuation(id,"owner-1");assert.equal(context.state,state);
     assert.ok(client.calls.some(call=>JSON.stringify(call)===JSON.stringify(["eq","id",id])));assert.ok(client.calls.some(call=>JSON.stringify(call)===JSON.stringify(["eq","user_id","owner-1"])));
-    assert.equal(client.calls[1][1],"id,scheme,road_norm,estimate,low,high");
+    assert.equal(client.calls[1][1],"id,scheme,road_norm,valuation_status,estimate,low,high");
   }
   const client=clientFor({});globalThis.__developmentClient=client;
   assert.equal((await getJourneyValuation(undefined,"owner-1")).state,"none");assert.equal((await getJourneyValuation("invalid","owner-1")).state,"missing");assert.equal(client.calls.length,0);
@@ -54,7 +65,7 @@ test("valuation reader uses explicit ID + owner filters, and distinguishes ready
 test("development phase handoff: validated GET selection, no writes and no saved-valuation link",async()=>{
   const panel=await file("app/new-home/[project]/price-panel.tsx");
   assert.match(panel,/<button type="submit" disabled=\{!canCompare\}/);assert.match(panel,/<form action="\/plans" method="get"/);
-  assert.match(panel,/context.state === "ready" && launch.tier === "selling"/);
+  assert.match(panel,/canContinueWithValuation\(context.state\)/);
   assert.doesNotMatch(panel,/quotePlans|localStorage|sessionStorage|fetch\(/);
   assert.doesNotMatch(await file("app/new-home/valuation-context.tsx"),/href=|View saved valuation/);
   assert.match(await file("app/valuation/result/[id]/page.tsx"),/new-home\?valuation=\$\{encodeURIComponent\(valuation.id\)\}/);

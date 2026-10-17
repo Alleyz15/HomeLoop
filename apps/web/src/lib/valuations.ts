@@ -1,7 +1,12 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Comparable, Confidence, UnitPosition } from "@/lib/valuation";
+import type {
+  Comparable,
+  Confidence,
+  UnitPosition,
+  ValuationStatus,
+} from "@/lib/valuation";
 
 /** A saved valuation request. `comps` holds the comparables that produced it. */
 export type StoredValuation = {
@@ -18,11 +23,13 @@ export type StoredValuation = {
   low: number | null;
   high: number | null;
   confidence: Confidence | null;
+  valuation_status: ValuationStatus;
   comps: Comparable[] | null;
   created_at: string;
 };
 
 export type SaveValuationInput = {
+  valuationStatus: ValuationStatus;
   roadNorm: string | null;
   scheme: string;
   propertyType: string;
@@ -68,6 +75,7 @@ export async function saveValuation(input: SaveValuationInput): Promise<string> 
       low: input.low,
       high: input.high,
       confidence: input.confidence,
+      valuation_status: input.valuationStatus,
       comps: input.comparables,
     })
     .select("id")
@@ -86,7 +94,7 @@ export async function getValuation(id: string): Promise<StoredValuation | null> 
   const { data } = await supabase
     .from("valuation_requests")
     .select(
-      "id,user_id,road_norm,scheme,ptype,unit_position,land_sqm,floor_sqm,tenure,estimate,low,high,confidence,comps,created_at",
+      "id,user_id,road_norm,scheme,ptype,unit_position,land_sqm,floor_sqm,tenure,estimate,low,high,confidence,valuation_status,comps,created_at",
     )
     .eq("id", id)
     .maybeSingle();
