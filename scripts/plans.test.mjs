@@ -39,6 +39,22 @@ test("manual plan presentation exposes formulas without RM amounts and defers on
   const planB=model.manualPlanPresentation("B",false);
   assert.equal(planB.available,true);assert.equal(planB.eligibility,"available");assert.match(planB.formula,/75%/);
 });
+test("plan cards use homeowner-friendly summaries while preserving the exact formulas",()=>{
+  assert.deepEqual(model.planCardCopy("A"),{
+    summary:"SDP buys your home directly at about 78.5% of its confirmed value. No buyer search, faster cash.",
+    formula:"Confirmed market value × (1 − 11.5% − 10%) = confirmed market value × 78.5%",
+  });
+  assert.deepEqual(model.planCardCopy("B"),{
+    summary:"You're guaranteed at least 75% of the confirmed value. If it sells on the open market, you keep the price minus about 4.4% in agent and legal fees.",
+    formula:"Floor = confirmed market value × 75%; expected open-market net = confirmed market value × (1 − 3.2% − 1.2%)",
+  });
+});
+test("manual plans share one concise no-price explanation",()=>{
+  assert.deepEqual(model.MANUAL_NO_PRICE_COPY,{
+    title:"No price yet",
+    body:"There weren't enough recent sales to estimate your home automatically. Choose a plan now. A registered valuer will confirm your home's value after you agree to proceed, and your amounts will appear then.",
+  });
+});
 const quote={new_home:{name:"Test",price:850000,price_source:"sales_quote"},plan_a:{eligible:true,reasons:[],offer:616723,offer_low:565200,offer_high:659400,price_gap:233277,rpgt_retention:18502,deposit:{cash_gap:23328,new_home_deposit:85000,old_home_deposit_offset:61672,note:"Assumed offset"}},plan_b:{eligible:true,floor:589226,floor_low:540000,floor_high:630000,expected_net:751067,expected_net_low:688320,expected_net_high:803040,net_at_floor:589226,deposit_gap:85000,price_gap:98933,rpgt_retention:23569}};
 test("reply guard supports legacy totals but rejects malformed breakdowns and undefined/nonfinite money",()=>{
   assert.ok(model.validPlanQuote(quote));assert.equal(model.validPlanQuote({}),false);

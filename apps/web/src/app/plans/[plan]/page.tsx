@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Calculator, LockKeyhole, ArrowRight } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getPlanJourney } from "@/lib/plans";
-import { manualPlanPresentation, planHref, depositAnswer, type PlanParams } from "@/lib/plans-model";
+import { manualPlanPresentation, planCardCopy, planHref, depositAnswer, type PlanParams } from "@/lib/plans-model";
 import { marketRm } from "@/lib/development-model";
 import { Backdrop, PlanError, ContextBar, EstimateNote } from "../shared";
 import styles from "../plans.module.css";
@@ -23,14 +23,15 @@ export default async function PlanCalculation({ params, searchParams }: { params
   const answer = depositAnswer(query.deposit), back = planHref(selection, undefined, answer);
   if (journey.mode === "manual") {
     const presentation = manualPlanPresentation(isA ? "A" : "B", journey.isSdp);
+    const copy = planCardCopy(isA ? "A" : "B");
     if (!presentation.available) return <section className={styles.page} data-plans-page><Backdrop /><Link className={styles.back} href={back}><ArrowLeft size={14} aria-hidden="true" />Back to comparison</Link><div className={styles.error} role="alert"><LockKeyhole size={26} aria-hidden="true" /><h1>Plan {plan.toUpperCase()} is unavailable.</h1><p>{presentation.eligibilityCopy}</p><Link className={styles.action} href={back}>Review the available option<ArrowRight size={15} /></Link></div></section>;
     return <div className={styles.page} data-plans-page data-plan-calculation={plan} data-manual-valuation>
       <Backdrop /><Link className={styles.back} href={back}><ArrowLeft size={14} aria-hidden="true" />Back to comparison</Link>
       <header className={styles.detailHeading}><p className={styles.eyebrow}>STEP 4 · UNDERSTAND THE STRUCTURE</p><h1>Plan {plan.toUpperCase()}: {isA ? "Direct Purchase" : "Open Market Selling"}</h1><p>No indicative RM amount is shown until a registered valuer confirms the old-home value.</p></header>
       <ContextBar journey={journey} />
       <div className={styles.detailGrid}>
-        <section className={styles.calculation} aria-labelledby="manual-formula-heading"><div className={styles.sectionHeading}><Calculator size={20} strokeWidth={1.4} aria-hidden="true" /><h2 id="manual-formula-heading">Formula after valuation</h2></div><div className={styles.detailRange}><span>{isA ? "Direct-purchase formula" : "Open-market and floor formulas"}</span><strong>{presentation.formula}</strong><p>{presentation.eligibilityCopy}. The formal amount is calculated only from the confirmed value after inspection.</p></div></section>
-        <section className={styles.calculation} aria-labelledby="manual-next-heading"><div className={styles.sectionHeading}><h2 id="manual-next-heading">What happens next</h2></div><dl className={styles.math}><div><dt>1. Owner decision</dt><dd>Agree to proceed with manual valuation</dd></div><div><dt>2. Inspection</dt><dd>A registered valuer confirms the market value</dd></div><div><dt>3. Formal offer</dt><dd>The plan formula and monthly limit are applied</dd></div></dl><button type="button" className={styles.action} disabled aria-describedby="application-coming"><LockKeyhole size={15} aria-hidden="true" />Confirm this plan</button><p id="application-coming" className={styles.cardFoot}>Application submission wiring is handled separately. No application has been created from this page.</p></section>
+        <section className={styles.calculation} aria-labelledby="manual-formula-heading"><div className={styles.sectionHeading}><Calculator size={20} strokeWidth={1.4} aria-hidden="true" /><h2 id="manual-formula-heading">How the plan works</h2></div><div className={styles.detailRange}><span>{isA ? "Direct purchase" : "Open-market sale with a guarantee floor"}</span><p className={styles.planSummary}>{copy.summary}</p><p className={styles.formula}><span>How is this calculated?</span> {copy.formula}</p><p>{presentation.eligibilityCopy}. The formal amount is calculated only from the confirmed value after inspection.</p></div></section>
+        <section className={styles.calculation} aria-labelledby="manual-next-heading"><div className={styles.sectionHeading}><h2 id="manual-next-heading">What happens next</h2></div><dl className={styles.math}><div><dt>1. Your decision</dt><dd>You&apos;ll need to agree to proceed before a registered valuer visits.</dd></div><div><dt>2. Inspection</dt><dd>A registered valuer confirms the market value</dd></div><div><dt>3. Formal offer</dt><dd>The plan formula and monthly limit are applied</dd></div></dl><button type="button" className={styles.action} disabled aria-describedby="application-coming"><LockKeyhole size={15} aria-hidden="true" />Confirm this plan</button><p id="application-coming" className={styles.cardFoot}>Application submission wiring is handled separately. No application has been created from this page.</p></section>
       </div><EstimateNote />
     </div>;
   }
