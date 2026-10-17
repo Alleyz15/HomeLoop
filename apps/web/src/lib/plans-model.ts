@@ -5,6 +5,31 @@ export type DepositAnswer = "yes" | "no" | null;
 export type PlanSelection = { valuation: string; launch: number; homeType: string; salesQuote: string };
 export type PlanParams = Record<string, string | string[] | undefined>;
 
+const PLAN_CARD_COPY = {
+  A: {
+    summary:
+      "SDP buys your home directly at about 78.5% of its confirmed value. No buyer search, faster cash.",
+    formula:
+      "Confirmed market value × (1 − 11.5% − 10%) = confirmed market value × 78.5%",
+  },
+  B: {
+    summary:
+      "You're guaranteed at least 75% of the confirmed value. If it sells on the open market, you keep the price minus about 4.4% in agent and legal fees.",
+    formula:
+      "Floor = confirmed market value × 75%; expected open-market net = confirmed market value × (1 − 3.2% − 1.2%)",
+  },
+} as const;
+
+export const MANUAL_NO_PRICE_COPY = {
+  title: "No price yet",
+  body:
+    "There weren't enough recent sales to estimate your home automatically. Choose a plan now. A registered valuer will confirm your home's value after you agree to proceed, and your amounts will appear then.",
+} as const;
+
+export function planCardCopy(plan: "A" | "B") {
+  return PLAN_CARD_COPY[plan];
+}
+
 export function parsePlanSelection(params: PlanParams): PlanSelection | null {
   for (const field of ["valuation", "launch", "home_type", "sales_quote"]) if (Array.isArray(params[field])) return null;
   const valuation = typeof params.valuation === "string" ? params.valuation : "";
@@ -46,16 +71,14 @@ export function manualPlanPresentation(plan: "A" | "B", isSdp: boolean) {
       eligibilityCopy: isSdp
         ? "Eligibility confirmed after valuation"
         : "Plan A requires an old home in an SDP township.",
-      formula:
-        "Confirmed market value × (1 − 11.5% − 10%) = confirmed market value × 78.5%",
+      formula: planCardCopy("A").formula,
     };
   }
   return {
     available: true,
     eligibility: "available" as const,
     eligibilityCopy: "Available after the registered valuation",
-    formula:
-      "Floor = confirmed market value × 75%; expected open-market net = confirmed market value × (1 − 3.2% − 1.2%)",
+    formula: planCardCopy("B").formula,
   };
 }
 

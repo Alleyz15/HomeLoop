@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import type { RoadPropertyType, RoadResult, UnitPosition } from "@/lib/valuation";
+import { intermediateAutoFillCopy } from "@/lib/valuation-copy";
 import {
   TERRACE_LOTS,
   formatArea,
@@ -330,12 +331,12 @@ export function ValuationForm() {
 
                 {autoFilled && !needsSizes ? (
                   <p className="rounded-lg bg-muted px-3 py-2 text-sm">
-                    Filled in from this road: {formatArea(type.typical_land_sqm!, unit)}{" "}
-                    land and {formatArea(type.typical_floor_sqm!, unit)} built-up
-                    {type.typical_share
-                      ? `, which ${Math.round(type.typical_share * 100)}% of these homes share`
-                      : null}
-                    .
+                    {intermediateAutoFillCopy({
+                      recentSales: type.n_recent_3y,
+                      land: formatArea(type.typical_land_sqm!, unit),
+                      floor: formatArea(type.typical_floor_sqm!, unit),
+                      typicalShare: type.typical_share,
+                    })}
                   </p>
                 ) : (
                   <>
