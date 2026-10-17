@@ -19,8 +19,8 @@ export async function checkDevelopment(page,{baseUrl,artifacts,valuation,setScen
   await page.getByRole("heading",{name:"Serenia Baleria 1 & 2",exact:true}).waitFor();
   assert.match(await page.locator("[data-valuation-context]").innerText(),/RM720,000 – RM840,000/);assert.match(await page.locator("[data-valuation-context]").innerText(),/Middle estimate RM785,635/);
   assert.equal(await page.getByRole("link",{name:/View saved valuation/i}).count(),0);assert.equal(await page.locator("a[href^='/plans']").count(),0);
-  assert.ok(await page.getByRole("button",{name:"Choose this home",exact:true}).isDisabled());
-  assert.match(await preview().innerText(),/-RM30,112 – RM89,888/);await page.getByText("Plan comparison coming next.",{exact:true}).waitFor();
+  assert.ok(await page.getByRole("button",{name:"Choose this home",exact:true}).isEnabled());
+  assert.match(await preview().innerText(),/-RM30,112 – RM89,888/);await page.getByText("Next: compare plans. This does not submit an application.",{exact:true}).waitFor();
   await page.getByLabel("Home type",{exact:true}).selectOption("Type A2");assert.match(await preview().innerText(),/-RM30,112 – RM89,888/);
   await quote().fill("850,000.25");await preview().getByText("RM10,000.25 – RM130,000.25",{exact:true}).waitFor();assert.match(await preview().innerText(),/your sales quotation/);
   await quote().fill("800000");await preview().getByText("-RM40,000 – RM80,000",{exact:true}).waitFor();assert.match(await preview().innerText(),/negative figure/);
@@ -50,7 +50,7 @@ export async function checkDevelopment(page,{baseUrl,artifacts,valuation,setScen
   await page.emulateMedia({reducedMotion:"reduce"});assert.equal(await page.locator("[data-development-page]").evaluate(el=>el.getAnimations({subtree:true}).filter(a=>a.playState==="running").length),0);await page.emulateMedia({reducedMotion:"no-preference"});
   await page.locator("[data-project-image] img").evaluate(img=>img.dispatchEvent(new Event("error")));await page.getByText("Project imagery unavailable",{exact:true}).waitFor();
   const plainContext=await page.context().browser().newContext({javaScriptEnabled:false,viewport:{width:1440,height:1100},storageState:await page.context().storageState()});
-  try{const plain=await plainContext.newPage();await plain.goto(baseUrl+"/new-home/2"+query);await plain.getByRole("heading",{name:"Serenia Baleria 1 & 2",exact:true}).waitFor();assert.ok(await plain.getByRole("button",{name:"Choose this home",exact:true}).isDisabled());await plain.getByText(/Live quotation and layout previews require JavaScript/).waitFor();await plain.getByRole("link",{name:"Back to developments",exact:true}).click();await plain.waitForURL(baseUrl+"/new-home"+query);}finally{await plainContext.close();}
+  try{const plain=await plainContext.newPage();await plain.goto(baseUrl+"/new-home/2"+query);await plain.getByRole("heading",{name:"Serenia Baleria 1 & 2",exact:true}).waitFor();assert.ok(await plain.getByRole("button",{name:"Choose this home",exact:true}).isEnabled());await plain.getByText(/Live quotation and layout previews require JavaScript/).waitFor();await plain.getByRole("link",{name:"Back to developments",exact:true}).click();await plain.waitForURL(baseUrl+"/new-home"+query);}finally{await plainContext.close();}
   setScenario("new");await page.setViewportSize({width:1440,height:1100});
-  console.log("PASS Development details: owner-scoped valuation context across catalogue filters/tabs, internal navigation, verified/Standard home types, quotation override/cents/validation, range/negative differences, missing prices, unpriced/missing/failed valuations, browse-only entry, upcoming/hidden/404 projects, permanently disabled plan CTA, no saved-valuation link, responsive 1440/768/390/320 layouts, focus reveal/lens motion, image fallback, sticky header, reduced motion and no-JavaScript fallback");
+  console.log("PASS Development details: preserved context, quotation/range/validation, guarded plan handoff, upcoming/unpriced restrictions, responsive layouts, existing motion and no-JavaScript fallback");
 }

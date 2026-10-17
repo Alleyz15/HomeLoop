@@ -67,6 +67,22 @@ All reusable plan constants and formulas live in the side-effect-free
 assumed agent and legal costs. `plan_b.net_at_floor` equals the guarantee floor
 because a triggered guarantee is a direct SDP purchase with no estate agent.
 
+### Itemised plan response (17 October 2026)
+
+`plan_a.breakdown` and `plan_b.breakdown` add display-only explanation fields:
+`basis`, `deductions` (`label`, decimal `rate`, whole-RM `amount`), `result`, and
+`rounding_adjustment`. Plan A lists the existing cost allowance/risk buffer;
+Plan B lists the existing assumed agent/legal fees. `plan_b.floor_rate` exposes
+the existing fixed floor ratio. No offer, floor, fee rate, deposit rule or total
+formula has changed. Independently rounded deduction rows can differ from the
+rounded formula total; the explicit adjustment reconciles them without changing
+the actual quote.
+
+Redeploy this service to expose the new fields on a hosted backend. No database
+migration, new environment variable or Supabase/Render setting is required. The
+frontend remains compatible with the earlier totals-only response and shows an
+honest unavailable-breakdown message until the updated service is running.
+
 Install the test dependencies and run the offline suite with:
 
 ```bash

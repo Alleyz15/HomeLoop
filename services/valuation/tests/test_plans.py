@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.plans.calc import calculate_plan_quote, round_rm
-from app.schemas import PlanQuoteRequest
+from app.schemas import PlanQuoteRequest, PlanQuoteResponse
 from app.service import perform_plan_quote
 
 
@@ -70,6 +70,32 @@ def test_golden_plan_formulas_and_ranges() -> None:
 
 def test_money_rounding_uses_conventional_half_up() -> None:
     assert round_rm(100.5) == 101
+
+
+@pytest.mark.parametrize("estimate", [5, 12, 785635, 786000, 785635.36])
+def test_additive_breakdown_reconciles_to_unchanged_totals(estimate: float) -> None:
+    result = calculate_plan_quote(
+        valuation={**GOLDEN_VALUATION, "estimate": estimate, "low": min(1, estimate), "high": max(900000, estimate)},
+        new_home_name="Test", new_home_price=850000, price_source="sales_quote",
+    )
+    parsed = PlanQuoteResponse.model_validate(result)
+    assert parsed.plan_a.breakdown.result == result["plan_a"]["offer"]
+    assert parsed.plan_b.breakdown.result == result["plan_b"]["expected_net"]
+    for plan in (parsed.plan_a, parsed.plan_b):
+        row = plan.breakdown
+        assert row.basis - sum(item.amount for item in row.deductions) + row.rounding_adjustment == row.result
+    assert [row.rate for row in parsed.plan_a.breakdown.deductions] == [0.115, 0.1]
+    assert [row.rate for row in parsed.plan_b.breakdown.deductions] == [0.032, 0.012]
+    assert parsed.plan_b.floor_rate == 0.75
+
+
+def test_breakdown_display_rounding_does_not_change_formula() -> None:
+    result = calculate_plan_quote(
+        valuation={**GOLDEN_VALUATION, "estimate": 5},
+        new_home_name="Test", new_home_price=850000, price_source="sales_quote",
+    )
+    assert result["plan_a"]["offer"] == 4
+    assert result["plan_a"]["breakdown"]["rounding_adjustment"] == 1
 
 
 def test_guarantee_floor_has_no_open_market_fee_deduction() -> None:
