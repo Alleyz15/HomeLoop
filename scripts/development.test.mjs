@@ -51,10 +51,11 @@ test("valuation reader uses explicit ID + owner filters, and distinguishes ready
   assert.equal((await getJourneyValuation(undefined,"owner-1")).state,"none");assert.equal((await getJourneyValuation("invalid","owner-1")).state,"missing");assert.equal(client.calls.length,0);
   globalThis.__developmentClient={from(){throw Error("Offline");}};assert.equal((await getJourneyValuation(id,"owner-1")).state,"error");
 });
-test("phase boundary: no selection writes, no saved-valuation link and disabled compare-plan entry",async()=>{
+test("development phase handoff: validated GET selection, no writes and no saved-valuation link",async()=>{
   const panel=await file("app/new-home/[project]/price-panel.tsx");
-  assert.match(panel,/<button type="button" disabled/);assert.match(panel,/Plan comparison coming next/);
-  assert.doesNotMatch(panel,/quotePlans|localStorage|sessionStorage|fetch\(|action=/);
+  assert.match(panel,/<button type="submit" disabled=\{!canCompare\}/);assert.match(panel,/<form action="\/plans" method="get"/);
+  assert.match(panel,/context.state === "ready" && launch.tier === "selling"/);
+  assert.doesNotMatch(panel,/quotePlans|localStorage|sessionStorage|fetch\(/);
   assert.doesNotMatch(await file("app/new-home/valuation-context.tsx"),/href=|View saved valuation/);
   assert.match(await file("app/valuation/result/[id]/page.tsx"),/new-home\?valuation=\$\{encodeURIComponent\(valuation.id\)\}/);
   const {catalogueHref}=await moduleFor(await file("lib/catalogue-model.ts"));

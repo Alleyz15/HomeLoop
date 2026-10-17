@@ -54,7 +54,7 @@ export default async function DevelopmentPage({ params, searchParams }: {
         {context.state === "none" && <aside className={styles.notice}><h2>A closer look, at your pace.</h2><p>You’re browsing without a saved valuation. Start from a valuation result to see how this home’s price compares with your current home.</p></aside>}
         <p className={styles.source}>{catalogueCheckedDate(launch.checked_on)}{url && <> · <a href={url} target="_blank" rel="noopener noreferrer">Official SDP development page<ArrowUpRight size={12} aria-hidden="true" /></a></>}</p>
       </section>
-      <PricePanel key={`${launch.id}-${context.valuation?.id ?? context.state}`} launch={launch} layouts={layouts.layouts} layoutSource={layouts.source} context={context} />
+      <PricePanel key={`${launch.id}-${context.valuation?.id ?? context.state}-${String(query.home_type)}-${String(query.sales_quote)}`} launch={launch} layouts={layouts.layouts} layoutSource={layouts.source} context={context} initialType={typeof query.home_type === "string" ? query.home_type : undefined} initialQuotation={typeof query.sales_quote === "string" ? query.sales_quote : ""} />
     </div>
     <p className={styles.disclaimer}>A place to explore, not a reservation. Project imagery is sourced from SDP and may show an artist’s impression. Availability, eligibility, layout details and prices must be confirmed with SDP sales. Nothing on this page submits an application or reserves a unit.</p>
   </div>;

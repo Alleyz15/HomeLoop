@@ -250,6 +250,8 @@
   - [x] 2026-10-16 开始、2026-10-17 验收：用户批准先做 Home → Explore SDP Homes 的浏览目录：selling/upcoming 分页、搜索、township/屋型筛选、官方项目图片、资料日期、缺价提示及新照片切片动画。项目按钮暂开官方 SDP 网页；不实现内部登记兴趣、选户型、报价或估价记录带入。25 项 Node 测试及 Home/目录/Dashboard 浏览器回归通过；线上目录只读查询确认 16 在售 + 7 upcoming。详见前端记录 F2-08a；未部署。
   - [x] 2026-10-17 F2-08b：先完成内部项目详情 `/new-home/[project]`；估价结果带 valuation ID，经本人限定读取后在目录筛选/分类/返回中保留。显示旧屋区间及较小中间值、官方项目资料、已核实户型（否则 Standard home type）、起价/可选 SDP 销售报价覆盖及基本差额，注明并非现金应付。无 View saved valuation；Choose this home 按批准停用并注明 Plan comparison coming next。Home 入口仍为官方网页浏览；无草稿保存、预订或申请。31 项 Node 测试、TypeScript、完整 lint 及本地 production 浏览器验收通过（1440/768/390/320 px、动效/低动态偏好、无 JS、本人资料隔离与既有 Home/目录/记录/角色回归）；无 runtime exception 或申请写入。详见前端记录；未部署。
 - [ ] ④ 选方案（`/plans`）：方案 A / B 两张卡片 + 引导问题（能否先付 10% 订金）→ 详细计算 → 确认；不符合资格时方案 A 变灰并说明原因（第 5.3 节）
+  - [x] 2026-10-17 F2-09a–d：完成 `/plans`、`/plans/a`、`/plans/b`；采用获批旧版 ivory/sage 双卡设计、新标题 Compare your trade-in options、分层阴影及独立眨眼/头部/手臂/呼吸的 2.5D adviser。Development 的 Choose this home 经校验后启用；GET 带入并返回恢复户型与报价，不存草稿。服务端重读本人估价与路段资格，不信任客户端金额/SDP flag；调用原 `quotePlans()` 保留整数 RM 顺序。显示区间、保底、订金现金缺口、资格原因及明细；后端只增明细字段与 rounding adjustment，不改公式/数据库。38 项 Node 与 145 项非线上 Python 测试、最终 production build/TypeScript/lint、完整浏览器回归（含 1440/768/390/320 px、低动态偏好、无 JS、图层顺序、角色/本人资料隔离）通过；无 runtime exception 或申请写入，正常环境 build 已恢复。详见前端记录；未部署。
+  - [ ] 下一阶段：实现 `/apply` 后才启用 Confirm this plan；目前不创建申请或预订。远端后端需重新部署才返回新增扣除明细；前端兼容旧版 totals-only API 并明确提示，未部署或修改 hosted 设置。
 - [ ] ⑤ 换屋计划书 + 提交申请（`/apply`，同一页）：时间线、资金进出、订金缺口提醒、要准备的东西、RPGT 提醒；下半部填门牌、地契号码（可选）、PDPA 同意（第 5.3、5.4 节）
 - [ ] 报价相关操作：初步报价「继续 / 不用了」；正式报价「接受 / 换方案 / 拒绝 / 要求复核」与 14 天倒数；接受后「我已签约」（第 5.5 节）
 

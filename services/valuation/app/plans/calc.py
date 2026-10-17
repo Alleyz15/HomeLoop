@@ -10,10 +10,14 @@ from app.plans.constants import (
     NEW_HOME_DEPOSIT_RATE,
     OLD_HOME_DEPOSIT_RATE,
     PLAN_A_OFFER_RATE,
+    PLAN_A_COST_RATE,
+    PLAN_A_RISK_BUFFER_RATE,
     PLAN_B_EXPECTED_NET_RATE,
     PLAN_B_FLOOR_RATE,
     RPGT_REMINDER,
     RPGT_RETENTION_RATE,
+    SELLER_AGENT_FEE_RATE,
+    SELLER_LEGAL_FEE_RATE,
 )
 
 
@@ -42,6 +46,19 @@ def plan_b_floor(value: float) -> int:
 
 def plan_b_net(value: float) -> int:
     return _apply_rate(value, PLAN_B_EXPECTED_NET_RATE)
+
+
+def _breakdown(value: float, result: int, deductions: list[tuple[str, Decimal]]) -> dict[str, Any]:
+    """Explain the existing formula without recomputing/changing its total.
+
+    Individual display rows are rounded independently. An explicit reconciliation
+    row preserves the total when their rounded sum differs by a ringgit.
+    """
+    rows = [{"label": label, "rate": float(rate), "amount": _apply_rate(value, rate)}
+            for label, rate in deductions]
+    basis = round_rm(value)
+    return {"basis": basis, "deductions": rows, "result": result,
+            "rounding_adjustment": result - (basis - sum(row["amount"] for row in rows))}
 
 
 def _timeline_step(
@@ -233,6 +250,10 @@ def calculate_plan_quote(
             "offer": offer,
             "offer_low": offer_low,
             "offer_high": offer_high,
+            "breakdown": _breakdown(estimate, offer, [
+                ("Assumed cost allowance", PLAN_A_COST_RATE),
+                ("Assumed risk buffer", PLAN_A_RISK_BUFFER_RATE),
+            ]),
             "deposit": {
                 "new_home_deposit": new_home_deposit,
                 "old_home_deposit_offset": old_home_deposit_offset,
@@ -258,6 +279,11 @@ def calculate_plan_quote(
             "expected_net": expected_net,
             "expected_net_low": expected_net_low,
             "expected_net_high": expected_net_high,
+            "breakdown": _breakdown(estimate, expected_net, [
+                ("Assumed seller agent fee", SELLER_AGENT_FEE_RATE),
+                ("Assumed seller legal fee", SELLER_LEGAL_FEE_RATE),
+            ]),
+            "floor_rate": float(PLAN_B_FLOOR_RATE),
             "net_at_floor": net_at_floor,
             "deposit_gap": new_home_deposit,
             "price_gap": round_rm(new_home_price - expected_net),

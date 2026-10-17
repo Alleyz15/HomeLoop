@@ -209,12 +209,26 @@ class NewHomeQuote(BaseModel):
     price_source: PlanPriceSource
 
 
+class PlanDeduction(BaseModel):
+    label: str
+    rate: float
+    amount: int
+
+
+class PlanBreakdown(BaseModel):
+    basis: int
+    deductions: list[PlanDeduction]
+    result: int
+    rounding_adjustment: int
+
+
 class PlanAQuote(BaseModel):
     eligible: bool
     reasons: list[str]
     offer: int
     offer_low: int
     offer_high: int
+    breakdown: PlanBreakdown
     deposit: PlanADeposit
     price_gap: int
     rpgt_retention: int
@@ -230,6 +244,8 @@ class PlanBQuote(BaseModel):
     expected_net: int
     expected_net_low: int
     expected_net_high: int
+    breakdown: PlanBreakdown
+    floor_rate: float
     net_at_floor: int
     deposit_gap: int
     price_gap: int
