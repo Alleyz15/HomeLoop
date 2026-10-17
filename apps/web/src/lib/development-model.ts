@@ -43,7 +43,7 @@ const PUBLISHED: Record<string, { source: string; layouts: PublishedLayout[] }> 
     { value: "Type C (SAMM)", label: "Type C (SAMM) · 550 sq ft", note: "Affordable-home eligibility requirements apply. Confirm eligibility and price with SDP sales." },
   ] },
 };
-export function publishedLayouts(project: string, sourceUrl: string | null) {
+export function publishedLayouts(project: string, sourceUrl: string | null): { source: string | null; layouts: PublishedLayout[] } {
   const entry = PUBLISHED[project];
   return entry && entry.source === sourceUrl ? entry : {
     source: null, layouts: [{ value: "Standard home type", label: "Standard home type" }],

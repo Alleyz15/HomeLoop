@@ -147,6 +147,8 @@ body:has([data-catalogue-page]) { background: #f7f7ef; }
 .site-main:has([data-catalogue-page]) { padding-top: 28px; }
 body:has([data-development-page]) { background: #f7f7ef; }
 .site-main:has([data-development-page]) { padding-top: 28px; }
+body:has([data-plans-page]) { background: #f7f7ef; }
+.site-main:has([data-plans-page]) { padding-top: 28px; }
 body:has([data-dashboard-page]) .site-header [data-slot="separator"], body:has([data-dashboard-page]) .site-footer [data-slot="separator"] { background: #dfe3d5; }
 body:has([data-dashboard-page]) .site-footer { color: #5e6e56; }
 @media (max-width: 760px) {

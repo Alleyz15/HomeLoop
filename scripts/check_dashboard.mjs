@@ -14,6 +14,7 @@ import { checkOwnerRecords } from "./owner_records_checks.mjs";
 import { checkCatalogue } from "./catalogue_checks.mjs";
 import { catalogueFixtures } from "./catalogue_fixtures.mjs";
 import { checkDevelopment } from "./development_checks.mjs";
+import { checkPlans } from "./plans_checks.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const webDir = path.join(root, "apps/web");
@@ -24,7 +25,7 @@ const accounts = {
   "owner@dashboard.test": { id: "10000000-0000-4000-8000-000000000002", role: "owner" },
   "admin@dashboard.test": { id: "10000000-0000-4000-8000-000000000001", role: "admin" },
 };
-const valuation = { id:"20000000-0000-4000-8000-000000000001", road_norm:"JLN TEST", scheme:"Saved test township", ptype:"Terrace", estimate:785635.36, low:720000, high:840000, created_at:"2026-10-10T12:00:00Z" };
+const valuation = { id:"20000000-0000-4000-8000-000000000001", road_norm:"JLN TEST", scheme:"Saved test township", ptype:"Terrace", tenure:"Freehold", confidence:"medium", estimate:785635.36, low:720000, high:840000, created_at:"2026-10-10T12:00:00Z" };
 const application = { id:"30000000-0000-4000-8000-000000000001", valuation_id:valuation.id, launch_id:7, plan:"A", unit_type:"Type A", address_line:"12, Jalan Test", indicative_low:610000, indicative_high:630000, inspection_scheduled_at:"2026-10-20T02:00:00Z", offer_amount:616723, offer_expires_at:new Date(Date.now()+7*86400000).toISOString(), reject_reason:"The property is outside the supported area.", espa_signed_at:null, espa_confirmed_at:null, info_return_status:null, created_at:"2026-10-11T12:00:00Z", updated_at:"2026-10-12T12:00:00Z" };
 const caseId=(index)=>"30000000-0000-4000-8000-"+String(index).padStart(12,"0");
 const valueId=(index)=>"20000000-0000-4000-8000-"+String(index).padStart(12,"0");
@@ -40,6 +41,7 @@ function rowsForScenario() {
 }
 let scenario = "new";
 let catalogueScenario = "normal";
+let planScenario = "normal";
 let authUrl;
 let qaProcess;
 let browser;
@@ -47,6 +49,15 @@ let changedBuild = false;
 let serverLog = "";
 const errors = [];
 const queries = [];
+const quoteRequests = [];
+async function fixtureQuote(request, launch) {
+  const python=process.env.PLANS_QA_PYTHON ?? path.join(root,"services/valuation/.venv/Scripts/python.exe");
+  const child=spawn(python,[path.join(root,"scripts/plan_quote_fixture.py")],{cwd:root,stdio:["pipe","pipe","pipe"],windowsHide:true});
+  let output="",error="";child.stdout.on("data",chunk=>{output+=chunk;});child.stderr.on("data",chunk=>{error+=chunk;});
+  child.stdin.end(JSON.stringify({request,launch}));
+  const code=await new Promise((resolve,reject)=>{child.once("error",reject);child.once("exit",resolve);});
+  if(code!==0)throw new Error(error);return JSON.parse(output);
+}
 function userFor(email) { return { ...accounts[email], email, aud:"authenticated", role:"authenticated", email_confirmed_at:"2026-01-01T00:00:00Z", app_metadata:{provider:"email",providers:["email"]}, user_metadata:{}, identities:[], created_at:"2026-01-01T00:00:00Z" }; }
 function tokenFor(email) {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -72,6 +83,19 @@ const auth = createServer(async (request,response) => {
   if (url.pathname === "/auth/v1/user") return accounts[email] ? reply(200,userFor(email)) : reply(401,{message:"No test session"});
   if (url.pathname === "/auth/v1/logout") return reply(204);
   if (url.pathname === "/rest/v1/profiles") return accounts[email] ? reply(200,[{role:accounts[email].role}]) : reply(401,{message:"No test session"});
+  if (request.method === "POST" && url.pathname === "/plans/quote") {
+    if(request.headers["x-internal-key"]!=="plans-local-qa-key") {errors.push("Missing internal quote key");return reply(401,{});}
+    let raw="";for await(const chunk of request)raw+=chunk;
+    const input=JSON.parse(raw);quoteRequests.push(input);
+    for(const field of ["estimate","low","high"])if(input.valuation[field]!==Math.round(valuation[field]))errors.push("Quote did not use whole-RM saved valuation");
+    if(planScenario==="quote_failure")return reply(503,{detail:"Local quote unavailable"});
+    if(planScenario==="malformed")return reply(200,{new_home:{},plan_a:{},plan_b:{}});
+    try {
+      const quote=await fixtureQuote(input,catalogueFixtures.find(row=>row.id===input.new_home.launch_id));
+      if(planScenario==="legacy"){delete quote.plan_a.breakdown;delete quote.plan_b.breakdown;delete quote.plan_b.floor_rate;}
+      return reply(200,quote);
+    }catch(error){errors.push("Local quote fixture failed: "+error.message);return reply(500,{});}
+  }
   if (request.method !== "GET") { errors.push(`Unexpected write ${request.method} ${url.pathname}`); return reply(405,{}); }
   if (!accounts[email]) return reply(401,{});
   queries.push({path:url.pathname,search:url.search,email});
@@ -82,6 +106,11 @@ const auth = createServer(async (request,response) => {
     return replyRows(rowsForScenario().valuations.filter(row=>!id || id===`eq.${row.id}`));
   }
   if (url.pathname === "/rest/v1/applications") return replyRows(rowsForScenario().applications);
+  if (url.pathname === "/rest/v1/road_catalog") {
+    if(url.searchParams.get("scheme")!==`eq.${valuation.scheme}`||url.searchParams.get("ptype")!==`eq.${valuation.ptype}`||url.searchParams.get("road_norm")!==`eq.${valuation.road_norm}`){errors.push("Unscoped plan metadata query");return reply(403,{});}
+    if(planScenario==="metadata_failure")return reply(500,{});
+    return reply(200,planScenario==="metadata_missing"?[]:[{is_sdp:planScenario!=="non_sdp"}]);
+  }
   if (url.pathname === "/rest/v1/application_events") {
     const id=(url.searchParams.get("application_id")??"").replace("eq.","");
     const record=rowsForScenario().applications.find((item)=>item.id===id);
@@ -110,7 +139,7 @@ async function stop(child) { if(!child || child.exitCode!==null)return; const do
 try {
   await new Promise((resolve)=>auth.listen(0,"127.0.0.1",resolve));
   authUrl=`http://127.0.0.1:${auth.address().port}`;
-  const env={...process.env,NEXT_TELEMETRY_DISABLED:"1",NEXT_PUBLIC_SUPABASE_URL:authUrl,NEXT_PUBLIC_SUPABASE_ANON_KEY:"dashboard-test-anon-key"};
+  const env={...process.env,NEXT_TELEMETRY_DISABLED:"1",NEXT_PUBLIC_SUPABASE_URL:authUrl,NEXT_PUBLIC_SUPABASE_ANON_KEY:"dashboard-test-anon-key",VALUATION_API_URL:authUrl,VALUATION_INTERNAL_KEY:"plans-local-qa-key"};
   changedBuild=true;console.log("Building isolated Dashboard QA frontend…");await build(env);
   qaProcess=startNext(["start","--hostname","127.0.0.1","--port",new URL(baseUrl).port],env);
   qaProcess.stdout.on("data",(chunk)=>{serverLog=(serverLog+chunk).slice(-16000);});
@@ -131,6 +160,7 @@ try {
   await checkOwnerHome(page,{baseUrl,artifacts});
   await checkCatalogue(page,{baseUrl,artifacts,setScenario:(state)=>{catalogueScenario=state;}});
   await checkDevelopment(page,{baseUrl,artifacts,valuation,setScenario:(state)=>{scenario=state;},setCatalogueScenario:(state)=>{catalogueScenario=state;}});
+  await checkPlans(page,{baseUrl,artifacts,valuation,setScenario:(state)=>{scenario=state;},setPlanScenario:(state)=>{planScenario=state;},quoteRequests});
   if(process.env.OWNER_HOME_ONLY!=="1") {
     await checkOwnerRecords(page,{baseUrl,artifacts,setScenario:(state)=>{scenario=state;},application,caseId});
     await page.getByRole("button",{name:"Sign out",exact:true}).click();await page.waitForURL((url)=>url.pathname==="/login");
@@ -138,7 +168,7 @@ try {
     await page.goto(baseUrl+"/login");
     await page.getByLabel("Email address").fill("admin@dashboard.test");await page.getByLabel("Password",{exact:true}).fill("dashboard-test-password");await page.getByRole("button",{name:"Sign in",exact:true}).click();await page.waitForURL(baseUrl+"/admin");
     const before=queries.length;
-    for(const route of ["/home","/dashboard","/new-home","/new-home/2"]) {await page.goto(baseUrl+route);await page.waitForURL(baseUrl+"/admin");}
+    for(const route of ["/home","/dashboard","/new-home","/new-home/2","/plans","/plans/a"]) {await page.goto(baseUrl+route);await page.waitForURL(baseUrl+"/admin");}
     assert.equal(queries.slice(before).some((query)=>query.email==="admin@dashboard.test"),false);
     console.log("PASS owner/admin guards and owner-scoped records; no foreign event reads");
   }

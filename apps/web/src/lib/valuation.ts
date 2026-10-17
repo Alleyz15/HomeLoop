@@ -157,6 +157,13 @@ export type TimelineStep = {
   note: string | null;
 };
 
+export type PlanBreakdown = {
+  basis: number;
+  deductions: Array<{ label: string; rate: number; amount: number }>;
+  result: number;
+  rounding_adjustment: number;
+};
+
 export type PlanQuoteResponse = {
   new_home: {
     name: string;
@@ -169,6 +176,8 @@ export type PlanQuoteResponse = {
     offer: number;
     offer_low: number;
     offer_high: number;
+    /** Absent until the additive backend response has been deployed. */
+    breakdown?: PlanBreakdown;
     deposit: {
       new_home_deposit: number;
       old_home_deposit_offset: number;
@@ -189,6 +198,8 @@ export type PlanQuoteResponse = {
     expected_net: number;
     expected_net_low: number;
     expected_net_high: number;
+    breakdown?: PlanBreakdown;
+    floor_rate?: number;
     net_at_floor: number;
     deposit_gap: number;
     price_gap: number;
