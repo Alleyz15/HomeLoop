@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * rather than trusted from a token, and no database query runs on every request.
  */
 const PROTECTED_PREFIXES = [
+  "/home",
   "/dashboard",
   "/valuation",
   "/new-home",

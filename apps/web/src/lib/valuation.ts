@@ -2,6 +2,11 @@ import "server-only";
 
 export type Confidence = "high" | "medium" | "low";
 export type UnitPosition = "intermediate" | "corner_end" | "custom";
+export type ValuationStatus =
+  | "ok"
+  | "insufficient_data"
+  | "not_found"
+  | "unsupported_property_type";
 export type AiFallbackReason =
   | "no_api_key"
   | "api_error"
@@ -41,7 +46,7 @@ export type Comparable = {
 };
 
 export type ValuationResponse = {
-  status: "ok" | "insufficient_data" | "not_found" | "unsupported_property_type";
+  status: ValuationStatus;
   estimate: number | null;
   low: number | null;
   high: number | null;
@@ -157,6 +162,13 @@ export type TimelineStep = {
   note: string | null;
 };
 
+export type PlanBreakdown = {
+  basis: number;
+  deductions: Array<{ label: string; rate: number; amount: number }>;
+  result: number;
+  rounding_adjustment: number;
+};
+
 export type PlanQuoteResponse = {
   new_home: {
     name: string;
@@ -169,6 +181,8 @@ export type PlanQuoteResponse = {
     offer: number;
     offer_low: number;
     offer_high: number;
+    /** Absent until the additive backend response has been deployed. */
+    breakdown?: PlanBreakdown;
     deposit: {
       new_home_deposit: number;
       old_home_deposit_offset: number;
@@ -189,6 +203,8 @@ export type PlanQuoteResponse = {
     expected_net: number;
     expected_net_low: number;
     expected_net_high: number;
+    breakdown?: PlanBreakdown;
+    floor_rate?: number;
     net_at_floor: number;
     deposit_gap: number;
     price_gap: number;
@@ -318,9 +334,21 @@ export function searchRoads(q: string, limit = 10): Promise<RoadResult[]> {
 }
 
 export function quotePlans(input: PlanQuoteInput): Promise<PlanQuoteResponse> {
+  // Calculate from the whole-RM valuation shown to owners. The API rounds
+  // the resulting offers separately; retaining cents here can shift them by RM1.
+  const roundedInput: PlanQuoteInput = {
+    ...input,
+    valuation: {
+      ...input.valuation,
+      estimate: Math.round(input.valuation.estimate),
+      low: Math.round(input.valuation.low),
+      high: Math.round(input.valuation.high),
+    },
+  };
+
   return valuationApi<PlanQuoteResponse>("/plans/quote", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(roundedInput),
   });
 }
 

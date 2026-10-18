@@ -127,3 +127,62 @@
     @apply font-sans;
     }
 }
+
+/* Every route shares an always-visible, readable header. */
+.site-header { position: sticky; top: 0; z-index: 50; flex-shrink: 0; background: #f7f7ef; box-shadow: 0 2px 12px #203e3206; }
+html { scroll-padding-top: 110px; }
+.site-nav > div { min-width: 0; }
+.site-nav > div > span { overflow-wrap: anywhere; }
+/* Compact owner Home fits a desktop viewport without hiding content. */
+body:has([data-owner-home]) { background: #f7f7ef; }
+.site-main:has([data-owner-home]) { padding-top: 25px; padding-bottom: 20px; }
+body:has([data-owner-home]) .site-nav { padding-top: 14px; padding-bottom: 14px; }
+body:has([data-owner-home]) .site-footer .footer-heading { padding-top: 12px; }
+body:has([data-owner-home]) .site-footer > p { padding-top: 8px; padding-bottom: 12px; font-size: 10px; line-height: 1.6; }
+body:has([data-owner-home]) .site-header [data-slot="separator"], body:has([data-owner-home]) .site-footer [data-slot="separator"] { background: #dfe3d5; }
+/* Dashboard-only shell; other routes retain their existing presentation. */
+body:has([data-dashboard-page]) { background: #f7f7ef; }
+/* Catalogue keeps its textured artwork behind the shared shell. */
+body:has([data-catalogue-page]) { background: #f7f7ef; }
+.site-main:has([data-catalogue-page]) { padding-top: 28px; }
+body:has([data-development-page]) { background: #f7f7ef; }
+.site-main:has([data-development-page]) { padding-top: 28px; }
+body:has([data-plans-page]) { background: #f7f7ef; }
+.site-main:has([data-plans-page]) { padding-top: 28px; }
+body:has([data-dashboard-page]) .site-header [data-slot="separator"], body:has([data-dashboard-page]) .site-footer [data-slot="separator"] { background: #dfe3d5; }
+body:has([data-dashboard-page]) .site-footer { color: #5e6e56; }
+@media (max-width: 760px) {
+  body:has([data-dashboard-page]) .site-nav { gap: 12px; }
+  body:has([data-dashboard-page]) .site-nav > div { width: 100%; justify-content: space-between; min-width: 0; }
+  body:has([data-dashboard-page]) .site-nav > div > span { font-size: 11px; overflow-wrap: anywhere; min-width: 0; }
+}
+body:has([data-welcome-page]) { background: #f7f7ef; }
+.site-main:has([data-welcome-page]) { padding-top: 0; padding-bottom: 0; }
+/* Reuse the Welcome shell palette on authentication without affecting other routes. */
+body:has([data-auth-page]) { background: #f7f7ef; }
+.site-main:has([data-auth-page]) { padding-top: 0; padding-bottom: 0; }
+body:has([data-auth-page]) .site-nav { padding-top: 22px; padding-bottom: 22px; }
+body:has([data-auth-page]) .site-header [data-slot="separator"], body:has([data-auth-page]) .site-footer [data-slot="separator"] { background: #dfe3d5; }
+body:has([data-auth-page]) .site-footer { color: #5e6e56; }
+.site-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 600; letter-spacing: -.8px; margin-right: auto; }
+.site-brand-mark { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 50%; background: #e5ebd9; color: #36553d; }
+.brand-period { color: #7a9656; margin-left: -8px; }
+.site-sign-in { display: inline-flex; align-items: center; gap: 18px; font-size: 11px; color: #263f30; border: 1px solid #c6ceba; border-radius: 6px; padding: 9px 14px; }
+.site-sign-in:hover { background: #edf0e5; }
+.site-sign-in:focus-visible, .site-brand:focus-visible { outline: 2px solid #78964f; outline-offset: 5px; }
+body:has([data-welcome-page]) .site-nav { padding-top: 22px; padding-bottom: 22px; }
+body:has([data-welcome-page]) .site-nav > a:not(.site-brand) { font-size: 11px; color: #56644f; }
+body:has([data-welcome-page]) .site-header [data-slot="separator"], body:has([data-welcome-page]) .site-footer [data-slot="separator"] { background: #dfe3d5; }
+body:has([data-welcome-page]) .site-footer { color: #5e6e56; }
+.footer-heading > span { font-size: 10px; }
+.skip-link { position: fixed; top: -80px; left: 16px; z-index: 100; border-radius: 4px; padding: 10px 16px; background: #203d30; color: white; font-size: 14px; }
+.skip-link:focus { top: 12px; }
+@media (max-width: 480px) {
+  .site-nav > div { max-width: 100%; flex-wrap: wrap; }
+  .site-nav { column-gap: 16px; padding-left: 20px; padding-right: 20px; }
+  .site-brand { font-size: 18px; gap: 5px; }
+  .site-brand-mark { width: 27px; height: 27px; }
+  .site-main { padding-left: 20px; padding-right: 20px; }
+  body:has([data-welcome-page]) .site-nav > a:not(.site-brand) { font-size: 10px; }
+  .site-sign-in { padding: 8px 10px; gap: 5px; font-size: 10px; }
+}

@@ -1,8 +1,10 @@
 # HomeLoop Task Track
 
-最后更新：2026-10-14｜截止：**10/23 23:59**
+最后更新：2026-10-16｜截止：**10/23 23:59**
 
 本文件记录整个系统的任务进度，分为**后端**与**前端**两部分。
+
+前端每阶段与每项操作的变更、受影响文件、bug、验证结果及 commit 记录见 [Frontend_Implementation_Log.md](Frontend_Implementation_Log.md)。后续前端实现或修复需同步更新该文件。
 
 > **给 AI 编程助手（Codex / Claude）的规则**
 > 1. 开始任何任务前，先读本文件和 `docs/md-files/` 里的其他文件。产品规则以《HomeLoop_更新_页面与流程.md》为准。
@@ -98,6 +100,8 @@
 
 完成日期：2026-10-14｜commits `3ed7275`、`4a77305`、`dc9316e`、`f772eaf`
 
+人工估价路径补充：2026-10-17｜commits `83f88e3`、`2014084`
+
 - [x] 提交时执行第 1 关资格、必填资料与 PDPA 检查；每位屋主同一时间只允许一份活跃申请
 - [x] PostgreSQL SECURITY DEFINER RPC 状态机：锁定申请、验证调用者与合法转换，并在同一交易写入一笔 `application_events`
 - [x] Admin 操作：开始审核、要求补件、初步范围、拒绝、安排/记录上门、发正式报价、回应复核及接受后追踪
@@ -105,12 +109,19 @@
 - [x] 正式报价由数据库按确认市值重算；14 天到期采用 lazy expiry，方案切换与发报价均检查月度额度
 - [x] Admin flags：正式估价低于 AI low 超过 10%、AI 低可信度、月度额度达到 80%
 - [x] server-only Next.js RPC helpers、pgTAP 状态机测试；本地重建后 56 项测试通过
+- [x] `valuation_requests.valuation_status` 保存 `ok / insufficient_data / not_found / unsupported_property_type`；旧资料保守回填。只有经保存记录及 `road_catalog` 近 3 年少于 10 笔双重验证的 `insufficient_data` 可进入人工估价，另外两种失败状态不可送申请
+- [x] 人工估价状态 `manual_valuation_pending`：admin `request_manual_valuation` 后，屋主必须明确执行 `proceed_manual_valuation` 才能安排上门；也可从该状态撤回。人工路径在上门前没有 indicative RM 区间，也没有 admin 桌面估价步骤
+- [x] 人工 `record_inspection` 必须有正数 `confirmed_value`，并在 note 写注册估价师与估价依据；不使用 AI adjustment reason，同时记录 `manual_valuation_resolved_at / by`
+- [x] 方案 A 的 SDP township 与「确认市值不高于新屋价格」规则在 `issue_offer`、`respond_review`、`switch_plan` 再检查。人工估价后若方案 A 不合格，屋主可在正式报价前改方案 B，且不消耗一次正式 `plan_switch_count`
+- [x] `admin_application_flags` 增加 `manual_valuation_required`；新 RPC 维持 SECURITY DEFINER、空 search path、owner/admin 检查、`FOR UPDATE`、每动作一笔 event、只授权 authenticated。全新本地 reset 后 pgTAP 94 项通过，schema lint 无警告
 
 已确定的状态机决定：
 
 - 补件可以从 `under_review` 或 `inspected` 发起；`info_return_status` 记录来源，屋主补件后回到原关卡并清空该字段。
 - 正式报价阶段每份申请只可换方案一次（`plan_switch_count`，与一次复核分开计算）：B → A 重新检查方案 A 资格、清空报价并回到 `inspection_scheduled` 等注册估价师；A → B 用已确认市价重新计算 75% 保底、检查额度并发出新的 14 天报价。
 - 屋主从 `accepted` 标记 e-SPA 已签后进入 `espa_signed`；admin 以 `espa_confirmed_at` / `espa_confirmed_by` 确认，不新增状态。所有挂牌及之后的追踪动作必须等 admin 确认。
+- `insufficient_data` 不制造临时价格：屋主选择方案时只看结构/公式；方案 A 仅先检查 SDP township，金额资格等注册估价师确认市值后才决定。`not_found` 与 `unsupported_property_type` 不可沿用此路径。
+- 人工路径的正式转换为 `submitted → under_review → manual_valuation_pending → owner_proceed → inspection_scheduled → inspected → offer_sent`；其中 `manual_valuation_pending → withdrawn` 也是合法结束。
 
 ### 1.7 B2 估价 API 修正（2026-10-14，commit `d5056d7`）
 
@@ -153,15 +164,40 @@
 
 - [x] `src/lib/valuations.ts`：server-only `saveValuation()` / `getValuation()` / `getRoadMeta()`。**补上了之前缺的一环**：原本没有任何程式写入 `valuation_requests`，而 B4 的 `submit_application` 需要一个真实的 `p_valuation_id`，现在估价完成就会存一笔并取得 id
 - [x] 估不出价（资料不足）的请求也会存，金额留 null，屋主仍有纪录、之后也能据此送申请
+- [x] 2026-10-17 保存估价 API 的准确 `valuation_status`；结果页仅 `insufficient_data` 显示可继续申请说明，`not_found / unsupported_property_type` 不显示申请入口。新屋及方案页可继续人工估价路径，只显示方案结构与公式、不显示 RM 金额；非 SDP 的方案 A 停用，SDP 的方案 A 标示「Eligibility confirmed after valuation」（commit `2014084`）
 - [x] `src/lib/units.ts`：m² ↔ sq ft 换算、排屋尺寸快捷、RM 格式化
 - [x] `src/app/valuation/actions.ts`：`findRoads`（走 B2 `/roads`）与 `createValuation`（走 B2 `/valuate` → 存档 → 导向结果页），全部 server action，内部 key 不会进浏览器
 - [x] `is_sdp` / `district` / `tenure_mode` 直接读 `road_catalog`（authenticated 有 select 权限），**不新增 migration**；`valuation_requests` 没有 `is_sdp` 栏位，这样就不用改表
 - [x] `npm run build`（11 条路由）、`tsc --noEmit`、`eslint` 全部乾净
 - [x] 静态核对过 insert 的 13 个栏位都存在，且 `unit_position` / `confidence` 的 CHECK 约束与送出的值相符
+- [x] 2026-10-15（待 commit）修正方案报价舍入顺序：`quotePlans()` 在发送前将 `estimate` / `low` / `high` 用 `Math.round()` 转成整数 RM，后端再计算并舍入报价；原始估价保留小数。RM785,635.36 对应方案 A RM616,723、方案 B RM589,226；回归测试见 `scripts/quote_plans.test.mjs`。
 
 **未验证**：demo 帐号已建立，但整条「搜路名 → 估价 → 存档 → 结果页」尚未用真实 session 跑过。Render 的 `/roads` 与 `/valuate` 已单独验证可用。
 
 ---
+
+### 1.11 后端本机运行验证（2026-10-15）
+
+- 环境：建立 gitignored `services/valuation/.venv`，使用本机 Python 3.13 安装 `requirements-dev.txt` 中的固定版本依赖；`pip check` 通过。README 建议 Python 3.11，本次未验证 3.11。
+- 配置：`services/valuation/.env` 必需值均存在且可由 Settings 加载；未输出 key。未改动环境文件或业务代码。
+- 离线测试：在 repo root 使用 `.venv` 的 Python 执行 `-m pytest -q -m 'not integration' --tb=short`，**165 passed，10 deselected**。
+- 真实 Supabase 集成测试：从 Settings 将 URL/anon key 载入测试进程，执行 `tests/test_golden.py`、`tests/test_simulator_golden.py` 的 integration tests，**10 passed**。
+- 启动：在 `services/valuation` 执行 `.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`，成功启动；本机地址 `http://127.0.0.1:8000`。
+- HTTP 验证：`/health` 200；无 internal key 的 `/roads` 401；带 key 的 `/roads`、`/valuate`、`/plans/quote`、`/simulator/run`、`/ai/explain-valuation`、`/ai/admin-assist` 全部 200。
+- 真实估价：Bukit Jelutong / 双层排屋 / 地 164 m² / 建筑 180 m²，回传 **RM785,635.3591160221**、10 笔参考成交；报价请求先按获批准规则取整数 RM 后，方案 A **RM616,723**、方案 B **RM589,226**；风险模拟读取 **187** 个回测案例。
+- Gemini：估价解说与 admin 辅助两次检查均为 `source=llm`、无 fallback，约 13.78 秒 / 5.57 秒；这两次成功不代表持续可用性或延迟保证。
+- 初次 sandbox 测试受临时目录权限与本机网络隔离影响，重新在获批权限下运行后通过；未将这些环境失败当作业务 bug。测试只读线上参考资料，无导入、migration 或申请写入。
+- 限制：有第三方弃用警告；未运行 PostgreSQL pgTAP 状态机测试、真实账号写入/完整申请流程、前端 build 或线上部署检查。诊断脚本放在 gitignored `.venv/check_backend.py`，本节是验证结果记录，待 commit。
+
+### 1.12 前端 Welcome 页设计与 EffectCraft 动画（2026-10-16，待 commit）
+
+- [x] 完成获批准的 ivory / forest-green Welcome 设计：主视觉、介绍、三项优点、四步流程、A/B 简介及估价 CTA；guest 顶部导航可跳至页面区块，owner/admin 保留角色导航；Act 242 原文保留。
+- [x] 用 EffectCraft 0.10.0 CLI 制作原生房屋/花园动画，保留 `.jsx`、可编辑 `.ecproj`、重建说明及静态 poster；后续获批升级为 13 秒版本（约 1.45 MiB），包括房屋分层组装、路径绘制、抵达高光、镜头推进及 9–13 秒花园循环；暂停/播放/独立重播、reduced-motion 与视频失败 fallback 均保留。
+- [x] 最终 production build（含 lint / TypeScript）通过；Edge 实测 1440 / 768 / 390 / 320 px 无横向溢出；估价按钮正确进入 `/login?next=/valuation`，区块导航、视频解码/控制、键盘 skip link、静态 fallback 通过，无浏览器 runtime error。
+- [x] 视觉检查修正初版 hero opacity 过淡，并增大辅助文字；详细变更、文件与验证见 `Frontend_Implementation_Log.md` 的 F2-01a。未改后端或 auth 实现；未 commit / deploy；真实 owner/admin session 验证仍待做。
+- [x] 2026-10-16 动效升级（F2-01b）：新增指针景深、标签/浮卡不同幅度移动、滚动渐入、四步连接线、方案卡 hover 与 CTA 路径绘制。最终 build（含 lint / TypeScript）及扩展 Edge 检查通过，涵盖五个不同剧情帧、循环/暂停/重播、运行时 reduced-motion 切换、无 JS 内容与 320px 响应式；主题与内容保持不变，待 commit。
+
+- [x] 2026-10-16 Welcome 精简（F2-01c）：按用户要求移除 How it works / Our plans / See how it works / Sign in 导航链接及动画暂停/播放/重播按钮；动画继续自动播放，其他内容、样式与估价 CTA 保留。此项取代以上旧记录中的导航/控制行为；production build（含 lint / TypeScript）及 Edge 浏览器复验通过，待 commit。
 
 ## 2. 待做：后端
 
@@ -203,19 +239,29 @@
 
 - [x] 2026-10-15 版面：顶部导航按角色切换（未登录 Home｜屋主 Dashboard/Valuation/New home/Plans｜admin Applications/Risk simulator）、显示登入的邮箱与登出按钮、底部 Act 242 免责声明原文不变
 - [x] 2026-10-15 登录 / 注册（邮箱 + 密码，Server Actions）；登录后按 `profiles.role` 导向 `/dashboard` 或 `/admin`；支援 `?next=` 回到原本要去的页面（只允许站内相对路径）
+- [x] 2026-10-16 Sign in 视觉升级（F1-02a）：沿用 Welcome 的 ivory / forest-green / sage 与 serif 字体，双栏房屋/花园插画、背景网格/光晕、轻动效、tab 滑动、密码显隐、focus/点击反馈、提交载入与错误状态；保留现有 Create account / Server Actions / next / 密码规则，不新增认证功能。最终 production build（含 lint / TypeScript）、Edge 双模式 1440/768/390/320 px 与 Welcome regression 检查通过；修正手机标题空格，未创建账号，真实成功登入仍待验证，待 commit。
+- [x] 2026-10-16 Sign in 动效升级（F1-02b）：以独立 EffectCraft 14 秒立体房屋/花园场景替换旧平面插画，含分层组装、路径/光点、镜头与 8–14 秒循环；扩大建筑轮廓、sage 光晕及前景叶片，新增指针多层景深，表单不跟随移动。主题/文案/认证不变；保留 reduced-motion、视频/无 JS fallback；build（含 lint / TypeScript）、扩展 Edge 与 Welcome regression 检查通过，详见前端记录，待 commit。
+- [x] 2026-10-16 Sign in 门廊动效（F1-02c，取代上项房屋模型）：依获批预览改为层叠拱门；真实 3D 门板与把手绕左铰链约 5 秒缓慢向内打开，地面光线/阴影同步变化；保持开启并循环轻光影，不自动关门。移除花园/叶片与旧插画说明，主文案、表单、配色及认证不变。最终边缘融合 build（含 lint / TypeScript）、扩展 Edge 双模式 1440/768/390/320 px 与 Welcome regression 检查通过；变更/文件/验证详见前端记录，待 commit。
 - [x] 2026-10-15 未登录访问受保护页面时导向 `/login?next=…`；受保护前缀为 `/dashboard`、`/valuation`、`/new-home`、`/plans`、`/apply`、`/admin`（原则 2：要登录才能估价）
+- [x] 2026-10-16 定向修复（F1-04 / F2-02a）：估价初始 state 移出 `use server`，修复登入后 `results.length` 浏览器崩溃；admin 登入固定至 `/admin`，屋主只恢复允许的站内目的地；Welcome 隐藏应用导航/邮箱/登出但保留 session；应用内顶部/底部 Logo 回角色首页。4 个新 Node 测试 + 既有 rounding regression、本地 auth stub 的 owner/admin 成功登入/导航/返回/登出通过；正常 production build（含 lint / TypeScript）已恢复，Sign in / Welcome 回归通过。未改设计/动画、数据库或其他估价功能；真实账号密码未配置，仍需用户重试，待 commit。
 - [ ] **待验证**：demo 帐号已建立；仍要实测屋主登入 → `/dashboard`、admin 登入 → `/admin`、屋主手动输入 `/admin` → 被送回 `/dashboard`
 
 ### F2. 屋主端
 
-- [x] 2026-10-15 Welcome 页（`/`）：普通版（标题、一句话介绍、按钮）；已登入时直接显示「去我的 Dashboard」
-- [ ] Dashboard（`/dashboard`）：8 格进度条 + 依状态变化的简略卡片 → 点进去看详细页；方案 B 显示挂牌子进度（第 5.6 节）
+- [x] 2026-10-16 Welcome 页（`/`）：完成获批准的现代介绍页与 EffectCraft 原创动画；guest 可登入并继续估价，owner/admin 显示对应入口；详见 1.12 与前端记录 F2-01a（待 commit）。
+- [x] 2026-10-16 Dashboard 总览画面（`/dashboard`）：8 格进度条、真实保存资料的状态卡、当前屋与所选新屋、方案 B 子进度、原创 EffectCraft 动画、手机排版及 loading/error/empty 状态。按用户确认，本阶段只完成 Dashboard；尚未完成的详情/选新屋/回应报价入口停用并注明，不扩建其他页面。详情及测试结果见前端记录 F2-06a/b/c（待 commit，未部署）。
+  - [x] 2026-10-16 用户批准改为双页：`/home` 主入口（Your Records + 左右等高双卡、不同 EffectCraft 动画，无草稿/Current Home 卡），`/dashboard` 多笔记录、汇总卡、搜索筛选分页、每份申请展开自己的 8 格进度。保留一人一份活跃申请规则；全站页头 sticky，移除屋主页头四个入口，品牌返回 `/home`。Home 已先通过桌面一屏及手机验证，再实施记录页；完整验证结果见 F1-05、F2-06d/e/f。
+  - [ ] 后续阶段：接上申请详情、报价回应及选新屋等页面；真实账号与线上 RLS 端到端验收。保证期截止与实际结算净额没有足够资料时不虚构。
 - [x] 2026-10-15 ① 估价输入（`/valuation`）：路名搜索（JALAN/JLN 同字、自动带出期数、县与是否 SDP 标签）→ 屋型（只列这条路真实成交过的，附近 3 年笔数与常见面积）→ 单位类型（中间单位自动带入常见面积并显示占比；角头/自填则手动输入）→ 地契；m² / sq ft 切换会换算已输入的数字；排屋 20×70 / 22×75 / 22×80 尺快捷按钮；搜不到路名时提示改用期数或 township（第 4 节）
   - [ ] **还没做**：照片上传（第 4 节标为可选）。需要 Supabase Storage `photos` bucket 的本人目录上传
 - [x] 2026-10-15 ② 估价结果（`/valuation/result/[id]`）：区间与中间值、可信度（三档各自的白话说明）、10 笔参考成交表（月份、地段、建筑、价格、每平方米）、Act 242 免责声明在页脚；资料不足时不显示数字、改为说明少于 10 笔并建议人工估价；非 SDP 旧屋显示「只适用方案 B」卡片
   - [x] 2026-10-15 AI 白话解说已串接 server-only B5 helper，并以 Suspense 串流；服务失败时隐藏 slot，不阻断估价数字、可信度与参考成交先显示
 - [ ] ③ 选新屋（`/new-home`）：在售项目卡片 + 「即将推出」分页（登记兴趣）→ 项目详情 → 选户型 → 价格默认起价、可填销售报价 → 显示差额与价格来源（第 5.1、5.3 节）
+  - [x] 2026-10-16 开始、2026-10-17 验收：用户批准先做 Home → Explore SDP Homes 的浏览目录：selling/upcoming 分页、搜索、township/屋型筛选、官方项目图片、资料日期、缺价提示及新照片切片动画。项目按钮暂开官方 SDP 网页；不实现内部登记兴趣、选户型、报价或估价记录带入。25 项 Node 测试及 Home/目录/Dashboard 浏览器回归通过；线上目录只读查询确认 16 在售 + 7 upcoming。详见前端记录 F2-08a；未部署。
+  - [x] 2026-10-17 F2-08b：先完成内部项目详情 `/new-home/[project]`；估价结果带 valuation ID，经本人限定读取后在目录筛选/分类/返回中保留。显示旧屋区间及较小中间值、官方项目资料、已核实户型（否则 Standard home type）、起价/可选 SDP 销售报价覆盖及基本差额，注明并非现金应付。无 View saved valuation；Choose this home 按批准停用并注明 Plan comparison coming next。Home 入口仍为官方网页浏览；无草稿保存、预订或申请。31 项 Node 测试、TypeScript、完整 lint 及本地 production 浏览器验收通过（1440/768/390/320 px、动效/低动态偏好、无 JS、本人资料隔离与既有 Home/目录/记录/角色回归）；无 runtime exception 或申请写入。详见前端记录；未部署。
 - [ ] ④ 选方案（`/plans`）：方案 A / B 两张卡片 + 引导问题（能否先付 10% 订金）→ 详细计算 → 确认；不符合资格时方案 A 变灰并说明原因（第 5.3 节）
+  - [x] 2026-10-17 F2-09a–d：完成 `/plans`、`/plans/a`、`/plans/b`；采用获批旧版 ivory/sage 双卡设计、新标题 Compare your trade-in options、分层阴影及独立眨眼/头部/手臂/呼吸的 2.5D adviser。Development 的 Choose this home 经校验后启用；GET 带入并返回恢复户型与报价，不存草稿。服务端重读本人估价与路段资格，不信任客户端金额/SDP flag；调用原 `quotePlans()` 保留整数 RM 顺序。显示区间、保底、订金现金缺口、资格原因及明细；后端只增明细字段与 rounding adjustment，不改公式/数据库。38 项 Node 与 145 项非线上 Python 测试、最终 production build/TypeScript/lint、完整浏览器回归（含 1440/768/390/320 px、低动态偏好、无 JS、图层顺序、角色/本人资料隔离）通过；无 runtime exception 或申请写入，正常环境 build 已恢复。详见前端记录；未部署。
+  - [ ] 下一阶段：实现 `/apply` 后才启用 Confirm this plan；目前不创建申请或预订。远端后端需重新部署才返回新增扣除明细；前端兼容旧版 totals-only API 并明确提示，未部署或修改 hosted 设置。
 - [ ] ⑤ 换屋计划书 + 提交申请（`/apply`，同一页）：时间线、资金进出、订金缺口提醒、要准备的东西、RPGT 提醒；下半部填门牌、地契号码（可选）、PDPA 同意（第 5.3、5.4 节）
 - [ ] 报价相关操作：初步报价「继续 / 不用了」；正式报价「接受 / 换方案 / 拒绝 / 要求复核」与 14 天倒数；接受后「我已签约」（第 5.5 节）
 
@@ -238,6 +284,7 @@
 
 | 问题 | 说明 |
 |---|---|
+| 前端待处理的整合问题（更新 2026-10-16） | 前端记录 FE-BUG-02、03、05 仍待处理：资料不足结果页承诺可申请，但 SQL 拒绝；地契自动带入未接线；无常见面积的中间单位手填面积未随表单提交。FE-BUG-04 已由用户提供的 production chunk 确认为浏览器 state 边界错误，移至独立 state 模块修复；FE-BUG-06/07 的角色跳转及公开页导航也已定向修复，本地隔离 auth 浏览器验证通过，真实账号流程仍待用户重试。 |
 | 部分网络的路由器 DNS 查不到 `*.supabase.co` | 改用 1.1.1.1 / 8.8.8.8，或在 hosts 文件加 `104.18.38.10 qcuzvdkrqzxogigsxisk.supabase.co`（Supabase IP 改变时要更新） |
 | `transactions` 只能导入一次 | 重新导入前要先 `truncate` 6 张参考表（见 README） |
 | 大部分新屋项目只公布起价 | 第 ③ 步用起价，允许用户填销售报价 |
@@ -253,7 +300,7 @@
 | 每月额度月份归属（已解决） | Migration `20261015084351_fix_monthly_limit_timezone.sql`（commit `93faa61`）已于 2026-10-15 套用线上，统一以 `Asia/Kuala_Lumpur` 计算报价月份；本机重建与 59 项 pgTAP 已通过，远端 migration list 已对齐，linked database lint 无错误。 |
 | `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
 | 风险模拟的 RM 金额要标明估价基准 | 《商业模式》第 5 节算的是**占估价的百分比**；RM3,500 / RM26,000 是套在示例的 RM786,000 上。187 笔的平均估价是 RM944,511，所以按每笔自己估价平均会得到 RM7,354 / RM36,953。`/simulator/run` 三种基准都回传，A3 优先显示百分比 |
-| B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此这些数值只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额 |
+| B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此 priced snapshot 数值仍只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额。人工路径额外核对该屋主保存的 `valuation_status=insufficient_data` 与对应 `road_catalog.n_recent_3y < 10`，不接受单靠客户端自称资料不足。 |
 
 ## 5. 已确定的关键数字（不要随意改）
 

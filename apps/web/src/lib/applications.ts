@@ -7,6 +7,7 @@ export type ApplicationStatus =
   | "under_review"
   | "info_requested"
   | "indicative_sent"
+  | "manual_valuation_pending"
   | "owner_proceed"
   | "withdrawn"
   | "inspection_scheduled"
@@ -59,6 +60,9 @@ export type Application = {
   reject_reason: string | null;
   valuation_snapshot: JsonObject | null;
   plan_quote_snapshot: JsonObject | null;
+  manual_valuation_required: boolean;
+  manual_valuation_resolved_at: string | null;
+  manual_valuation_resolved_by: string | null;
   info_return_status: "under_review" | "inspected" | null;
   plan_switch_count: number;
   espa_signed_at: string | null;
@@ -84,7 +88,7 @@ export type SubmitApplicationInput = {
   postcode: string;
   pdpaConsent: boolean;
   valuationSnapshot: JsonObject;
-  planQuoteSnapshot: JsonObject;
+  planQuoteSnapshot: JsonObject | null;
   titleNo?: string | null;
 };
 
@@ -93,6 +97,7 @@ export type AdminApplicationFlags = {
   valuation_gap: boolean;
   low_confidence: boolean;
   quota_near: boolean;
+  manual_valuation_required: boolean;
 };
 
 async function callRpc<T>(
@@ -177,6 +182,26 @@ export function sendIndicative(
     p_application_id: applicationId,
     p_indicative_low: low,
     p_indicative_high: high,
+    ...auditArgs(audit),
+  });
+}
+
+export function requestManualValuation(
+  applicationId: string,
+  audit: AuditInput = {},
+): Promise<Application> {
+  return callRpc<Application>("request_manual_valuation", {
+    p_application_id: applicationId,
+    ...auditArgs(audit),
+  });
+}
+
+export function proceedManualValuation(
+  applicationId: string,
+  audit: AuditInput = {},
+): Promise<Application> {
+  return callRpc<Application>("proceed_manual_valuation", {
+    p_application_id: applicationId,
     ...auditArgs(audit),
   });
 }
@@ -302,6 +327,16 @@ export function switchPlan(
   audit: AuditInput = {},
 ): Promise<Application> {
   return callRpc<Application>("switch_plan", {
+    p_application_id: applicationId,
+    ...auditArgs(audit),
+  });
+}
+
+export function switchManualPlanToB(
+  applicationId: string,
+  audit: AuditInput = {},
+): Promise<Application> {
+  return callRpc<Application>("switch_manual_plan_to_b", {
     p_application_id: applicationId,
     ...auditArgs(audit),
   });
