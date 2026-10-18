@@ -257,9 +257,6 @@ export default async function ValuationResultPage({
         {(priced || manual) ? <Button render={<Link href={`/new-home?valuation=${encodeURIComponent(valuation.id)}`} />} size="lg">
           Next: choose a new home
         </Button> : null}
-        <Button render={<Link href="/valuation" />} size="lg" variant="outline">
-          Value another home
-        </Button>
       </div>
       {manual ? <p className="text-sm text-muted-foreground">Plan structures are available now; all RM amounts wait for the registered valuation.</p> : null}
     </section>
