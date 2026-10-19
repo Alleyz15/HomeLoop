@@ -16,7 +16,7 @@
 .timeline li:not(:last-child)::before { content: ""; position: absolute; top: 35px; bottom: 3px; left: 16px; width: 1px; background: #d9e1cb; }
 .timeline li:last-child { padding-bottom: 0; }
 .step { height: 34px; width: 34px; display: grid; place-items: center; background: #edf1e2; border: 1px solid #d7e0c6; border-radius: 50%; font-size: 11px; color: #5e7749; }
-.timeline li:first-child .step { background: #284d3a; border-color: #284d3a; color: #fffef8; }
+.timeline li:first-child .step { border-color: #d9be92; background: #f6ebd8; color: #795c30; animation: guidePulse 3.6s ease-in-out infinite; }
 .timeline h3, .note h3, .consentBox h3 { font-size: 14px; line-height: 1.6; font-weight: 600; margin: 3px 0 6px; }
 .timeline p { font-size: 12px; line-height: 1.9; color: #748363; margin: 5px 0 0; }
 .timeline .time { color: #506d42; font-size: 11px; }
@@ -70,8 +70,30 @@
 .active .submit { max-width: 280px; margin-top: 22px; }
 .page a:focus-visible, .page button:focus-visible, .page input:focus-visible { outline: 2px solid #819e61; outline-offset: 4px; }
 .spinner { animation: spin 1s linear infinite; }
+.card, .form, .active { transition: translate .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.sectionHeading > svg { color: #637a50; padding: 6px; box-sizing: content-box; background: #edf1e2; border-radius: 10px; }
+.taxReminder .sectionHeading > svg { background: #f6ebd8; color: #856334; }
+.timeline li { animation: stageArrive .45s both; }
+.timeline li:nth-child(2) { animation-delay: .06s; }
+.timeline li:nth-child(3) { animation-delay: .12s; }
+.timeline li:nth-child(n+4) { animation-delay: .18s; }
+.timeline .stageNote { padding: 10px 12px; margin-top: 11px; border-left: 2px solid #ddc59e; border-radius: 0 6px 6px 0; background: #f3f5ec; color: #526b43; font-size: 11px; line-height: 1.9; }
+.stack > .note { margin-top: 0; }
+.taxList { margin: 17px 0 0; padding-left: 18px; color: #637751; font-size: 12px; line-height: 1.9; }
+.taxList li + li { margin-top: 13px; }
+.taxSources { display: flex; flex-wrap: wrap; gap: 10px 15px; margin-top: 17px; }
+.taxSources a { font-size: 11px; color: #526b43; text-decoration: underline; text-underline-offset: 3px; }
+.submit { transition: background .25s, box-shadow .25s, transform .2s; }
+.submit > svg { transition: transform .25s; }
+.submit:hover:not(:disabled) > svg:last-child { transform: translateX(3px); }
+.submit:active:not(:disabled) { transform: scale(.99); }
+.form input { transition: border-color .2s, box-shadow .2s; }
+.form input:focus-visible { box-shadow: 0 0 0 3px #dfe8cf66; }
+@media (hover: hover) { .card:hover { translate: 0 -3px; border-color: #bfcfaf; box-shadow: 0 18px 30px -20px #34472b55; } }
+@keyframes guidePulse { 0%, 100% { box-shadow: 0 0 0 0 #d5b27824; } 50% { box-shadow: 0 0 0 5px #d5b2780c; } }
+@keyframes stageArrive { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 900px) { .grid { grid-template-columns: minmax(0,1fr); } }
 @media (max-width: 600px) { .heading h1 { font-size: 40px; letter-spacing: -1.2px; } .heading > p:last-child { font-size: 13px; } .card, .form, .active { padding: 23px 20px; } .sectionHeading h2 { font-size: 25px; } .fields { grid-template-columns: minmax(0,1fr); gap: 20px; } .form h2 { font-size: 31px; } .consentBox { gap: 10px; } .money > div { gap: 12px; } .money dd { font-size: 13px; } .money .total dd { font-size: 17px; } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .page *, .page *::before, .page *::after { animation: none !important; transition: none !important; } .card:hover { translate: none; } .submit:hover:not(:disabled) > svg:last-child, .submit:active:not(:disabled) { transform: none; } }

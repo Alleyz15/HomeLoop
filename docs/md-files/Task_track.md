@@ -263,6 +263,7 @@
   - [x] 2026-10-17 F2-09a–d：完成 `/plans`、`/plans/a`、`/plans/b`；采用获批旧版 ivory/sage 双卡设计、新标题 Compare your trade-in options、分层阴影及独立眨眼/头部/手臂/呼吸的 2.5D adviser。Development 的 Choose this home 经校验后启用；GET 带入并返回恢复户型与报价，不存草稿。服务端重读本人估价与路段资格，不信任客户端金额/SDP flag；调用原 `quotePlans()` 保留整数 RM 顺序。显示区间、保底、订金现金缺口、资格原因及明细；后端只增明细字段与 rounding adjustment，不改公式/数据库。38 项 Node 与 145 项非线上 Python 测试、最终 production build/TypeScript/lint、完整浏览器回归（含 1440/768/390/320 px、低动态偏好、无 JS、图层顺序、角色/本人资料隔离）通过；无 runtime exception 或申请写入，正常环境 build 已恢复。详见前端记录；未部署。
   - [ ] 下一阶段：实现 `/apply` 后才启用 Confirm this plan；目前不创建申请或预订。远端后端需重新部署才返回新增扣除明细；前端兼容旧版 totals-only API 并明确提示，未部署或修改 hosted 设置。
 - [ ] ⑤ 换屋计划书 + 提交申请（`/apply`，同一页）：时间线、资金进出、订金缺口提醒、要准备的东西、RPGT 提醒；下半部填门牌、地契号码（可选）、PDPA 同意（第 5.3、5.4 节）
+  - [x] 2026-10-20 用户批准定向文案/动效完善（F2-10a/b，待 commit）：保留队友 `e94dbf1` 已有申请页面、表单与金额；新增每阶段白话说明及屋主行动提示，分清 priced A / priced B / manual 的上门类型，补齐初步区间/继续意愿、leasehold 同意时间、B 订金资金先后与 RPGT 来源提醒。保留方案页全部明细、保底、区间及注意事项；仅详情页/申请页加柔和 yuzu 点缀、小动效与 reduced-motion。62 项 Node 测试、独立 TypeScript 及两次隔离 production 浏览器验收通过（priced/manual A/B、leasehold、1440/768/390/320px、动效/低动态偏好、选择保留、表单及内存提交/重复申请回归）；无 runtime exception。未改后端、数据库或线上配置；完整流程仍需后续屋主回应及 admin 画面。
 - [ ] 报价相关操作：初步报价「继续 / 不用了」；正式报价「接受 / 换方案 / 拒绝 / 要求复核」与 14 天倒数；接受后「我已签约」（第 5.5 节）
 
 ### F3. Admin 端

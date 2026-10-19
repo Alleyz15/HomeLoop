@@ -17,7 +17,7 @@ const ownerId = "10000000-0000-4000-8000-000000000002";
 const valuation = { id: "20000000-0000-4000-8000-000000000001", user_id: ownerId, road_norm: "JLN TEST", scheme: "Saved test township", ptype: "Terrace", tenure: "Freehold", unit_position: "intermediate", land_sqm: 178, floor_sqm: 190, confidence: "medium", estimate: 785635.36, low: 720000, high: 840000, valuation_status: "ok", comps: [], created_at: "2026-10-10T12:00:00Z" };
 let scenario = "normal", authUrl, next, browser, log = "", application = null;
 const calls = [], issues = [];
-const currentValuation = () => ({ ...valuation, ...(scenario === "manual" ? { valuation_status: "insufficient_data", estimate: null, low: null, high: null, confidence: null } : {}) });
+const currentValuation = () => ({ ...valuation, ...(scenario === "manual" ? { valuation_status: "insufficient_data", estimate: null, low: null, high: null, confidence: null } : {}), ...(scenario === "leasehold" ? { tenure: "Leasehold" } : {}) });
 const user = email => ({ id: ownerId, email, aud: "authenticated", role: "authenticated", app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {}, identities: [], created_at: "2026-01-01T00:00:00Z" });
 function token(email) {
   const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -116,17 +116,46 @@ try {
     await page.getByRole("heading", { name: "Your move, mapped out." }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get("plan"), plan);
     assert.match(await page.locator("[data-apply-page]").innerText(), /RM850,000.25/);
+    const timeline = page.locator("[data-application-timeline]");
+    await timeline.waitFor();
+    assert.match(await timeline.locator('[data-journey-stage="consent"]').innerText(), /initial price range/);
+    assert.match(await timeline.locator('[data-journey-stage="visit"] h3').innerText(), plan === "A" ? /registered valuer/ : /home inspection/);
+    assert.equal(await timeline.locator('[data-journey-stage="consent-state"]').count(), 0);
+    for (const note of await timeline.locator("li > div > p:last-child").allTextContents()) assert.ok(note.length > 40);
+    assert.match(await page.locator("[data-rpgt-reminder]").innerText(), /60 days[\s\S]*90 days/);
+    if (plan === "B") await page.locator("[data-deposit-timing]").waitFor();
     await page.getByRole("link", { name: `Back to Plan ${plan} calculation` }).click(); await page.waitForURL(url => url.pathname === `/plans/${plan.toLowerCase()}`);
     assert.equal(new URL(page.url()).searchParams.get("sales_quote"), "850000.25");
   }
   console.log("PASS both Confirm links, quotation cents, selection preservation and back navigation");
+  for (const plan of ["A", "B"]) {
+    scenario = "leasehold"; await page.goto(destination(plan));
+    assert.match(await page.locator('[data-journey-stage="consent-state"]').innerText(), /1–3 months/);
+    const ids = await page.locator("[data-journey-stage]").evaluateAll(rows => rows.map(row => row.dataset.journeyStage));
+    assert.ok(ids.indexOf("consent-state") < ids.indexOf("complete"));
+    scenario = "manual"; await page.goto(destination(plan));
+    assert.match(await page.locator('[data-journey-stage="consent"]').innerText(), /PDPA consent.*not consent to a visit/);
+    assert.match(await page.locator('[data-journey-stage="visit"] h3').innerText(), /registered valuer/);
+    await page.getByRole("heading", { name: "Amounts follow the registered valuation" }).waitFor();
+  }
+  scenario = "normal";
   await page.goto(destination());
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  assert.equal(await page.locator('[data-journey-stage="review"] > span').evaluate(node => getComputedStyle(node).animationName), "none");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  assert.notEqual(await page.locator('[data-journey-stage="review"] > span').evaluate(node => getComputedStyle(node).animationName), "none");
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1100 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px overflow`);
-    if ([1440, 390].includes(width)) await page.screenshot({ path: path.join(artifacts, `apply-${width}.png`), fullPage: true });
+    // Freeze decorative loops and finish finite entrances for legible QA captures.
+    if ([1440, 390].includes(width)) await page.screenshot({ path: path.join(artifacts, `apply-${width}.png`), fullPage: true, animations: "disabled" });
   }
   await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.goto(destination("B", "plans/b"));
+  await page.getByRole("heading", { name: "Indicative guarantee floor" }).waitFor();
+  assert.match(await page.locator('[data-plan-calculation="b"]').innerText(), /RPGT retention estimate/);
+  await page.screenshot({ path: path.join(artifacts, "plan-b-notes.png"), fullPage: true, animations: "disabled" });
+  await page.goto(destination());
   await page.getByRole("button", { name: "Submit trade-in application" }).click(); assert.equal(calls.length, 0);
   await fill(page); assert.match(await page.locator("#address-preview").innerText(), /12A, JLN TEST/);
   // Verify server validation as well as native HTML validation.

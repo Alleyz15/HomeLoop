@@ -1,6 +1,6 @@
 # HomeLoop Frontend Implementation Log
 
-Last updated: 2026-10-17 (Asia/Kuala_Lumpur)
+Last updated: 2026-10-20 (Asia/Kuala_Lumpur)
 
 This file records frontend work by phase and action: what changed, which files were affected, bugs or gaps found, verification results, and commit references. It includes server-side Next.js helpers because they support the frontend journey. Backend implementations are included only as integration dependencies.
 
@@ -21,7 +21,7 @@ Product authority: [HomeLoop_更新_页面与流程.md](HomeLoop_更新_页面�
 |---|---|---|
 | F0 — Frontend foundation and API helpers | Implemented | Use the helpers in the remaining screens |
 | F1 — Shared layout and authentication | Implemented; signed-in checks pending | Verify owner/admin login and role redirects with real sessions |
-| F2 — Homeowner journey | Home, records, catalogue, development details and Compare Plans implemented; later journey partial | Photos, confirmation into Apply, submission/full application details and offer controls; hosted deployment/live-account checks |
+| F2 — Homeowner journey | Home, records, catalogue, development details, Compare Plans and Apply submission implemented in source; F2-10a/b refine the journey notes | Photos, full application details and owner response/offer controls; hosted deployment/live-account checks |
 | F3 — Admin journey | Role guard and helpers implemented; screens pending | Applications panel, application details, risk simulator |
 | F4 — Integration, QA and delivery | In progress | Resolve open contracts, build checks, browser QA and complete demo flow |
 
@@ -372,16 +372,32 @@ Implementation commit for F1-01 through F1-03: `c8d1fe2` (2026-10-15).
 - Remaining limits: real hosted owner/admin sessions/RLS and remote updated backend deployment have not been verified here. Application submission remains the next phase; no draft, reservation, schema, hosted account/settings, deployment or commit changes.
 - Local handoff: normal `.env` production preview restarted at `http://127.0.0.1:3000`. Open a priced saved valuation → choose a selling development/home type → Choose this home → comparison → either eligible calculation. The normal preview uses the backend already configured by the user; if that backend still runs the previous release, totals work and the calculation page explicitly waits for the additive response deployment. Sites guidance kept the approved existing theme/local-only scope; Supabase guidance informed verified session ownership and explicit filtered reads. Adviser artwork was generated with the built-in image tool; complete prompts and production/source paths are in `design/plans/README.md`.
 
-### F2-07 through F2-11 — Remaining homeowner actions
+### F2-10a — Plain-language journey notes and correct plan-specific visits
 
-These are remaining actions. Catalogue, development selection and Compare Plans are implemented; confirmation into Apply and later workflow portions remain planned.
+- Date / commit: 2026-10-20; pending commit. User approved targeted corrections and small motion, retaining the existing theme, calculations and useful notes.
+- Before → after: Apply previously described a registered valuation for every case and combined several stages. Presentation now separates review, owner agreement, the correct visit, formal offer, signing, selling (B), completion and handover. Each stage has a simple explanation and a practical owner note. Priced cases receive an initial range before consent; manual cases explicitly receive no invented range and require separate visit consent. Priced B uses an SDP/partner-agent inspection; A/manual uses a registered valuer. Leasehold adds state consent before completion. Planning stages are explicitly not live progress.
+- Affected files: new `apps/web/src/lib/apply-journey.ts`; `apps/web/src/app/apply/page.tsx`; new `scripts/apply_journey.test.mjs`; extended `scripts/check_apply.mjs`.
+- Preserved: existing financial amounts, itemised deductions, guarantee floor, ranges, rounding reconciliation, price/deposit difference, exclusions, original cash/retention warnings, preparation checklist, form validation, submission and one-active-case policy. No backend, migration, authentication or hosted configuration changes.
+- Bugs found/fixed: Apply's universal registered-valuer description was wrong for normal priced B; the initial-range/consent step and conditional leasehold timing were missing. Only presentation is corrected here; owner/admin response controls remain a later phase.
+
+### F2-10b — Reminder completion and restrained motion
+
+- Date / commit: 2026-10-20; pending commit.
+- Changes: add separate Plan B upfront-deposit/proceeds timing warning; expand preparation guidance without deleting existing notes; add general RPGT filing/payment, retention, sixth-year and refund reminders with official HASiL links. Checked 2026-10-20: filing/payment guidance `https://www.hasil.gov.my/en/ckht/pengenalan-sistem-taksir-sendiri-ckht-sts-ckht/`; retention `https://www.hasil.gov.my/en/ckht/pegangan-dan-remitan-wang-oleh-pemeroleh/`; rates `https://www.hasil.gov.my/en/ckht/kadar-cukai-keuntungan-harta-tanah/`; refund `https://www.hasil.gov.my/en/ckht/prosedur-bayaran-ckht/`. MD's 3% is explicitly the prototype assumption, not universal personal tax advice; no tax calculator is added.
+- Affected files: `apps/web/src/app/apply/page.tsx`, `apps/web/src/app/apply/apply.module.css`, `apps/web/src/app/plans/plans.module.css`.
+- Design: existing ivory/sage/forest, layout and typography retained under Sites guidance. Small muted-yuzu icon/note accents, subtle card hover lift, staggered timeline/calculation rows and decorative first-node pulse; no completion animation or changed figures. Plan CSS is scoped to calculation pages so comparison/adviser and unrelated screens keep their design. All new motion stops under reduced-motion preferences; content needs no animation/JavaScript to remain visible.
+- Verification: 62 focused Node tests passed; standalone TypeScript passed. Production browser checks passed twice against isolated local protocol fixtures: priced A/B visit and consent copy, manual A/B without invented amounts, conditional leasehold consent before completion, all-stage notes, Plan B floor/retention notes, live reduced-motion preference, 1440/768/390/320px without overflow, both Confirm links and return selection/cents, native/server form validation, retained values on failure, successful in-memory submission/Dashboard record, active-case block and owner/admin/metadata guards. No browser exceptions. Final visual captures disable decorative animation so finite entrances cannot obscure the screenshot; desktop/mobile and Plan B screenshots inspected under `apply-notes-20261020` in the local visualization workspace. Both runs restored the normal production build successfully. Whitespace check passed (only the existing LF/CRLF warning). No deployment or remote mutation.
+
+### F2-07 through F2-11 — Homeowner action status
+
+Catalogue, development selection, Compare Plans and Apply submission are implemented in source. Apply was added by teammate commit `e94dbf1`; manual support by `83f88e3` / `2014084`. Older dated entries above describe their state at the time. Owner response and admin workflow screens remain pending; source completion does not assert hosted deployment.
 
 | Action | Intended change | Existing integration points / proposed files | Bugs, dependencies and acceptance work |
 |---|---|---|---|
 | F2-07 Photos | Optional owner-folder upload and photo display | Existing valuation form/actions; storage integration and display files to be selected during implementation | Private `photos` bucket exists; test ownership and upload failures |
 | F2-08 New-home selection | Catalogue, details/types/quotation and guarded Choose this home handoff implemented | `/new-home`, `/new-home/[project]`, `/plans`, owned valuation reads | No internal interest registration or live inventory is claimed |
-| F2-09 Plan selection | Comparison, guidance, eligibility and detailed calculation views implemented in F2-09a–d | `/plans`, `/plans/a`, `/plans/b`, server-only `quotePlans()` | Confirm this plan stays disabled until Apply exists; deploy additive backend fields for itemised remote display |
-| F2-10 Apply | Timeline, cash timing, address/title, PDPA consent and submission | Proposed `apps/web/src/app/apply/page.tsx` and actions; existing application/valuation helpers | Resolve FE-BUG-02 before supporting manual-valuation applications |
+| F2-09 Plan selection | Comparison, guidance, eligibility and calculation views; teammate added Confirm links into Apply | `/plans`, `/plans/a`, `/plans/b`, server-only `quotePlans()` | Hosted itemisation still depends on the connected backend response; not redeployed here |
+| F2-10 Apply | Teammate implemented timeline, cash timing, address/title, PDPA and submission; F2-10a/b refine copy, reminders and motion | `apps/web/src/app/apply/`, `apps/web/src/lib/apply{,-model,-journey}.ts` | Local tests distinguish priced/manual paths; verify hosted manual migration and real owner flow separately |
 | F2-11 Owner responses | Proceed/withdraw, accept/switch/decline/review and e-SPA declaration | Existing application RPC wrappers; UI/actions paths to be selected | Test expiry, one-review/one-switch limits and permitted status transitions |
 
 ## F3 — Admin journey
@@ -431,7 +447,7 @@ Status: pending. No completion or deployment is claimed.
 | ID | Status / evidence | Problem and impact | Affected files / next action |
 |---|---|---|---|
 | FE-BUG-01 | Fixed locally; pending commit; targeted checks passed | Decimal valuation input caused RM1 differences from the agreed whole-RM calculation sequence | `apps/web/src/lib/valuation.ts`, `scripts/quote_plans.test.mjs`; see F2-05 |
-| FE-BUG-02 | Open; confirmed code/spec conflict | Result page says insufficient-data owners can apply; `submit_application` requires status `ok` and positive valuation amounts. Saving an unpriced record alone does not enable submission | `apps/web/src/app/valuation/result/[id]/page.tsx`, `apps/web/src/lib/valuations.ts`, `supabase/migrations/20261014111603_application_workflow.sql`; agree and implement the manual-valuation contract before F2-10; any schema fix requires a new migration |
+| FE-BUG-02 | Fixed in source by teammate commits `83f88e3` / `2014084`; hosted migration not verified here | Original conflict blocked insufficient-data cases. New forward migration validates legitimate manual cases; frontend distinguishes priced/manual/unavailable paths without fabricated prices | `supabase/migrations/20261017142952_manual_valuation_workflow.sql`, valuation/plan/application helpers; local fixture submission tested in F2-10. Owner/admin response screens remain unfinished |
 | FE-BUG-03 | Open; observed statically, no browser reproduction | Form initializes tenure to `Freehold`; selecting a road/type does not call `roadDetails()` or apply `tenure_mode`, despite earlier automatic-tenure claims. Leasehold users must manually correct it | `apps/web/src/app/valuation/valuation-form.tsx`, `apps/web/src/app/valuation/actions.ts`, `apps/web/src/lib/valuations.ts`; connect metadata and verify both tenures |
 | FE-BUG-04 | Reproduced in the exact production chunk; fixed locally, pending commit | A clean build did not catch the browser receiving initial-state function references instead of objects and crashing at `search.results.length` | State objects moved to `apps/web/src/app/valuation/state.ts`; imports corrected in actions/form; plain-state tests and successful isolated owner browser navigation passed; see F2-02a |
 | FE-BUG-05 | Open; observed statically, conditional path not exercised | An intermediate unit without typical catalog sizes allows manual sizes, but hidden `land_sqm`/`floor_sqm` values are sent only when `needsSizes` is true (corner/custom). The intermediate manual fallback therefore sends empty sizes and can be rejected | `apps/web/src/app/valuation/valuation-form.tsx`, `apps/web/src/app/valuation/actions.ts`; submit manually entered intermediate sizes and test missing catalog metadata |
