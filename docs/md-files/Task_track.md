@@ -1,6 +1,6 @@
 # HomeLoop Task Track
 
-最后更新：2026-10-16｜截止：**10/23 23:59**
+最后更新：2026-10-20｜截止：**10/23 23:59**
 
 本文件记录整个系统的任务进度，分为**后端**与**前端**两部分。
 
@@ -114,6 +114,17 @@
 - [x] 人工 `record_inspection` 必须有正数 `confirmed_value`，并在 note 写注册估价师与估价依据；不使用 AI adjustment reason，同时记录 `manual_valuation_resolved_at / by`
 - [x] 方案 A 的 SDP township 与「确认市值不高于新屋价格」规则在 `issue_offer`、`respond_review`、`switch_plan` 再检查。人工估价后若方案 A 不合格，屋主可在正式报价前改方案 B，且不消耗一次正式 `plan_switch_count`
 - [x] `admin_application_flags` 增加 `manual_valuation_required`；新 RPC 维持 SECURITY DEFINER、空 search path、owner/admin 检查、`FOR UPDATE`、每动作一笔 event、只授权 authenticated。全新本地 reset 后 pgTAP 94 项通过，schema lint 无警告
+
+申请补件照片与讯息隐私扩展：2026-10-20｜本地完成，commit / 远端 migration 待用户确认
+
+- [x] 新增 migration `20261019191115_application_photos_and_message_privacy.sql`：独立私有 `application-photos` bucket、照片 reservation / cancel / submit RPC；仅 JPEG / PNG / WebP，每张最多 5 MiB，每次补件或复核最多 5 张。原 `photos` bucket、估价公式与既有流程 RPC 签名不变。
+- [x] 发现并修复隐私缺口：原 event 的 RLS 只隔离不同申请，未阻止屋主直接通过 API 查询本人申请的内部 `note / payload`。现以 column grants 限制，admin 透过受保护的 `get_application_audit()` 读取；明确给屋主看的文字使用 `owner_message` / `send_owner_message()`，不会把旧 admin note 自动公开。
+- [x] 照片绑定申请、当前补件/正式报价 event 与提交 event；必须本人上传、真实 Storage object 与 metadata 相符；错误、过期、跨用户与重复提交拒绝。提交后正常 session 不可覆盖或删除证据。补件及复核仍调用原状态机，维持每动作一笔 event 和一次复核限制。
+- [x] 新增 server-only helpers 与验证规则：`apps/web/src/lib/application-photos.ts`、`application-photo-policy.ts`。这是后端接口支援，未修改或新增 frontend 页面。
+- [x] 全新本地 reset 后 pgTAP **151 项**、Node **73 项**与 TypeScript 通过；真实本地 Auth / Storage 上传、下载、补件、Plan B 复核及权限测试通过，测试资料已清理。schema lint 无错误；保留原有公开参考目录 `road_catalog` advisor 提示，未修改不相关目录权限。
+- [ ] 用户先 review / commit 后端；远端 migration 与后续 frontend 另行进行。本次没有修改 hosted Supabase、Render、Vercel、环境变量或 secrets；没有新增自动清理排程。
+
+逐项变更、受影响文件、API 使用方式、测试及本地 Docker Auth health-check 注意事项见 [backend-application-photos.md](../backend-application-photos.md)。此扩展的 Application Details frontend 尚未开始，不记为前端已完成。
 
 已确定的状态机决定：
 
