@@ -11,10 +11,10 @@ export function PlanError({ message }: { message: string }) {
 }
 
 export function ContextBar({ journey }: { journey: PlanJourney }) {
-  const { valuation, launch, selection, quote, isSdp } = journey;
+  const { valuation, launch, selection, isSdp } = journey;
   return <section className={styles.context} aria-label="Your selected homes" data-plan-context>
-    <div><span className={styles.eyebrow}>YOUR CURRENT HOME</span><h2>{valuation.scheme} <span>· {isSdp ? "SDP township" : "Outside an SDP township"}</span></h2><strong>{marketRm(Math.round(Number(valuation.low)))} – {marketRm(Math.round(Number(valuation.high)))}</strong><p>Middle estimate {marketRm(Math.round(Number(valuation.estimate)))}</p></div>
-    <div><span className={styles.eyebrow}>YOUR CHOSEN NEW HOME</span><h2>{launch.project} <span>· {selection.homeType}</span></h2><strong>{marketRm(selection.salesQuote ? Number(selection.salesQuote) : quote.new_home.price)}</strong><p>Price source: {quote.new_home.price_source === "sales_quote" ? "SDP sales quotation" : "published project starting price"}</p><small>Plan amounts are rounded to whole RM.</small>{journey.homeTypeNote && <small>{journey.homeTypeNote}</small>}</div>
+    <div><span className={styles.eyebrow}>YOUR CURRENT HOME</span><h2>{valuation.scheme} <span>· {isSdp ? "SDP township" : "Outside an SDP township"}</span></h2>{journey.mode === "priced" ? <><strong>{marketRm(Math.round(Number(valuation.low)))} – {marketRm(Math.round(Number(valuation.high)))}</strong><p>Middle estimate {marketRm(Math.round(Number(valuation.estimate)))}</p></> : <><strong>Registered valuation pending</strong><p>No price range before inspection.</p></>}</div>
+    <div><span className={styles.eyebrow}>YOUR CHOSEN NEW HOME</span><h2>{launch.project} <span>· {selection.homeType}</span></h2>{journey.mode === "priced" ? <><strong>{marketRm(selection.salesQuote ? Number(selection.salesQuote) : journey.quote.new_home.price)}</strong><p>Price source: {journey.quote.new_home.price_source === "sales_quote" ? "SDP sales quotation" : "published project starting price"}</p><small>Plan amounts are rounded to whole RM.</small></> : <><strong>Price saved for the application</strong><p>Price source: {journey.newHome.priceSource === "sales_quote" ? "SDP sales quotation" : "published project starting price"}</p><small>Amounts will appear only after the registered valuation.</small></>}{journey.homeTypeNote && <small>{journey.homeTypeNote}</small>}</div>
   </section>;
 }
 

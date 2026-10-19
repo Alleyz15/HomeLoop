@@ -19,7 +19,7 @@ test("new / priced / insufficient-data accounts have honest distinct states", ()
 });
 
 test("every workflow status maps to the right stage", () => {
-  const expected = { submitted: 1, under_review: 1, info_requested: 1, indicative_sent: 2, owner_proceed: 3, inspection_scheduled: 3, inspected: 4, offer_sent: 4, review_requested: 4, accepted: 5, espa_signed: 5, listed: 6, buyer_found: 6, guarantee_triggered: 6, old_home_completed: 7, handover: 8, withdrawn: 1, rejected: 1, declined: 4, expired: 4 };
+  const expected = { submitted: 1, under_review: 1, info_requested: 1, indicative_sent: 2, manual_valuation_pending: 2, owner_proceed: 3, inspection_scheduled: 3, inspected: 4, offer_sent: 4, review_requested: 4, accepted: 5, espa_signed: 5, listed: 6, buyer_found: 6, guarantee_triggered: 6, old_home_completed: 7, handover: 8, withdrawn: 1, rejected: 1, declined: 4, expired: 4 };
   for (const [status, stage] of Object.entries(expected)) {
     const view = dashboardView({ ...empty, valuation, application: { ...app, status } }, now);
     assert.equal(view.stage, stage, status);

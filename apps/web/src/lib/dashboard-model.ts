@@ -30,6 +30,7 @@ const STATUS_COPY: Record<Application["status"], [string, string, string]> = {
   under_review: ["Under review", "Your application is with our team.", "The SDP trade-in team is reviewing your application. No action is needed from you at this stage."],
   info_requested: ["Information needed", "A little more detail, a clearer next step.", "The team needs additional information before your application can move forward."],
   indicative_sent: ["Initial price range received", "A first look at your way forward.", "Your initial price range is ready. It is not a formal offer; your decision to continue comes before a home visit."],
+  manual_valuation_pending: ["Manual valuation decision needed", "Your home needs a registered valuation.", "No indicative RM range is available. Agree to proceed before the team schedules a registered valuer, or withdraw the application."],
   owner_proceed: ["Interest confirmed", "Let’s take a closer look.", "You have chosen to continue. The team will arrange the appropriate home visit or formal valuation."],
   inspection_scheduled: ["Home visit scheduled", "Your home visit is arranged.", "The team has recorded an appointment for your property. See the scheduled date below."],
   inspected: ["Home visit completed", "One step closer to a formal offer.", "Your home visit is complete. The team is reviewing the findings before issuing a formal offer."],
@@ -55,7 +56,7 @@ export function hasPrice(valuation: DashboardValuation | null) {
 function stageForStatus(app: DashboardApplication, status: string): number {
   if (["submitted", "under_review"].includes(status)) return 1;
   if (status === "info_requested") return app.info_return_status === "inspected" ? 4 : 1;
-  if (status === "indicative_sent") return 2;
+  if (["indicative_sent", "manual_valuation_pending"].includes(status)) return 2;
   if (["owner_proceed", "inspection_scheduled"].includes(status)) return 3;
   if (["inspected", "offer_sent", "review_requested", "expired", "declined"].includes(status)) return 4;
   if (status === "accepted") return 5;

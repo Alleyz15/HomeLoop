@@ -1,11 +1,22 @@
-export type JourneyValuation = { id: string; scheme: string | null; road_norm: string | null; estimate: number | null; low: number | null; high: number | null };
-export type ValuationContext = { state: "none" | "missing" | "error" | "ready" | "unpriced"; valuation: JourneyValuation | null };
+export type JourneyValuationStatus = "ok" | "insufficient_data" | "not_found" | "unsupported_property_type";
+export type JourneyValuation = { id: string; scheme: string | null; road_norm: string | null; valuation_status: JourneyValuationStatus; estimate: number | null; low: number | null; high: number | null };
+export type ValuationJourneyState = "none" | "missing" | "error" | "ready" | "manual" | "unavailable";
+export type ValuationContext = { state: ValuationJourneyState; valuation: JourneyValuation | null };
+export const INSUFFICIENT_DATA_MESSAGE = "Not enough recent sales to estimate automatically. You can still apply — a registered valuer will value your home after you agree to proceed.";
 export function validValuationId(value: string | undefined) {
   return !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 export function hasValuationRange(value: JourneyValuation | null) {
   return !!value && [value.low, value.estimate, value.high].every(n => n != null && Number.isFinite(Number(n)) && Number(n) > 0)
     && Number(value.low) <= Number(value.estimate) && Number(value.estimate) <= Number(value.high);
+}
+export function valuationJourneyState(value: JourneyValuation): Extract<ValuationJourneyState, "ready" | "manual" | "unavailable"> {
+  if (value.valuation_status === "ok" && hasValuationRange(value)) return "ready";
+  if (value.valuation_status === "insufficient_data" && !hasValuationRange(value)) return "manual";
+  return "unavailable";
+}
+export function canContinueWithValuation(state: ValuationJourneyState) {
+  return state === "ready" || state === "manual";
 }
 export function marketRm(value: number) {
   // Keep the site's RM-prefix style consistent across browser/Node ICU versions.

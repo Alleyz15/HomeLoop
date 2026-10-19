@@ -15,4 +15,7 @@ data/*
 .vercel/
 .DS_Store
 .superpowers/
+.tools/effectcraft/
+.tools/npm/
+.tools/pip-cache/
 

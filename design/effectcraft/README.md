@@ -1,5 +1,7 @@
 # Welcome-page motion source
 
+For the downloaded macOS app and command-line tool, see [local setup](LOCAL_SETUP.md).
+
 Original HomeLoop artwork authored through **EffectCraft 0.10.0**. The SVG
 shapes in `welcome-journey.jsx` are imported into real editable EffectCraft
 layers, then animated with eased scale/position/rotation/opacity keyframes,
