@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, CircleAlert, FolderOpen, LockKeyhole } from "lucide-react";
+import { ArrowLeft, CircleAlert, FolderOpen, LockKeyhole } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { adminCaseRevision, getAdminCase, getAdminCaseCapacity, getAdminCaseEvidence } from "@/lib/admin-application-detail";
 import { adminCaseActions, adminCaseHref, caseStageNote, caseStatus, initialARange, positive } from "@/lib/admin-application-detail-model";
@@ -42,6 +42,5 @@ export default async function AdminApplicationDetails({ params, searchParams }: 
       audit: <CaseHistory section="audit" detail={detail} context={context} returnTo={returnTo} messagesParam={query.messages} auditParam={query.audit} />,
     }} />
     <aside className={styles.privacy}><LockKeyhole size={15} aria-hidden="true" /><p>Private case workspace · Internal notes are not shared with the owner. Signing, settlement and handover happen outside HomeLoop; record each milestone only after it is confirmed.</p></aside>
-    <a className={styles.back} href={returnTo}>Back to filtered Applications<ArrowUpRight size={14} aria-hidden="true" /></a>
   </div>;
 }
