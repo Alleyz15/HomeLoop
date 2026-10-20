@@ -39,6 +39,7 @@ export function CaseProgress({ data }: { data: DashboardData }) {
     {["offer_sent", "review_requested", "expired", "accepted", "listed", "buyer_found", "guarantee_triggered"].includes(view.status ?? "") && <div className={styles.message}><strong>{app.plan === "B" ? "Formal offer · agreed price floor, conditions apply" : "Formal purchase offer"}</strong><p className={styles.amount}>{money(app.offer_amount)}</p>
       {app.offer_expires_at && <p className={styles.deadline}><Clock3 size={14} aria-hidden="true" />{view.status === "expired" ? "Response period ended" : ["offer_sent", "review_requested"].includes(view.status ?? "") ? "Respond by" : "Original response deadline"}: {dateLabel(app.offer_expires_at, true)} (MYT)</p>}
     </div>}
-    <p className={styles.panelNote}>This view tracks saved progress. Application response forms and other unfinished workflow screens are coming in their own phases. No action has been submitted here.</p>
+    <Link prefetch={false} className={styles.textLink} href={`/dashboard/applications/${app.id}`}>Open application details & respond<ArrowUpRight size={14} aria-hidden="true" /></Link>
+    <p className={styles.panelNote}>This summary tracks saved progress. Open the application to read messages, view its details and respond when a step needs your decision. No action is submitted from this summary.</p>
   </section>;
 }

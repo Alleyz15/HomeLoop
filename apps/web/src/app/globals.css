@@ -142,6 +142,8 @@ body:has([data-owner-home]) .site-footer > p { padding-top: 8px; padding-bottom:
 body:has([data-owner-home]) .site-header [data-slot="separator"], body:has([data-owner-home]) .site-footer [data-slot="separator"] { background: #dfe3d5; }
 /* Dashboard-only shell; other routes retain their existing presentation. */
 body:has([data-dashboard-page]) { background: #f7f7ef; }
+body:has([data-application-detail]) { background: #f7f7ef; }
+.site-main:has([data-application-detail]) { padding-top: 28px; }
 /* Catalogue keeps its textured artwork behind the shared shell. */
 body:has([data-catalogue-page]) { background: #f7f7ef; }
 .site-main:has([data-catalogue-page]) { padding-top: 28px; }

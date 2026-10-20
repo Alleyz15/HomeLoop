@@ -1,6 +1,6 @@
 # Application follow-up photos and message privacy
 
-Implementation date: 2026-10-20. Backend-only; commit and hosted deployment pending.
+Implementation date: 2026-10-20. Backend commit: `fe21d07`. Hosted database migration applied on 2026-10-20 after explicit user approval; web deployment is separate.
 
 ## Scope and user-approved limits
 
@@ -23,6 +23,7 @@ Product reference: [HomeLoop_更新_页面与流程.md](md-files/HomeLoop_更新
 | Backend 3: server helpers | `apps/web/src/lib/application-photo-policy.ts`, `apps/web/src/lib/application-photos.ts`. | Adds shared validation and server-only upload/removal/submission/signed-view/message/audit helpers using the signed-in session, not service-role bypass. No frontend page, layout, form or navigation changed. |
 | Backend 4: tests | `supabase/tests/application_photos_test.sql`, `scripts/application_photos.test.mjs`, `scripts/check_application_photos.mjs`. | Verified permissions, invalid files, wrong/expired stages, stale request tabs, duplicates, five-photo limits, atomic submission, single review, immutable evidence and public/private message separation. Actual local Auth/Data/Storage API tests also passed. |
 | Backend 5: documentation | This file and `docs/md-files/Task_track.md`. | Records changes, verification, compatibility and deployment boundaries. No commit or hosted migration/deployment was performed. |
+| Backend 6: approved hosted deployment | Applied the unchanged migration from commit `fe21d07` to Supabase project `qcuzvdkrqzxogigsxisk`; updated this log, `Task_track.md` and the frontend integration log. | The new Application Details screen could not load because the running frontend used hosted Supabase, where the local-only photo/message extension was absent. Applied only this migration, aligned its history ID with the repository, and verified permissions and reads. No application code, formula, other migration, environment variable, Render or Vercel change. |
 
 ## Backend contract for the later frontend
 
@@ -74,8 +75,19 @@ Local runtime note: Docker's Auth health-check shell reported `exec format error
 
 ## Deployment boundary and remaining work
 
-- **Not yet applied to hosted Supabase.** Review and commit the new migration first. Do not edit a migration after it has been pushed; use a later migration for subsequent changes.
-- Deploy the database migration before enabling frontend code that calls these RPCs. It creates the bucket and policies; no manual public bucket setup is needed.
+- **Applied to hosted Supabase on 2026-10-20, with explicit user approval.** Version `20261019191115`, name `application_photos_and_message_privacy`, source commit `fe21d07`. Do not edit this deployed migration; use a later migration for subsequent changes.
+- The database dependency for the new frontend is now present. The migration created the private bucket and policies; no manual public bucket setup is needed.
 - Server helpers live in the Next.js project, so publishing their use later requires the normal web deployment. This work did not deploy Vercel, change Render/FastAPI, edit environment variables or change secrets.
 - Pending/cancelled records are not a valuation draft/resume feature. No automatic expired-upload garbage collector or retention job is included. Expired unsubmitted photos can be cancelled and removed through the existing cleanup helper. Any scheduled retention/deletion policy needs separate approval; do not remove Storage files by deleting metadata SQL rows.
-- **Frontend remains a separate, unstarted phase for this extension.** After the backend commit, implement the approved Application Details page and wire its actual stage-specific actions/photos/messages to this contract. Do not show fake uploads or invented workflow statuses.
+- Application Details and owner responses were implemented in the subsequent frontend phase (F2-11a–c). The hosted-migration action does not deploy that frontend or claim a successful browser check using the user's own session. Refresh the local Application Details page to verify its visible result.
+
+## Hosted deployment verification — 2026-10-20
+
+- Preflight confirmed only this repository migration was missing. No reset, seed, test accounts, uploaded test files or application-status changes were performed on hosted Supabase.
+- Applied the exact approved SQL. Supabase's migration tool initially recorded generated version `20261020052443`; only that newly created history row was aligned to the repository's original version `20261019191115`. The final migration list contains one entry for this extension, preventing teammates' CLI workflows from treating it as a different or duplicate migration.
+- Verified `application_photos`, `application_events.owner_message`, the private `application-photos` bucket, five public RPCs, RLS and owner-message column grants. The bucket is private, permits JPEG/PNG/WebP, and limits each object to 5,242,880 bytes.
+- Verified authenticated sessions cannot directly insert photo metadata or select internal event `note` / `payload`; all five RPCs reject a missing user identity. The owner-scoped application, valuation, safe event and photo queries succeeded in a read-only database transaction. No customer field values were printed or modified by those checks.
+- The hosted Data API recognises both updated resources and rejects anonymous reads with SQL permission code `42501` (HTTP 401), not a missing-table/column error.
+- The offer-formula definition hash is identical before/after deployment. Existing application and valuation counts, and the existing valuation `photos` bucket configuration, are unchanged. The approved owner-note backfill and audit-column restrictions are intentional parts of this migration, not a change to the case workflow.
+- Security advisor review: existing [public reference materialized-view notice](https://supabase.com/docs/guides/database/database-linter?lint=0016_materialized_view_in_api) and [disabled leaked-password-protection notice](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) remain unchanged and were not addressed outside this request's scope. The [authenticated SECURITY DEFINER RPC notice](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) now covers 33 functions (previously 28): the five additions are intentionally exposed authenticated RPCs with empty search paths, explicit ownership/admin checks and no anonymous execution grant. Their missing-identity denials were verified; no blanket permissions or RLS bypass were introduced for client sessions.
+- Migration file SHA-256: `E9E31D771522113388B7C27C0CF11D7DD771AB2CAE00AF0466C5D26167E041F9`. Source unchanged by deployment.

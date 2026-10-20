@@ -115,14 +115,14 @@
 - [x] 方案 A 的 SDP township 与「确认市值不高于新屋价格」规则在 `issue_offer`、`respond_review`、`switch_plan` 再检查。人工估价后若方案 A 不合格，屋主可在正式报价前改方案 B，且不消耗一次正式 `plan_switch_count`
 - [x] `admin_application_flags` 增加 `manual_valuation_required`；新 RPC 维持 SECURITY DEFINER、空 search path、owner/admin 检查、`FOR UPDATE`、每动作一笔 event、只授权 authenticated。全新本地 reset 后 pgTAP 94 项通过，schema lint 无警告
 
-申请补件照片与讯息隐私扩展：2026-10-20｜本地完成，commit / 远端 migration 待用户确认
+申请补件照片与讯息隐私扩展：2026-10-20｜后端 commit `fe21d07`；用户批准后已套用 hosted Supabase migration `20261019191115`
 
 - [x] 新增 migration `20261019191115_application_photos_and_message_privacy.sql`：独立私有 `application-photos` bucket、照片 reservation / cancel / submit RPC；仅 JPEG / PNG / WebP，每张最多 5 MiB，每次补件或复核最多 5 张。原 `photos` bucket、估价公式与既有流程 RPC 签名不变。
 - [x] 发现并修复隐私缺口：原 event 的 RLS 只隔离不同申请，未阻止屋主直接通过 API 查询本人申请的内部 `note / payload`。现以 column grants 限制，admin 透过受保护的 `get_application_audit()` 读取；明确给屋主看的文字使用 `owner_message` / `send_owner_message()`，不会把旧 admin note 自动公开。
 - [x] 照片绑定申请、当前补件/正式报价 event 与提交 event；必须本人上传、真实 Storage object 与 metadata 相符；错误、过期、跨用户与重复提交拒绝。提交后正常 session 不可覆盖或删除证据。补件及复核仍调用原状态机，维持每动作一笔 event 和一次复核限制。
 - [x] 新增 server-only helpers 与验证规则：`apps/web/src/lib/application-photos.ts`、`application-photo-policy.ts`。这是后端接口支援，未修改或新增 frontend 页面。
 - [x] 全新本地 reset 后 pgTAP **151 项**、Node **73 项**与 TypeScript 通过；真实本地 Auth / Storage 上传、下载、补件、Plan B 复核及权限测试通过，测试资料已清理。schema lint 无错误；保留原有公开参考目录 `road_catalog` advisor 提示，未修改不相关目录权限。
-- [ ] 用户先 review / commit 后端；远端 migration 与后续 frontend 另行进行。本次没有修改 hosted Supabase、Render、Vercel、环境变量或 secrets；没有新增自动清理排程。
+- [x] 2026-10-20 用户明确批准后，仅套用既有 photo/privacy migration 到 hosted Supabase `qcuzvdkrqzxogigsxisk`；history 对齐原版本 `20261019191115`，没有重复 migration。验证新表/字段/私有 bucket/五个 RPC、RLS/column grants、无身份拒绝及 owner-scoped 只读查询通过；原报价函数 hash、既有记录数量和 valuation `photos` bucket 配置不变。只更新部署记录，未改应用代码、原 migration 文件、公式、Render、Vercel、环境变量或 secrets；没有新增自动清理排程。此项为数据库部署，不代表 frontend 已上线或用户 session 浏览器验收完成。
 
 逐项变更、受影响文件、API 使用方式、测试及本地 Docker Auth health-check 注意事项见 [backend-application-photos.md](../backend-application-photos.md)。此扩展的 Application Details frontend 尚未开始，不记为前端已完成。
 
@@ -262,7 +262,8 @@
 - [x] 2026-10-16 Welcome 页（`/`）：完成获批准的现代介绍页与 EffectCraft 原创动画；guest 可登入并继续估价，owner/admin 显示对应入口；详见 1.12 与前端记录 F2-01a（待 commit）。
 - [x] 2026-10-16 Dashboard 总览画面（`/dashboard`）：8 格进度条、真实保存资料的状态卡、当前屋与所选新屋、方案 B 子进度、原创 EffectCraft 动画、手机排版及 loading/error/empty 状态。按用户确认，本阶段只完成 Dashboard；尚未完成的详情/选新屋/回应报价入口停用并注明，不扩建其他页面。详情及测试结果见前端记录 F2-06a/b/c（待 commit，未部署）。
   - [x] 2026-10-16 用户批准改为双页：`/home` 主入口（Your Records + 左右等高双卡、不同 EffectCraft 动画，无草稿/Current Home 卡），`/dashboard` 多笔记录、汇总卡、搜索筛选分页、每份申请展开自己的 8 格进度。保留一人一份活跃申请规则；全站页头 sticky，移除屋主页头四个入口，品牌返回 `/home`。Home 已先通过桌面一屏及手机验证，再实施记录页；完整验证结果见 F1-05、F2-06d/e/f。
-  - [ ] 后续阶段：接上申请详情、报价回应及选新屋等页面；真实账号与线上 RLS 端到端验收。保证期截止与实际结算净额没有足够资料时不虚构。
+  - [x] 2026-10-20 接上 `/dashboard/applications/[id]` 屋主详情页：从展开的个别申请进入，显示真实记录与当前阶段的回应操作；见 F2-11a–c。此项是源码完成，不代表已部署。
+  - [ ] 真实 hosted 账号与线上 RLS 端到端验收；前一阶段的 photo/privacy migration 必须先套用目标数据库。保证期截止与实际结算净额没有足够资料时不虚构。
 - [x] 2026-10-15 ① 估价输入（`/valuation`）：路名搜索（JALAN/JLN 同字、自动带出期数、县与是否 SDP 标签）→ 屋型（只列这条路真实成交过的，附近 3 年笔数与常见面积）→ 单位类型（中间单位自动带入常见面积并显示占比；角头/自填则手动输入）→ 地契；m² / sq ft 切换会换算已输入的数字；排屋 20×70 / 22×75 / 22×80 尺快捷按钮；搜不到路名时提示改用期数或 township（第 4 节）
   - [ ] **还没做**：照片上传（第 4 节标为可选）。需要 Supabase Storage `photos` bucket 的本人目录上传
 - [x] 2026-10-15 ② 估价结果（`/valuation/result/[id]`）：区间与中间值、可信度（三档各自的白话说明）、10 笔参考成交表（月份、地段、建筑、价格、每平方米）、Act 242 免责声明在页脚；资料不足时不显示数字、改为说明少于 10 笔并建议人工估价；非 SDP 旧屋显示「只适用方案 B」卡片
@@ -275,7 +276,8 @@
   - [ ] 下一阶段：实现 `/apply` 后才启用 Confirm this plan；目前不创建申请或预订。远端后端需重新部署才返回新增扣除明细；前端兼容旧版 totals-only API 并明确提示，未部署或修改 hosted 设置。
 - [ ] ⑤ 换屋计划书 + 提交申请（`/apply`，同一页）：时间线、资金进出、订金缺口提醒、要准备的东西、RPGT 提醒；下半部填门牌、地契号码（可选）、PDPA 同意（第 5.3、5.4 节）
   - [x] 2026-10-20 用户批准定向文案/动效完善（F2-10a/b，待 commit）：保留队友 `e94dbf1` 已有申请页面、表单与金额；新增每阶段白话说明及屋主行动提示，分清 priced A / priced B / manual 的上门类型，补齐初步区间/继续意愿、leasehold 同意时间、B 订金资金先后与 RPGT 来源提醒。保留方案页全部明细、保底、区间及注意事项；仅详情页/申请页加柔和 yuzu 点缀、小动效与 reduced-motion。62 项 Node 测试、独立 TypeScript 及两次隔离 production 浏览器验收通过（priced/manual A/B、leasehold、1440/768/390/320px、动效/低动态偏好、选择保留、表单及内存提交/重复申请回归）；无 runtime exception。未改后端、数据库或线上配置；完整流程仍需后续屋主回应及 admin 画面。
-- [ ] 报价相关操作：初步报价「继续 / 不用了」；正式报价「接受 / 换方案 / 拒绝 / 要求复核」与 14 天倒数；接受后「我已签约」（第 5.5 节）
+- [x] 2026-10-20 F2-11a–c（待 commit，未部署）：新增屋主申请详情与真实阶段回应；初步范围 Continue / Withdraw、人工估价独立同意、补件文字/私有照片、正式报价 Accept / 合资格一次 Switch / Decline / 一次 Review 与真实到期倒数、接受后 e-SPA 签署声明。后台仍需确认签署；不连接 HIMS 或收款。沿用 ivory / forest / sage、小幅暖色点缀、分层阴影、移动文件图案、hover/focus/click 动效与 reduced-motion。服务端重读本人申请/上下文/版本后调用原 RPC；不修改后端、原公式、已有 migration 或 .env。
+  - [x] 84 项 Node 测试、独立 TypeScript、lint error 检查及 production build 通过。逐动作文件/问题/完整浏览器验收结果见 `Frontend_Implementation_Log.md` F2-11a–c；真实 hosted 部署仍另行确认。
 
 ### F3. Admin 端
 
