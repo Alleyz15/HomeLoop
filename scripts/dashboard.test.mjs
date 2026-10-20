@@ -10,6 +10,15 @@ const valuation = { id: "valuation-1", estimate: 785635.36, low: 720000, high: 8
 const app = { id: "app-1", valuation_id: valuation.id, launch_id: 7, status: "under_review", plan: "A", created_at: "2026-10-11T12:00:00Z", updated_at: "2026-10-12T12:00:00Z", offer_expires_at: "2026-10-30T12:00:00Z" };
 const empty = { valuation: null, application: null, events: [], project: null, error: false, contextError: false };
 
+test("application progress keeps its detail entry point without a duplicate saved-valuation link", async () => {
+  const progress = await readFile(new URL("../apps/web/src/app/dashboard/case-progress.tsx", import.meta.url), "utf8");
+  const records = await readFile(new URL("../apps/web/src/app/dashboard/dashboard-screen.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(progress, /View saved valuation|\/valuation\/result\//i);
+  assert.match(progress, /href=\{`\/dashboard\/applications\/\$\{app\.id\}`\}/);
+  assert.match(progress, /Open application details &amp; respond|Open application details & respond/);
+  assert.match(records, /href=\{`\/valuation\/result\/\$\{record\.id\}`\}/);
+});
+
 test("new / priced / insufficient-data accounts have honest distinct states", () => {
   assert.equal(dashboardView(empty, now).stage, 0);
   assert.equal(dashboardView({ ...empty, valuation }, now).stage, 1);
