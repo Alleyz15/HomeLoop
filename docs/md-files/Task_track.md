@@ -284,6 +284,7 @@
 - [x] 2026-10-20 仅完成双页实施交接计划（非页面实现）：[Admin Dashboard / Application Details plan](../superpowers/plans/2026-10-20-admin-dashboard-and-application-details.md)。包含逐阶段控件与 RPC、资料/隐私/照片/AI 规则、文件分工、测试及 G1 正式报价预览 / G2 方案 B 初步范围语义的批准停点。实际 A1 / A2 仍如下列待做；不更改屋主现有画面或后台合同。
 - [x] 2026-10-20 A1 只读申请面板（`/admin`）源码完成：真实每月额度/用量、All + 七个工作队列（含接受后追踪）、完整资料计数、分页、申请人/物业/项目搜索、旧屋 township/方案/警告筛选、明确缺资料/错误状态；沿用 ivory / forest-green / sage，轻动效、键盘操作、reduced-motion 与手机横向表格。读取不调用会修改到期状态的 flags RPC，不新增报价公式或 workflow 写入。94 项 Node 测试、TypeScript、lint 与 production/browser 检查记录见 `Frontend_Implementation_Log.md` F3-01a；hosted migration/权限/额度配置只读核对完成。待用户审核/commit，未部署；真实 LOCAL Supabase / 浏览器 RLS 验证因本机无 Docker/Supabase 未执行。Details 尚未实现，逐案入口诚实注明不可用。
   - [ ] A1.4 每月额度编辑：按计划在 Dashboard 审核后另外实施；不在本次只读面板阶段新增。
+  - [x] 2026-10-20 用户批准简化 admin 页头（F3-01b，待 commit）：移除 Refresh records 按钮、Loaded 时间与不用的 DTO 字段/样式；移除 Applications / Risk simulator 导航链接。保留 Logo、账号、Sign out、admin 登录直达 `/admin` 与原有资料读取/API。A1 原始实现 commit 已核实为 `96edfb8`。
 - [ ] A2 申请详情（`/admin/applications/[id]`）：完整资料、AI 估价与参考成交、照片、AI 辅助摘要、操作记录；按当前关卡显示操作按钮与表单（看屋结果、调整原因、公式算出的报价预览）（第 5.5 节）
 - [ ] A3 风险模拟（`/admin/simulator`）：拉杆与即时结果
 

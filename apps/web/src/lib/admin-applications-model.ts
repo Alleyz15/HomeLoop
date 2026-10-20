@@ -39,7 +39,7 @@ export type AdminRecord = {
 };
 export type AdminDashboardData = {
   records: AdminRecord[]; listError: boolean; referenceErrors: boolean;
-  month: string; capacity: { A: Capacity; B: Capacity }; loadedAt: string;
+  month: string; capacity: { A: Capacity; B: Capacity };
 };
 
 const STATUS_LABELS: Record<string, string> = {

@@ -56,5 +56,5 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
   const profiles = value(profilesResult), valuations = value(valuationsResult), projects = value(projectsResult);
   return { records: buildAdminRecords({ applications: apps ?? [], profiles, valuations, projects, usage, limits }, now),
     listError: apps === null, referenceErrors: profiles === null || valuations === null || projects === null,
-    month, capacity: { A: capacityFor("A", month, usage, limits), B: capacityFor("B", month, usage, limits) }, loadedAt: new Date(now).toISOString() };
+    month, capacity: { A: capacityFor("A", month, usage, limits), B: capacityFor("B", month, usage, limits) } };
 }

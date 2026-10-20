@@ -85,6 +85,12 @@ try {
   await page.getByRole("button", { name: "Sign in", exact: true }).click(); await page.waitForURL(base + "/admin");
   const main = page.locator("[data-admin-dashboard]");
   await page.getByRole("heading", { name: "Applications.", exact: true }).waitFor();
+  assert.equal(await page.getByRole("link", { name: "Refresh records", exact: true }).count(), 0);
+  const header = page.getByRole("navigation", { name: "Primary navigation" });
+  assert.equal(await header.getByRole("link", { name: "Applications", exact: true }).count(), 0);
+  assert.equal(await header.getByRole("link", { name: "Risk simulator", exact: true }).count(), 0);
+  assert.equal(await header.getByRole("link", { name: "HomeLoop home" }).getAttribute("href"), "/admin");
+  assert.equal(await header.getByRole("button", { name: "Sign out", exact: true }).count(), 1);
   assert.equal(await page.locator("tbody tr").count(), 10); assert.match(await main.innerText(), /25 applications/);
   assert.match(await page.locator('[data-capacity="A"]').innerText(), /RM4,100,000/);
   assert.match(await page.locator('[data-capacity="A"]').innerText(), /Near capacity/);
@@ -97,7 +103,7 @@ try {
   assert.equal(await page.locator("tbody tr").count(), 3); assert.equal(new URL(page.url()).searchParams.get("queue"), "accepted");
   await page.setViewportSize({ width: 768, height: 1100 }); assert.ok(await page.getByRole("link", { name: "Clear all filters", exact: true }).isVisible());
   await page.setViewportSize({ width: 1440, height: 1100 });
-  await page.getByRole("link", { name: "Refresh records" }).click(); assert.equal(await page.locator("tbody tr").count(), 3);
+  await page.reload(); assert.equal(await page.locator("tbody tr").count(), 3);
   await page.goto(base + "/admin"); await page.getByLabel("Search applications").fill("%_.*"); await page.getByRole("button", { name: /Apply filters/ }).click(); assert.equal(await page.locator("tbody tr").count(), 1);
   await page.getByLabel("Search applications").fill("no such property"); await page.getByRole("button", { name: /Apply filters/ }).click(); await page.getByRole("heading", { name: "No applications match this view." }).waitFor();
   await page.goto(base + "/admin");

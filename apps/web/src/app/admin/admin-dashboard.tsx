@@ -34,7 +34,6 @@ export function AdminDashboard({ data, params }: { data: AdminDashboardData; par
   return <div className={styles.dashboard} data-admin-dashboard data-record-page={filters.page}>
     <header className={styles.heading}>
       <div><p className={styles.eyebrow}><span aria-hidden="true" />THE TRADE-IN WORKBENCH</p><h1>Applications<span>.</span></h1><p>Find the next step. Keep every home moving.</p></div>
-      <div className={styles.refresh}><a href={adminHref(filters)} className={styles.refreshButton}><RefreshCw size={15} aria-hidden="true" />Refresh records</a><span>Loaded <time dateTime={data.loadedAt}>{adminDate(data.loadedAt, true)}</time></span></div>
     </header>
 
     <section aria-labelledby="capacity-heading" className={styles.capacitySection}>
@@ -46,7 +45,7 @@ export function AdminDashboard({ data, params }: { data: AdminDashboardData; par
     <section className={styles.workbench} aria-labelledby="queue-heading">
       <div className={styles.workbenchHeading}><div className={styles.sectionTitle}><span className={styles.ledgerIcon}><ClipboardList size={21} strokeWidth={1.5} aria-hidden="true" /></span><div><h2 id="queue-heading">The application queue</h2><p>One place for every stage of the move.</p></div></div><span className={styles.recordCount}>{data.listError ? "Records unavailable" : `${data.records.length} ${data.records.length === 1 ? "application" : "applications"}`}</span></div>
 
-      {data.listError ? <div className={styles.empty} role="alert"><CircleAlert size={32} strokeWidth={1.4} aria-hidden="true" /><h3>We couldn’t load the applications.</h3><p>Your records may still be available. Refresh to try again; no application has been changed.</p><a className={styles.refreshButton} href={adminHref(filters)}>Try again<RefreshCw size={15} aria-hidden="true" /></a></div> : <>
+      {data.listError ? <div className={styles.empty} role="alert"><CircleAlert size={32} strokeWidth={1.4} aria-hidden="true" /><h3>We couldn’t load the applications.</h3><p>Your records may still be available. Refresh to try again; no application has been changed.</p><a className={styles.retryButton} href={adminHref(filters)}>Try again<RefreshCw size={15} aria-hidden="true" /></a></div> : <>
         <nav className={styles.queues} aria-label="Application queues">{ADMIN_QUEUES.map(queue => <a key={queue.id} href={adminHref(filters, { queue: queue.id, page: 1 })} aria-current={queue.id === filters.queue ? "page" : undefined}><span>{queue.label}</span><b>{page.counts[queue.id]}</b></a>)}</nav>
         <div className={styles.filterArea}>
           <form key={adminHref(filters)} action="/admin" method="get" className={styles.filters} role="search" aria-label="Filter applications">

@@ -451,6 +451,15 @@ Catalogue, development selection, Compare Plans, Apply submission and owner Appl
 - Browser screenshots: `/Users/zjsmac/.codex/visualizations/2026/10/18/01a14e61-34a6-72d0-a5f6-91cdb02de406/admin-dashboard/admin-1440.png` and `admin-390.png`; inspected desktop/mobile layouts. The screenshot numbers and people are isolated QA fixtures, not production defaults.
 - Remaining: user review and commit of this page before starting Details; real LOCAL Supabase/browser session and RLS checks could not run because Docker/Supabase are not installed in this workspace. A1.4 existing-month capacity editing remains a separate post-review step. G1 formal-preview API and G2 initial Plan B range semantics remain unresolved for the later Details page. No commit, Git push or deployment performed.
 
+### F3-01b — Simplify the approved admin header and refresh controls
+
+- Date: 2026-10-20 (Asia/Kuala_Lumpur); pending commit. Previous Dashboard implementation is committed as `96edfb8`.
+- User-approved scope: remove the Dashboard's Refresh records control and admin header Applications / Risk simulator links; use browser refresh and keep direct admin login to `/admin`.
+- Changes: removed the refresh link and its Loaded timestamp, unused responsive styling and the now-unused `loadedAt` field from the admin reader/DTO. Removed the admin navigation configuration/rendering; owner navigation already had no links. Kept the role-aware logo, account information, Sign out, admin route/authorization and existing login destination. Renamed the separate error-retry CSS class so the error recovery control stays independent. No data-loading query, financial rule, API, simulator functionality or owner workflow was removed.
+- Affected files: `apps/web/src/components/site-navigation.tsx`, `apps/web/src/app/admin/admin-dashboard.tsx`, `apps/web/src/app/admin/admin.module.css`, `apps/web/src/lib/admin-applications-model.ts`, `apps/web/src/lib/admin-applications.ts`, `scripts/check_admin_dashboard.mjs`, this log and `Task_track.md`.
+- Verification: all 94 Node tests, targeted ESLint, standalone TypeScript and production builds passed. Updated the existing browser checks passed: the three controls are absent, logo/Sign out remain, admin login lands at `/admin`, browser reload preserves selected filters, and existing queue/filter/paging/error/role checks still work at 1440/1024/768/390/320 px. Normal production build restored; screenshots in `/Users/zjsmac/.codex/visualizations/2026/10/18/01a14e61-34a6-72d0-a5f6-91cdb02de406/admin-dashboard-header/`. No new test suite or backend contract change was introduced for these control removals.
+- Commit/deployment: pending commit; no push or deployment. Application Details remains a later phase.
+
 The admin role guard is implemented in F1-03; workflow and AI helpers are implemented in F0/F2. Dashboard implementation is recorded above; the other admin screens remain planned.
 
 | Action | Intended change | Existing integration points / proposed files | Bugs, dependencies and acceptance work |
