@@ -32,22 +32,23 @@ test("manual plan presentation exposes formulas without RM amounts and defers on
   const planA=model.manualPlanPresentation("A",true);
   assert.equal(planA.available,true);assert.equal(planA.eligibility,"pending");
   assert.equal(planA.eligibilityCopy,"Eligibility confirmed after valuation");
-  assert.match(planA.formula,/78\.5%/);assert.doesNotMatch(planA.formula,/RM\s?\d/);
+  assert.match(planA.formula,/cost allowance − risk buffer/);assert.doesNotMatch(planA.formula,/[\d%]/);
   const blockedA=model.manualPlanPresentation("A",false);
   assert.equal(blockedA.available,false);assert.equal(blockedA.eligibility,"ineligible");
   assert.match(blockedA.eligibilityCopy,/SDP township/);
   const planB=model.manualPlanPresentation("B",false);
-  assert.equal(planB.available,true);assert.equal(planB.eligibility,"available");assert.match(planB.formula,/75%/);
+  assert.equal(planB.available,true);assert.equal(planB.eligibility,"available");assert.match(planB.formula,/guarantee floor/);assert.doesNotMatch(planB.formula,/[\d%]/);
 });
-test("plan cards use homeowner-friendly summaries while preserving the exact formulas",()=>{
-  assert.deepEqual(model.planCardCopy("A"),{
-    summary:"SDP buys your home directly at about 78.5% of its confirmed value. No buyer search, faster cash.",
-    formula:"Confirmed market value × (1 − 11.5% − 10%) = confirmed market value × 78.5%",
-  });
-  assert.deepEqual(model.planCardCopy("B"),{
-    summary:"You're guaranteed at least 75% of the confirmed value. If it sells on the open market, you keep the price minus about 4.4% in agent and legal fees.",
-    formula:"Floor = confirmed market value × 75%; expected open-market net = confirmed market value × (1 − 3.2% − 1.2%)",
-  });
+test("plan copy formats backend deduction labels and rates, without fixed percentage fallbacks",()=>{
+  const response={plan_a:{breakdown:{deductions:[{label:"Backend cost allowance",rate:0.125},{label:"Backend risk buffer",rate:0.09}]}},plan_b:{floor_rate:0.8,breakdown:{deductions:[{label:"Backend agent fee",rate:0.025},{label:"Backend legal fee",rate:0.015}]}}};
+  const a=model.planCardCopy("A",response),b=model.planCardCopy("B",response);
+  assert.match(a.formula,/Backend cost allowance \(12.5%\) − Backend risk buffer \(9%\)/);
+  assert.match(b.summary,/80%/);assert.match(b.formula,/Backend agent fee \(2.5%\) − Backend legal fee \(1.5%\)/);
+  assert.doesNotMatch(JSON.stringify([a,b]),/78\.5%|11\.5%|75%|3\.2%|1\.2%|4\.4%/);
+  for(const plan of ["A","B"]){
+    assert.doesNotMatch(JSON.stringify(model.planCardCopy(plan)),/[\d%]/);
+    assert.doesNotMatch(JSON.stringify(model.planCardCopy(plan,{plan_a:{},plan_b:{}})),/[\d%]/);
+  }
 });
 test("manual plans share one concise no-price explanation",()=>{
   assert.deepEqual(model.MANUAL_NO_PRICE_COPY,{

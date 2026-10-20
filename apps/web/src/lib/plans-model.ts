@@ -8,15 +8,15 @@ export type PlanParams = Record<string, string | string[] | undefined>;
 const PLAN_CARD_COPY = {
   A: {
     summary:
-      "SDP buys your home directly at about 78.5% of its confirmed value. No buyer search, faster cash.",
+      "SDP buys your home directly, after the assumed cost allowance and risk buffer. No buyer search.",
     formula:
-      "Confirmed market value × (1 − 11.5% − 10%) = confirmed market value × 78.5%",
+      "Confirmed market value − cost allowance − risk buffer",
   },
   B: {
     summary:
-      "You're guaranteed at least 75% of the confirmed value. If it sells on the open market, you keep the price minus about 4.4% in agent and legal fees.",
+      "An open-market sale with a guarantee floor. Expected sale proceeds are after assumed agent and legal fees.",
     formula:
-      "Floor = confirmed market value × 75%; expected open-market net = confirmed market value × (1 − 3.2% − 1.2%)",
+      "Expected open-market proceeds = confirmed market value − agent fee − seller legal fee. The guarantee floor is a separate fallback.",
   },
 } as const;
 
@@ -26,8 +26,23 @@ export const MANUAL_NO_PRICE_COPY = {
     "There weren't enough recent sales to estimate your home automatically. Choose a plan now. A registered valuer will confirm your home's value after you agree to proceed, and your amounts will appear then.",
 } as const;
 
-export function planCardCopy(plan: "A" | "B") {
-  return PLAN_CARD_COPY[plan];
+export function planCardCopy(plan: "A" | "B", quote?: PlanQuoteResponse) {
+  const fallback = PLAN_CARD_COPY[plan];
+  if (!quote) return fallback;
+  const breakdown = (plan === "A" ? quote.plan_a : quote.plan_b).breakdown;
+  const percent = (rate: number) => new Intl.NumberFormat("en-MY", { style: "percent", maximumFractionDigits: 2 }).format(rate);
+  const deductions = breakdown?.deductions.map(row => `${row.label} (${percent(row.rate)})`).join(" − ");
+  if (plan === "A") return {
+    summary: fallback.summary,
+    formula: deductions ? `Confirmed market value − ${deductions}` : fallback.formula,
+  };
+  const floorRate = quote.plan_b.floor_rate;
+  const floor = typeof floorRate === "number" && Number.isFinite(floorRate)
+    ? `Guarantee floor = confirmed market value × ${percent(floorRate)}` : null;
+  return {
+    summary: floor ? `The guarantee floor is ${percent(floorRate!)} of the confirmed value. Expected open-market sale proceeds are after assumed agent and legal fees.` : fallback.summary,
+    formula: [floor, deductions ? `Expected open-market proceeds = confirmed market value − ${deductions}` : fallback.formula].filter(Boolean).join("; "),
+  };
 }
 
 export function parsePlanSelection(params: PlanParams): PlanSelection | null {
