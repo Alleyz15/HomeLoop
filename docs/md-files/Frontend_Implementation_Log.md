@@ -428,6 +428,15 @@ Catalogue, development selection, Compare Plans, Apply submission and owner Appl
 
 ## F3 — Admin journey
 
+### F3-00 — Two-page implementation handoff plan
+
+- Date / commit: 2026-10-20; planning only, pending commit.
+- Purpose: user requested a detailed plan that their teammate's AI can directly follow for the Admin Dashboard and Admin Application Details. No admin screen implementation was requested in this action.
+- Deliverable: [Admin Dashboard and Application Details handoff](../superpowers/plans/2026-10-20-admin-dashboard-and-application-details.md), covering page content/design, data sources, all application-stage actions, RPC/form rules, public/internal message separation, private submitted photos, AI limitations, proposed file responsibilities, implementation checkpoints and acceptance scenarios.
+- Findings: no public read-only formal-offer preview contract; initial Plan B `indicative_low/high` semantics need explicit clarification; the flags getter lazily expires offers and is not a read-only page-fetch helper; profiles have no email field; manual AI inputs lack the currently required confidence; no structured loan balance, guarantee deadline, actual settlement or standalone note-save/reschedule contract. The plan names fallback displays and approval stop points instead of inventing data or authorising backend changes.
+- Affected files: new plan Markdown, this log and the plan link in `Task_track.md`. No application code, SQL/migration, environment, shared owner page, hosted Supabase, Render or Vercel change.
+- Verification: static comparison with the product MD, chronological migration definitions and existing helpers; checked the handoff's relative Markdown links and required workflow/helper names. This was not a runtime implementation/test run, and no admin page is marked complete.
+
 The admin role guard is implemented in F1-03; workflow and AI helpers are implemented in F0/F2. The following screens are planned, with no completed UI verification recorded.
 
 | Action | Intended change | Existing integration points / proposed files | Bugs, dependencies and acceptance work |

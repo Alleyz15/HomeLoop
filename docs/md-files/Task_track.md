@@ -281,6 +281,7 @@
 
 ### F3. Admin 端
 
+- [x] 2026-10-20 仅完成双页实施交接计划（非页面实现）：[Admin Dashboard / Application Details plan](../superpowers/plans/2026-10-20-admin-dashboard-and-application-details.md)。包含逐阶段控件与 RPC、资料/隐私/照片/AI 规则、文件分工、测试及 G1 正式报价预览 / G2 方案 B 初步范围语义的批准停点。实际 A1 / A2 仍如下列待做；不更改屋主现有画面或后台合同。
 - [ ] A1 申请面板（`/admin`）：顶部每月额度用量条；分页（新申请｜等屋主回复｜待上门｜待出正式报价｜已发报价｜完成或关闭）；简略列表 + 标记 + 筛选（第 5.2 节）
 - [ ] A2 申请详情（`/admin/applications/[id]`）：完整资料、AI 估价与参考成交、照片、AI 辅助摘要、操作记录；按当前关卡显示操作按钮与表单（看屋结果、调整原因、公式算出的报价预览）（第 5.5 节）
 - [ ] A3 风险模拟（`/admin/simulator`）：拉杆与即时结果
