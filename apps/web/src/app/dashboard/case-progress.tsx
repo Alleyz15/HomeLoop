@@ -28,7 +28,6 @@ export function CaseProgress({ data }: { data: DashboardData }) {
     <div className={styles.detailGrid}>
       <div><span className={styles.detailLabel}>CURRENT PROPERTY</span><strong>{data.valuation?.scheme ?? "Your saved property"}</strong><p>{app.address_line}</p>
         <p>Preliminary value: {hasPrice(data.valuation) ? data.valuation?.low != null && data.valuation.high != null ? `${money(data.valuation.low)} – ${money(data.valuation.high)}` : money(data.valuation?.estimate) : "Not available"}</p>
-        {data.valuation && <Link prefetch={false} className={styles.textLink} href={`/valuation/result/${data.valuation.id}`}>View saved valuation<ArrowUpRight size={14} aria-hidden="true" /></Link>}
       </div>
       <div><span className={styles.detailLabel}>SELECTED NEW HOME & PLAN</span><strong>{data.project ?? "Project details unavailable"}</strong><p>{app.unit_type}</p><p>{app.plan === "A" ? "Plan A · Direct Purchase" : "Plan B · Open-Market Selling"}</p><p>Last updated {dateLabel(app.updated_at)}</p></div>
     </div>
