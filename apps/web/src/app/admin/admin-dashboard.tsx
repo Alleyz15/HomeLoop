@@ -1,4 +1,5 @@
-import { ArrowDownLeft, ArrowUpRight, CircleAlert, ClipboardList, Inbox, LockKeyhole, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CircleAlert, ClipboardList, Inbox, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { adminCaseHref } from "@/lib/admin-application-detail-model";
 import { ADMIN_QUEUES, adminDate, adminHref, adminMoney, capacityView, monthLabel, selectAdminPage, type AdminDashboardData, type AdminParams, type AdminRecord, type Capacity } from "@/lib/admin-applications-model";
 import styles from "./admin.module.css";
 
@@ -58,7 +59,6 @@ export function AdminDashboard({ data, params }: { data: AdminDashboardData; par
           </form>
         </div>
         {data.referenceErrors && <p role="status" className={styles.referenceNotice}><CircleAlert size={15} aria-hidden="true" />Some names or property details could not be loaded. Search and township results may be incomplete. Refresh to try again.</p>}
-        <div className={styles.stagedNote}><LockKeyhole size={14} aria-hidden="true" /><span>Application Details is the next implementation phase. Opening cases will be available after that page is completed.</span></div>
 
         {page.rows.length ? <>
           <p className={styles.scrollHint}>Scroll horizontally to see every column.</p>
@@ -72,7 +72,7 @@ export function AdminDashboard({ data, params }: { data: AdminDashboardData; par
                 <td>{record.low !== null && record.high !== null ? <span className={styles.range}>{adminMoney(record.low)}<span>– {adminMoney(record.high)}</span></span> : <span className={styles.unpriced}>{record.valuationLabel}</span>}</td>
                 <td><Status record={record} /></td>
                 <td className={styles.date}><time dateTime={record.createdAt}>{adminDate(record.createdAt)}</time>{record.updatedAt !== record.createdAt && <span className={styles.secondary}>Updated {adminDate(record.updatedAt)}</span>}</td>
-                <td><span className={styles.unavailableAction} aria-disabled="true"><LockKeyhole size={12} aria-hidden="true" />Details unavailable</span></td>
+                <td><a className={styles.caseLink} href={adminCaseHref(record.id, adminHref(filters))}>Open application<ArrowUpRight size={13} aria-hidden="true" /></a></td>
               </tr>)}</tbody>
             </table>
           </div>

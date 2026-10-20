@@ -286,6 +286,9 @@
   - [ ] A1.4 每月额度编辑：按计划在 Dashboard 审核后另外实施；不在本次只读面板阶段新增。
   - [x] 2026-10-20 用户批准简化 admin 页头（F3-01b，待 commit）：移除 Refresh records 按钮、Loaded 时间与不用的 DTO 字段/样式；移除 Applications / Risk simulator 导航链接。保留 Logo、账号、Sign out、admin 登录直达 `/admin` 与原有资料读取/API。A1 原始实现 commit 已核实为 `96edfb8`。
 - [ ] A2 申请详情（`/admin/applications/[id]`）：完整资料、AI 估价与参考成交、照片、AI 辅助摘要、操作记录；按当前关卡显示操作按钮与表单（看屋结果、调整原因、公式算出的报价预览）（第 5.5 节）
+  - [x] 2026-10-20 本地实现 A2 资料页与现有后台支持的操作（F3-02a，待 commit）：房屋/保存报价/看屋资料、protected audit 分页、owner message 与内部 note 分离、private 照片查看、stage-based review/补件/拒绝/Plan A 初步范围/manual consent/上门/签约确认/后续里程碑、明确发送讯息与受限 AI 辅助。Dashboard 已接逐案入口并保留筛选返回。104 项 Node 测试、TypeScript、lint、production/browser fixture 检查通过；详见前端记录。
+  - [x] 2026-10-20 按批准的视觉稿重排 A2（F3-02b，待 commit）：平衡摘要/操作卡片、全宽资料分页、折叠 AI/内部 note、柔和柚橙色操作标题、轻量动画及 reduced-motion；保留原后台与 G1/G2 停点，不改屋主页面。
+  - [ ] G1 正式报价预览 API、正式发出/回应复核，以及 G2 Plan B 初步区间语义仍待明确；对应控件不开放，不自行算价或扩写后台。真实 LOCAL Supabase / Storage / RLS 完整验收因本机无 Docker/Supabase 尚未执行，未部署；不把 fixture browser 检查当成线上流程完成。
 - [ ] A3 风险模拟（`/admin/simulator`）：拉杆与即时结果
 
 ### F4. 串接与收尾

@@ -107,7 +107,8 @@ try {
   await page.goto(base + "/admin"); await page.getByLabel("Search applications").fill("%_.*"); await page.getByRole("button", { name: /Apply filters/ }).click(); assert.equal(await page.locator("tbody tr").count(), 1);
   await page.getByLabel("Search applications").fill("no such property"); await page.getByRole("button", { name: /Apply filters/ }).click(); await page.getByRole("heading", { name: "No applications match this view." }).waitFor();
   await page.goto(base + "/admin");
-  assert.equal(await page.locator('a[href^="/admin/applications/"]').count(), 0);
+  assert.equal(await page.locator('a[href^="/admin/applications/"]').count(), 10);
+  assert.equal(await page.getByRole("link", { name: "Open application", exact: false }).first().getAttribute("href"), `/admin/applications/${rows[0].id}`);
   await page.getByRole("region", { name: "Applications table" }).focus(); assert.equal(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Applications table");
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1100 }); await page.evaluate(() => scrollTo(0, 0));
