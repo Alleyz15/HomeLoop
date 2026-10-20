@@ -8,7 +8,7 @@ import { generateAdminAssistance, performAdminAction, viewAdminPhoto } from "./a
 import styles from "./detail.module.css";
 
 export type ActionContext = { id: string; revision: string; actions: AdminAction[]; manual: boolean; visit: string;
-  estimate: number | null; initial: { low: number; high: number } | null; stageNote: string | null; href: string };
+  estimate: number | null; initial: { low: number; high: number; floor?: number } | null; stageNote: string | null; href: string };
 const INITIAL_STATE: AdminActionState = {};
 function ActionForm({ context, messageOnly = false }: { context: ActionContext; messageOnly?: boolean }) {
   const actions = context.actions.filter(action => messageOnly ? action === "message" : action !== "message");
@@ -32,6 +32,7 @@ function ActionForm({ context, messageOnly = false }: { context: ActionContext; 
       {action === "information" && text("reason", "Information needed — shared with the owner", true)}
       {action === "reject" && <><div className={styles.field}><label htmlFor="workflow-category">Reason category</label><select {...input("category")} required><option value="">Select a reason</option><option value="structural">Structural concerns</option><option value="title">Title or ownership concerns</option><option value="capacity">Monthly capacity</option><option value="other">Other</option></select></div>{text("reason", "Explain the rejection — shared with the owner", true)}</>}
       {action === "initial_a" && <><p className={styles.help}>The starting values below are from this case’s saved backend Plan A quote. Review them before sending.</p>{amount("low", "Initial lower amount (RM)")}{amount("high", "Initial upper amount (RM)")}<p className={styles.publicNotice}>The owner will see {value("low") && value("high") ? `${adminMoney(Number(value("low")))} – ${adminMoney(Number(value("high")))}` : "the entered range"}. This is not a formal offer.</p></>}
+      {action === "initial_b" && context.initial?.floor !== undefined && <div className={styles.publicNotice}><p><strong>Expected open-market proceeds</strong><br />{adminMoney(context.initial.low)} – {adminMoney(context.initial.high)}</p><p><strong>Indicative guarantee floor</strong><br />{adminMoney(context.initial.floor)}</p><p>The expected proceeds assume an open-market sale and selling fees. The guarantee floor is a separate fallback amount. These are preliminary figures, not a formal offer.</p></div>}
       {action === "schedule" && <><p className={styles.help}>Visit type: <strong>{context.visit}</strong></p><div className={styles.field}><label htmlFor="workflow-appointment">Agreed appointment (Malaysia, MYT / UTC+8)</label><input {...input("appointment")} type="datetime-local" required /></div></>}
       {action === "findings" && <>
         <div className={styles.field}><label htmlFor="workflow-unit_match">Does the unit type match?</label><select {...input("unit_match")} required><option value="">Select yes or no</option><option value="yes">Yes, it matches</option><option value="no">No, it does not match</option></select></div>

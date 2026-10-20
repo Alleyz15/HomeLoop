@@ -2,6 +2,7 @@ import type { Application } from "./applications";
 import type { OwnerApplicationEvent, ApplicationPhoto } from "./application-photos";
 import type { StoredValuation } from "./valuations";
 import { dashboardView } from "./dashboard-model";
+import { validPlanQuote } from "./plans-model";
 
 export type OwnerApplication = Omit<Application, "value_adjust_reason" | "condition" | "unit_type_confirmed" | "manual_valuation_resolved_by" | "espa_confirmed_by">;
 export type ApplicationDetail = {
@@ -13,6 +14,16 @@ export type OwnerAction = "proceed" | "proceed_manual" | "withdraw" | "reply" | 
 export type DetailActionState = { error?: string; success?: string; reload?: boolean };
 export const validApplicationId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 export const applicationHref = (id: string) => `/dashboard/applications/${id}`;
+
+export function initialPlanBFigures(app: OwnerApplication) {
+  const quote = app.plan_quote_snapshot, selected = quote?.selected_plan;
+  if (app.plan !== "B" || app.manual_valuation_required || app.plan_switch_count !== 0 || !validPlanQuote(quote)
+    || Number(quote.new_home.price) !== Number(app.new_home_price) || (selected && selected !== "B")) return null;
+  const low = Number(quote.plan_b.expected_net_low), high = Number(quote.plan_b.expected_net_high), floor = Number(quote.plan_b.floor);
+  if (![low, high, floor].every(value => Number.isFinite(value) && value > 0) || low > high
+    || Number(app.indicative_low) !== low || Number(app.indicative_high) !== high) return null;
+  return { low, high, floor };
+}
 
 export function detailView(detail: ApplicationDetail, now = Date.now()) {
   const app = detail.application;

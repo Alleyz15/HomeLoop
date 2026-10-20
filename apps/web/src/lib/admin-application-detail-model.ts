@@ -17,12 +17,13 @@ export type AdminCaseEvidence = AdminCase & {
   photos: ApplicationPhoto[] | null;
   errors: string[];
 };
-export type AdminAction = "start" | "information" | "reject" | "initial_a" | "manual_consent" | "schedule" | "findings" | "signing" | "listed" | "buyer" | "guarantee" | "completed" | "handover" | "message";
+export type AdminAction = "start" | "information" | "reject" | "initial_a" | "initial_b" | "manual_consent" | "schedule" | "findings" | "signing" | "listed" | "buyer" | "guarantee" | "completed" | "handover" | "message";
 export const ADMIN_ACTIONS: Record<AdminAction, { label: string; detail: string; result: string }> = {
   start: { label: "Start review", detail: "Move this application into team review. Opening the case alone does not start a review.", result: "under_review" },
   information: { label: "Request information", detail: "The owner sees your request and can reply with text and supporting photos. The case waits for their response.", result: "info_requested" },
   reject: { label: "Reject application", detail: "The owner sees your reason. This closes the application and does not delete its records.", result: "rejected" },
   initial_a: { label: "Send initial Plan A range", detail: "Send a preliminary range, not a formal offer. The owner must choose to continue before a visit can be arranged.", result: "indicative_sent" },
+  initial_b: { label: "Send initial Plan B figures", detail: "Send the saved expected open-market proceeds range and show the separate indicative guarantee floor. These are preliminary figures, not a formal offer.", result: "indicative_sent" },
   manual_consent: { label: "Request valuation consent", detail: "Ask the owner whether to proceed with a registered valuation. No automatic price or appointment is created.", result: "manual_valuation_pending" },
   schedule: { label: "Schedule home visit", detail: "Record the agreed appointment in Malaysian time. Confirm arrangements with the owner; no named visitor is assigned here.", result: "inspection_scheduled" },
   findings: { label: "Record visit findings", detail: "Record the completed visit and the confirmed market value. This does not issue an offer.", result: "inspected" },
@@ -56,6 +57,11 @@ export function initialARange(app: Application) {
   return quote?.plan_a.eligible && positive(quote.plan_a.offer_low) && positive(quote.plan_a.offer_high) && quote.plan_a.offer_low <= quote.plan_a.offer_high
     ? { low: quote.plan_a.offer_low, high: quote.plan_a.offer_high } : null;
 }
+export function initialBFigures(app: Application) {
+  if (app.plan !== "B") return null;
+  const quote = savedCaseQuote(app), low = positive(quote?.plan_b.expected_net_low), high = positive(quote?.plan_b.expected_net_high), floor = positive(quote?.plan_b.floor);
+  return low !== null && high !== null && floor !== null && low <= high ? { low, high, floor } : null;
+}
 export function adminCaseActions(app: Application, now = Date.now()): AdminAction[] {
   if (!["A", "B"].includes(app.plan)) return [];
   const status = caseStatus(app, now), actions: AdminAction[] = [];
@@ -63,6 +69,7 @@ export function adminCaseActions(app: Application, now = Date.now()): AdminActio
   if (status === "under_review") {
     if (app.manual_valuation_required) actions.push("manual_consent");
     else if (app.plan === "A" && initialARange(app)) actions.push("initial_a");
+    else if (app.plan === "B" && initialBFigures(app)) actions.push("initial_b");
     actions.push("information", "reject");
   }
   if (status === "owner_proceed") actions.push("schedule");
@@ -80,7 +87,7 @@ export function adminCaseActions(app: Application, now = Date.now()): AdminActio
 }
 export function caseStageNote(app: Application, now = Date.now()) {
   const status = caseStatus(app, now);
-  if (status === "under_review" && !app.manual_valuation_required && app.plan === "B") return "Initial Plan B sending is pending confirmation of whether its range represents expected market proceeds or guarantee-floor amounts. No range will be sent until that meaning is agreed.";
+  if (status === "under_review" && !app.manual_valuation_required && app.plan === "B" && !initialBFigures(app)) return "A complete saved Plan B quote matching this case is unavailable. No initial figures have been calculated or invented.";
   if (status === "under_review" && !app.manual_valuation_required && app.plan === "A" && !initialARange(app)) return "A valid saved Plan A proposal matching this case is unavailable. No initial range has been calculated or invented.";
   if (["inspected", "review_requested"].includes(status)) return "Formal-offer preview is awaiting an admin-only backend preview endpoint. Issuing an offer and responding to an offer review remain unavailable until that authoritative preview is supported.";
   if (status === "inspection_scheduled" && !app.inspection_scheduled_at) return "No appointment date is recorded. A Plan B to Plan A switch can require a new registered valuation; record findings only after the appropriate visit actually takes place.";

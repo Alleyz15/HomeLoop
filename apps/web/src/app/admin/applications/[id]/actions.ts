@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminCaseRevision, getAdminCase, getAdminCaseEvidence, requireAdmin } from "@/lib/admin-application-detail";
-import { ADMIN_ACTIONS, adminCaseActions, object, parseAdminAction, positive, savedCaseQuote, type AdminActionState } from "@/lib/admin-application-detail-model";
+import { ADMIN_ACTIONS, adminCaseActions, initialBFigures, object, parseAdminAction, positive, savedCaseQuote, type AdminActionState } from "@/lib/admin-application-detail-model";
 import { startReview, requestInfo, rejectApplication, sendIndicative, requestManualValuation, scheduleInspection, recordInspection, confirmEspa, markListed, markBuyerFound, markGuaranteeTriggered, markOldHomeCompleted, markHandover, type Application } from "@/lib/applications";
 import { applicationPhotoUrl, sendOwnerMessage } from "@/lib/application-photos";
 import { adminAssist, type AdminAssistResponse, type Confidence } from "@/lib/valuation";
@@ -29,6 +29,8 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
     if (input.action === "information" && !input.reason) throw new Error("Tell the owner what information is needed.");
     if (input.action === "message" && !input.message) throw new Error("Enter the message you want to share with the owner.");
     if (input.action === "initial_a" && (input.low === null || input.high === null || input.low > input.high)) throw new Error("Enter a positive initial range with the lower amount no greater than the upper amount.");
+    const initialB = input.action === "initial_b" ? initialBFigures(app) : null;
+    if (input.action === "initial_b" && !initialB) throw new Error("A complete saved Plan B quote matching this case is required before sending initial figures.");
     if (input.action === "schedule" && !input.appointment) throw new Error("Enter a valid Malaysian appointment date and time.");
     if (input.action === "findings") {
       if (input.unitMatch === null || !input.condition || input.value === null) throw new Error("Confirm the unit match, condition and positive market value.");
@@ -50,6 +52,8 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
       case "information": result = await requestInfo(id, input.reason, audit); break;
       case "reject": result = await rejectApplication(id, input.reason, audit); break;
       case "initial_a": result = await sendIndicative(id, input.low!, input.high!, audit); break;
+      case "initial_b": result = await sendIndicative(id, initialB!.low, initialB!.high, { note: input.note || null,
+        payload: { amount_source: "saved_plan_quote_snapshot", indicative_kind: "expected_open_market_proceeds", indicative_floor: initialB!.floor } }); break;
       case "manual_consent": result = await requestManualValuation(id, audit); break;
       case "schedule": result = await scheduleInspection(id, input.appointment!, audit); break;
       case "findings": result = await recordInspection(id, { unitTypeConfirmed: input.unitMatch!, condition: input.condition!, confirmedValue: input.value!,

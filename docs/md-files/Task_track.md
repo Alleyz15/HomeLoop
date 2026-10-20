@@ -288,7 +288,8 @@
 - [ ] A2 申请详情（`/admin/applications/[id]`）：完整资料、AI 估价与参考成交、照片、AI 辅助摘要、操作记录；按当前关卡显示操作按钮与表单（看屋结果、调整原因、公式算出的报价预览）（第 5.5 节）
   - [x] 2026-10-20 本地实现 A2 资料页与现有后台支持的操作（F3-02a，待 commit）：房屋/保存报价/看屋资料、protected audit 分页、owner message 与内部 note 分离、private 照片查看、stage-based review/补件/拒绝/Plan A 初步范围/manual consent/上门/签约确认/后续里程碑、明确发送讯息与受限 AI 辅助。Dashboard 已接逐案入口并保留筛选返回。104 项 Node 测试、TypeScript、lint、production/browser fixture 检查通过；详见前端记录。
   - [x] 2026-10-20 按批准的视觉稿重排 A2（F3-02b，待 commit）：平衡摘要/操作卡片、全宽资料分页、折叠 AI/内部 note、柔和柚橙色操作标题、轻量动画及 reduced-motion；保留原后台与 G1/G2 停点，不改屋主页面。
-  - [ ] G1 正式报价预览 API、正式发出/回应复核，以及 G2 Plan B 初步区间语义仍待明确；对应控件不开放，不自行算价或扩写后台。真实 LOCAL Supabase / Storage / RLS 完整验收因本机无 Docker/Supabase 尚未执行，未部署；不把 fixture browser 检查当成线上流程完成。
+  - [x] 2026-10-21 G2 Plan B 初步金额基础流程已接通（待 commit，未部署）：Admin 在 `under_review` 只可发送与申请/新屋价格匹配的保存 quote；`indicative_low/high` 明确定义为扣除假设销售费用后的预计公开市场净收入区间，75% guarantee floor 独立展示。Server Action 会重新读取当前申请，不采用浏览器金额、不重算或复制公式；snapshot 缺失、不完整、不匹配、已切换方案或人工估价流程均 fail closed。发送沿用现有 `send_indicative`，在 private audit payload 记录本次 range/floor 及金额含义；Owner 只从申请读取已发送区间，并从匹配的本人 quote 读取 floor，不开放 private audit。补件成功后仍需 Admin 明确发送，不自动推进。此阶段性实现不等于 P1 完整验收；仍需补齐 eligible/whole-RM 校验、拒绝意外金额字段、完整 versioned receipt、RPC 返回 plan/range 校验，以及 isolated DB/browser 流程证据。
+  - [ ] G1 正式报价预览 API、正式发出/回应复核，以及 B→A 后重新安排 registered-valuer appointment 仍未完成；对应控件继续不开放，不自行算价或扩写后台。真实 LOCAL Supabase / Storage / RLS 完整验收及 hosted 部署另行确认；不把 fixture browser 检查当成线上流程完成。
 - [ ] A3 风险模拟（`/admin/simulator`）：拉杆与即时结果
 
 ### F4. 串接与收尾

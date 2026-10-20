@@ -70,8 +70,8 @@ test("evidence tabs allow only known sections and preserve safe return filters a
   assert.equal(selected.searchParams.get("tab"), "messages");
 });
 
-test("admin controls follow the state machine and block G1/G2, owner actions, closed and invalid-deadline cases", () => {
-  const expected = { submitted: ["start"], under_review: ["information", "reject"], info_requested: [], indicative_sent: [], manual_valuation_pending: [], owner_proceed: ["schedule"], inspection_scheduled: ["findings"], inspected: ["information", "reject"], offer_sent: [], review_requested: [], accepted: [], espa_signed: [], listed: [], buyer_found: [], guarantee_triggered: [], old_home_completed: [], handover: [], withdrawn: [], declined: [], expired: [], rejected: [] };
+test("admin controls expose saved Plan B initial figures while keeping G1 and owner actions blocked", () => {
+  const expected = { submitted: ["start"], under_review: ["initial_b", "information", "reject"], info_requested: [], indicative_sent: [], manual_valuation_pending: [], owner_proceed: ["schedule"], inspection_scheduled: ["findings"], inspected: ["information", "reject"], offer_sent: [], review_requested: [], accepted: [], espa_signed: [], listed: [], buyer_found: [], guarantee_triggered: [], old_home_completed: [], handover: [], withdrawn: [], declined: [], expired: [], rejected: [] };
   for (const [status, allowed] of Object.entries(expected)) assert.deepEqual(model.adminCaseActions(caseFixture(status)).filter(action => action !== "message"), allowed, status);
   assert.deepEqual(model.adminCaseActions(caseFixture("under_review", { plan: "A" })), ["initial_a", "information", "reject", "message"]);
   assert.ok(model.adminCaseActions(caseFixture("under_review", { manual_valuation_required: true })).includes("manual_consent"));
@@ -82,7 +82,9 @@ test("admin controls follow the state machine and block G1/G2, owner actions, cl
 });
 test("saved quotations cannot silently follow plan switches or changed prices; appointment conversion is timezone-independent", () => {
   assert.equal(model.initialARange(caseFixture("under_review", { plan: "A" })).low, 549500);
+  assert.deepEqual(model.initialBFigures(caseFixture("under_review")), { low: 669200, high: 860400, floor: 600000 });
   for (const patch of [{ plan_switch_count: 1 }, { manual_valuation_required: true }, { new_home_price: 1 }, { plan_quote_snapshot: {} }]) assert.equal(model.savedCaseQuote(caseFixture("under_review", patch)), null);
+  for (const patch of [{ plan_switch_count: 1 }, { manual_valuation_required: true }, { new_home_price: 1 }, { plan_quote_snapshot: {} }, { plan: "A" }]) assert.equal(model.initialBFigures(caseFixture("under_review", patch)), null);
   assert.equal(model.malaysiaAppointment("2026-10-20T14:30"), "2026-10-20T14:30:00+08:00");
   for (const invalid of ["2026-02-30T12:00", "2026-01-01T25:00", "bad", "2026-10-20T14:30Z"]) assert.equal(model.malaysiaAppointment(invalid), null);
   const core = { application: caseFixture(), latestEventId: "1", revisionAvailable: true };
@@ -130,6 +132,21 @@ test("all supported transitions call exactly one existing helper and check the r
   }
   const state = setup(); state.rpcResult = { ...state.app, status: "expired" }; assert.ok((await actions.performAdminAction({}, await formFor("start"))).error);
 });
+test("Plan B sends only the matching saved proceeds range and records its separate floor", async () => {
+  const state = setup(caseFixture("under_review")); state.expected = "indicative_sent";
+  const result = await actions.performAdminAction({}, await formFor("initial_b", { low: "1", high: "2", note: "Reviewed after the owner replied." }));
+  assert.ok(result.success, result.error);
+  assert.equal(state.calls.length, 1);
+  assert.deepEqual(state.calls[0], { name: "sendIndicative", args: [CASE_ID, 669200, 860400, {
+    note: "Reviewed after the owner replied.",
+    payload: { amount_source: "saved_plan_quote_snapshot", indicative_kind: "expected_open_market_proceeds", indicative_floor: 600000 },
+  }] });
+  for (const patch of [{ plan_quote_snapshot: {} }, { new_home_price: 1 }, { plan_switch_count: 1 }, { manual_valuation_required: true }]) {
+    const blocked = setup(caseFixture("under_review", patch));
+    const response = await actions.performAdminAction({}, await formFor("initial_b"));
+    assert.ok(response.error); assert.equal(blocked.calls.length, 0);
+  }
+});
 test("manual findings require a valuer/basis, avoid AI adjustment and preserve consent before scheduling", async () => {
   let state = setup(caseFixture("under_review", { manual_valuation_required: true })); state.expected = "manual_valuation_pending";
   assert.ok((await actions.performAdminAction({}, await formFor("manual_consent"))).success);
@@ -141,7 +158,7 @@ test("manual findings require a valuer/basis, avoid AI adjustment and preserve c
   assert.ok((await actions.performAdminAction({}, await formFor("findings", { ...fields, valuer: "Registered QA valuer", basis: "Local QA valuation report", note: "Internal only" }))).success);
   assert.equal(state.calls[0].args[1].valueAdjustReason, null); assert.match(state.calls[0].args[2].note, /Registered QA valuer/);
 });
-test("Plan A sends only an explicit valid range; Plan B and unsupported formal preview actions stay blocked", async () => {
+test("Plan A keeps its explicit range validation while unsupported formal preview actions stay blocked", async () => {
   let state = setup(caseFixture("under_review", { plan: "A" })); state.expected = "indicative_sent";
   assert.ok((await actions.performAdminAction({}, await formFor("initial_a", { low: "549500", high: "706500" }))).success); assert.equal(state.calls[0].name, "sendIndicative");
   for (const [low, high] of [["0", "1"], ["Infinity", "2"], ["5", "4"]]) { state = setup(caseFixture("under_review", { plan: "A" })); assert.ok((await actions.performAdminAction({}, await formFor("initial_a", { low, high }))).error); assert.equal(state.calls.length, 0); }
