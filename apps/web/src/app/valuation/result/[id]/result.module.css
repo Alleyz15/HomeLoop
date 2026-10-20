@@ -1,0 +1,104 @@
+.page { position: relative; isolation: isolate; display: flex; flex-direction: column; gap: 25px; width: 100%; min-width: 0; color: #203e32; }
+:global(body):has(.page) { background: #f7f7ef; }
+:global(.site-main):has(.page) { padding-top: 28px; }
+.backdrop { position: absolute; inset: -25px -20px; overflow: hidden; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at 8% 17%, #dfe7d051, transparent 47%), radial-gradient(ellipse at 100% 70%, #e9dfc533, transparent 48%); }
+.backdrop::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(115deg, transparent 0 9px, #9baa7e09 9px 10px); mask-image: linear-gradient(90deg, #000, transparent 50%, #000); }
+.backdrop i { position: absolute; width: 45vw; height: 85vh; left: -38vw; top: 15%; border: 1px solid #b4c29930; border-radius: 50%; transform: rotate(-25deg); }
+.backdrop i + i { left: auto; right: -41vw; top: 40%; transform: rotate(25deg); }
+.back { display: inline-flex; align-items: center; gap: 8px; width: fit-content; text-decoration: none; color: #6b805a; font-size: 12px; line-height: 1.7; }
+.back svg { transition: transform .25s; }
+.back:hover svg { transform: translateX(-3px); }
+.heading { margin: 4px 0 6px; animation: arrive .65s both; }
+.eyebrow { display: flex; align-items: center; gap: 9px; font-size: 9px; line-height: 1.8; letter-spacing: 1.7px; font-weight: 600; color: #74865e; margin: 0; }
+.statusDot { width: 6px; height: 6px; border-radius: 50%; background: #8ba56d; box-shadow: 0 0 0 4px #8ba56d12; animation: breathe 5s ease-in-out infinite; }
+.heading h1 { font: 400 clamp(35px, 4vw, 51px)/1.15 Georgia, serif; letter-spacing: -1.5px; margin: 17px 0 18px; }
+.heading h1 em { font-weight: 400; color: #778a62; }
+.address { display: flex; align-items: start; gap: 8px; font-size: 13px; line-height: 1.9; color: #6e805f; margin: 0; overflow-wrap: anywhere; }
+.address svg { flex-shrink: 0; margin-top: 5px; color: #869970; }
+.badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+.badges > span { color: #718561; border: 1px solid #dce3d1; background: #fdfdf6; border-radius: 5px; padding: 4px 10px; font-size: 10px; line-height: 1.7; }
+.badges .townshipBadge { background: #e9efdd; border-color: #dbe4ca; color: #627e4c; }
+.overview { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 23px; align-items: stretch; }
+.valueCard { min-width: 0; position: relative; overflow: hidden; border: 1px solid #cfdbc0; border-radius: 17px; background: linear-gradient(125deg, #e7edda, #f0f3e5); padding: 30px; box-shadow: 0 17px 29px -23px #344d2c77, inset 0 1px 0 #fff9; animation: arrive .65s .07s both; }
+.valueCard::after { content: ""; position: absolute; width: 260px; height: 260px; right: -170px; top: -130px; border: 1px solid #a3b68b25; border-radius: 50%; box-shadow: 0 0 0 30px #b8c6a312, 0 0 0 60px #b8c6a30a; pointer-events: none; }
+.valueTop { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.valueTop .eyebrow { font-size: 8px; letter-spacing: 1.5px; }
+.valueIcon { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; background: #f5f7edb3; border: 1px solid #d6e0c5; border-radius: 11px; color: #849a6d; }
+.valueCard h2 { font-size: 13px; font-weight: 400; line-height: 1.8; color: #637b51; margin: 11px 0 0; }
+.amount { font: 400 clamp(39px, 4.7vw, 61px)/1.2 Georgia, serif; letter-spacing: -1.9px; color: #203e32; margin: 9px 0 13px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.valueDescription { max-width: 410px; font-size: 11px; color: #748666; line-height: 1.9; margin: 0; }
+.range { display: flex; align-items: center; gap: 19px; border-top: 1px solid #cbd7b9; margin-top: 27px; padding-top: 21px; }
+.range > div { min-width: 0; }
+.range > div:last-child { text-align: right; }
+.range span:not(.rangeConnector) { display: block; font-size: 9px; line-height: 1.8; color: #7e906d; }
+.range strong { display: block; font: 400 clamp(20px, 2vw, 25px)/1.5 Georgia, serif; letter-spacing: -.4px; color: #45613a; overflow-wrap: anywhere; }
+.rangeConnector { height: 1px; flex: 1; min-width: 10px; background: #b6c6a0; position: relative; }
+.rangeConnector::before, .rangeConnector::after { content: ""; position: absolute; width: 4px; height: 4px; border-radius: 50%; background: #a7ba8c; top: -1.5px; }
+.rangeConnector::after { right: 0; }
+.detailsCard { min-width: 0; padding: 29px; border-radius: 17px; border: 1px solid #dce3d0; background: #fffef8; box-shadow: 0 13px 27px -23px #344d2c66, inset 0 1px 0 #fff; animation: arrive .65s .16s both; }
+.propertyHeading { display: flex; align-items: center; gap: 13px; }
+.homeIcon { display: grid; place-items: center; flex-shrink: 0; width: 50px; height: 50px; border: 1px solid #dce5cd; border-radius: 50%; color: #819a69; background: #f1f5e8; }
+.propertyHeading .eyebrow { font-size: 8px; letter-spacing: 1.3px; }
+.propertyHeading h2 { font: 400 21px/1.4 Georgia, serif; letter-spacing: -.3px; margin: 6px 0 0; overflow-wrap: anywhere; }
+.areas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 19px; margin-top: 27px; padding-bottom: 23px; border-bottom: 1px solid #e0e7d4; }
+.areas > div { min-width: 0; }
+.areas > div + div { border-left: 1px solid #e0e7d4; padding-left: 20px; }
+.areas svg { color: #8da178; margin-bottom: 9px; }
+.areas span { display: block; font-size: 10px; color: #81916f; line-height: 1.8; }
+.areas strong { display: block; font-size: 18px; font-weight: 400; color: #45613b; margin-top: 4px; overflow-wrap: anywhere; }
+.confidence { display: flex; align-items: start; gap: 10px; padding-top: 21px; }
+.confidenceIcon { color: #829b68; flex-shrink: 0; margin-top: 2px; }
+.confidence[data-confidence=low] .confidenceIcon { color: #a38d5e; }
+.confidence h3 { font-size: 11px; font-weight: 500; line-height: 1.8; color: #536f43; margin: 0 0 4px; }
+.confidence p { font-size: 11px; line-height: 1.9; color: #7b8c6b; margin: 0; }
+.explanation, .salesCard { min-width: 0; border: 1px solid #dce3d0; border-radius: 15px; background: #fffef8; box-shadow: 0 12px 26px -23px #344d2c66, inset 0 1px 0 #fff; }
+.explanation { padding: 25px 29px; animation: arrive .5s both; }
+.sectionHeading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sectionIcon { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px; background: #f0f4e5; border: 1px solid #e4ead8; color: #81996d; }
+.sectionHeading h2 { font: 400 25px/1.35 Georgia, serif; letter-spacing: -.5px; margin: 0; }
+.sectionHeading .eyebrow { font-size: 8px; letter-spacing: 1.3px; margin-bottom: 5px; }
+.explanationText { font-size: 12px; line-height: 2; color: #738466; margin: 20px 0 0; }
+.thinking :global([data-slot=card]) { background: #fffef8; border: 1px solid #dce3d0; border-radius: 15px; box-shadow: 0 12px 26px -23px #344d2c66; --tw-ring-shadow: 0 0 #0000; padding: 20px 12px; }
+.thinking :global([data-slot=card-content]) { color: #7b8c6b; font-size: 12px; }
+.planNotice { display: flex; align-items: start; gap: 15px; padding: 23px 27px; border: 1px solid #d7e2c8; border-radius: 13px; background: #f0f4e7; box-shadow: 0 5px 15px -12px #344d2c44; }
+.noticeIcon { color: #8ba173; flex-shrink: 0; margin-top: 3px; }
+.planNotice h2 { font: 400 23px/1.4 Georgia, serif; margin: 5px 0 7px; letter-spacing: -.3px; }
+.planNotice .eyebrow { font-size: 8px; letter-spacing: 1.4px; }
+.planNotice p:not(.eyebrow) { font-size: 12px; line-height: 1.9; color: #78896a; margin: 0; }
+.salesCard { overflow: hidden; padding-top: 27px; }
+.salesHeading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 29px; }
+.transactionBadge { flex-shrink: 0; padding: 5px 10px; border: 1px solid #dce6ce; border-radius: 5px; background: #f1f5e8; color: #81946e; font-size: 10px; line-height: 1.7; }
+.salesDescription { font-size: 12px; color: #7d8c6e; line-height: 1.9; margin: 16px 29px 22px; }
+.tableScroll { width: 100%; overflow-x: auto; padding: 0 29px 14px; }
+.table { border-collapse: collapse; width: 100%; min-width: 530px; text-align: left; font-size: 12px; line-height: 1.8; font-variant-numeric: tabular-nums; }
+.table th { font-weight: 400; font-size: 10px; color: #859573; background: #f3f5eb; padding: 13px 16px; border-top: 1px solid #e0e7d5; border-bottom: 1px solid #dce4ce; }
+.table th:first-child { border-radius: 7px 0 0 0; }
+.table th:last-child { border-radius: 0 7px 0 0; }
+.table td { padding: 13px 16px; border-bottom: 1px solid #e7ebde; color: #617653; transition: background .2s; white-space: nowrap; }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table tbody tr:hover td { background: #f4f7ec; }
+.table .salePrice { color: #345539; font-weight: 500; }
+.nextCard { display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 26px 29px; border-radius: 14px; background: linear-gradient(125deg, #e9eedd, #f0f2e5); border: 1px solid #d6e0c5; box-shadow: 0 12px 23px -22px #344d2c77; }
+.nextCard > div { min-width: 0; }
+.nextCard h2 { font: 400 29px/1.3 Georgia, serif; letter-spacing: -.6px; margin: 7px 0 9px; }
+.nextCard p:not(.eyebrow) { font-size: 12px; line-height: 1.9; color: #7a8a68; margin: 0; }
+.nextCard .manualNote { margin-top: 7px !important; font-size: 11px !important; }
+.nextButton { display: inline-flex; justify-content: center; align-items: center; flex-shrink: 0; gap: 20px; border: 1px solid #284c38; border-radius: 8px; background: linear-gradient(120deg, #30543e, #203e32); color: #f9faef; padding: 14px 19px; min-height: 49px; text-decoration: none; font-size: 12px; box-shadow: 0 4px 9px #203e3212, inset 0 1px 0 #ffffff1a; transition: background .25s, box-shadow .25s, transform .25s; }
+.nextButton svg { transition: transform .25s; }
+.nextButton:hover { background: #3d6044; box-shadow: 0 9px 17px -7px #203e3255; transform: translateY(-1px); }
+.nextButton:hover svg { transform: translateX(3px); }
+.nextButton:active { transform: scale(.985); }
+.stateCard { min-width: 0; padding: 34px; border: 1px solid #d6e1c5; border-radius: 16px; background: linear-gradient(125deg, #edf2e2, #f7f8ee); box-shadow: 0 13px 26px -23px #344d2c66; animation: arrive .6s both; }
+.stateIcon { display: grid; place-items: center; width: 56px; height: 56px; color: #88a06d; background: #f7f9ef; border: 1px solid #dce5ce; border-radius: 15px; margin-bottom: 22px; }
+.stateCard h2 { font: 400 31px/1.3 Georgia, serif; letter-spacing: -.6px; margin: 9px 0 15px; max-width: 650px; }
+.stateCard > p:not(.eyebrow) { font-size: 13px; color: #748765; line-height: 1.95; max-width: 800px; margin: 10px 0 0; }
+.page a:focus-visible, .tableScroll:focus-visible { outline: 2px solid #819f62; outline-offset: 4px; }
+.tableScroll:focus-visible { outline-offset: -4px; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@keyframes arrive { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes breathe { 0%, 100% { box-shadow: 0 0 0 4px #8ba56d12; } 50% { box-shadow: 0 0 0 7px #8ba56d06; } }
+@media (max-width: 900px) { .overview { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 19px; } .valueCard, .detailsCard { padding: 25px; } .amount { font-size: 48px; } .range { gap: 12px; } .range strong { font-size: 21px; } .propertyHeading { align-items: start; gap: 10px; } .homeIcon { width: 39px; height: 39px; } .propertyHeading h2 { font-size: 20px; } .propertyHeading .eyebrow { font-size: 7px; } .areas { gap: 14px; } .areas > div + div { padding-left: 14px; } .areas strong { font-size: 16px; } }
+@media (max-width: 700px) { .overview { grid-template-columns: minmax(0, 1fr); } .nextCard { flex-direction: column; align-items: stretch; gap: 20px; } .nextButton { align-self: start; } .salesHeading { align-items: start; } .transactionBadge { display: none; } .heading h1 { font-size: 41px; } .detailsCard { padding: 26px; } .propertyHeading { align-items: center; } .propertyHeading h2 { font-size: 23px; } .areas { gap: 22px; } .areas > div + div { padding-left: 22px; } .areas strong { font-size: 20px; } }
+@media (max-width: 480px) { .page { gap: 20px; } .heading { margin: 2px 0 4px; } .heading h1 { font-size: 37px; letter-spacing: -1px; margin: 15px 0; } .heading .eyebrow { font-size: 8px; letter-spacing: 1.3px; } .address { font-size: 11px; } .badges { gap: 6px; margin-top: 13px; } .badges > span { padding: 3px 8px; font-size: 9px; } .overview { gap: 19px; } .valueCard, .detailsCard { padding: 24px 21px; border-radius: 14px; } .valueTop .eyebrow { font-size: 7px; letter-spacing: 1.4px; } .valueIcon { width: 33px; height: 33px; } .valueCard h2 { margin-top: 12px; } .amount { font-size: 47px; letter-spacing: -1.3px; margin: 10px 0 13px; } .valueDescription { font-size: 11px; } .range { gap: 10px; padding-top: 18px; margin-top: 22px; } .range strong { font-size: 22px; } .range span:not(.rangeConnector) { font-size: 8px; } .propertyHeading h2 { font-size: 22px; } .areas strong { font-size: 19px; } .explanation { padding: 23px 21px; } .sectionHeading { gap: 10px; } .sectionHeading h2 { font-size: 23px; } .sectionHeading .eyebrow { font-size: 7px; letter-spacing: 1.1px; } .sectionIcon { width: 34px; height: 34px; } .explanationText { font-size: 11px; margin-top: 18px; } .planNotice { padding: 21px; gap: 11px; } .planNotice h2 { font-size: 23px; } .planNotice p:not(.eyebrow) { font-size: 11px; } .salesCard { padding-top: 23px; } .salesHeading { padding: 0 21px; } .salesDescription { font-size: 11px; margin: 15px 21px 20px; } .tableScroll { padding: 0 21px 12px; } .table { font-size: 11px; } .table th, .table td { padding: 12px; } .nextCard { padding: 24px 21px; } .nextCard h2 { font-size: 29px; } .nextCard p:not(.eyebrow) { font-size: 11px; } .nextButton { width: 100%; justify-content: space-between; font-size: 11px; } .stateCard { padding: 27px 22px; } .stateCard h2 { font-size: 28px; } .stateCard > p:not(.eyebrow) { font-size: 12px; } }
+@media (max-width: 350px) { .amount { font-size: 41px; } .range strong { font-size: 19px; } .range { gap: 8px; } .heading h1 { font-size: 34px; } }
+@media (prefers-reduced-motion: reduce) { .page *, .page *::before, .page *::after { animation: none !important; transition: none !important; } .back:hover svg, .nextButton:hover, .nextButton:hover svg, .nextButton:active { transform: none; } }

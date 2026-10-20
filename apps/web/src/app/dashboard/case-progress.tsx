@@ -28,7 +28,6 @@ export function CaseProgress({ data }: { data: DashboardData }) {
     <div className={styles.detailGrid}>
       <div><span className={styles.detailLabel}>CURRENT PROPERTY</span><strong>{data.valuation?.scheme ?? "Your saved property"}</strong><p>{app.address_line}</p>
         <p>Preliminary value: {hasPrice(data.valuation) ? data.valuation?.low != null && data.valuation.high != null ? `${money(data.valuation.low)} – ${money(data.valuation.high)}` : money(data.valuation?.estimate) : "Not available"}</p>
-        {data.valuation && <Link prefetch={false} className={styles.textLink} href={`/valuation/result/${data.valuation.id}`}>View saved valuation<ArrowUpRight size={14} aria-hidden="true" /></Link>}
       </div>
       <div><span className={styles.detailLabel}>SELECTED NEW HOME & PLAN</span><strong>{data.project ?? "Project details unavailable"}</strong><p>{app.unit_type}</p><p>{app.plan === "A" ? "Plan A · Direct Purchase" : "Plan B · Open-Market Selling"}</p><p>Last updated {dateLabel(app.updated_at)}</p></div>
     </div>
@@ -39,6 +38,7 @@ export function CaseProgress({ data }: { data: DashboardData }) {
     {["offer_sent", "review_requested", "expired", "accepted", "listed", "buyer_found", "guarantee_triggered"].includes(view.status ?? "") && <div className={styles.message}><strong>{app.plan === "B" ? "Formal offer · agreed price floor, conditions apply" : "Formal purchase offer"}</strong><p className={styles.amount}>{money(app.offer_amount)}</p>
       {app.offer_expires_at && <p className={styles.deadline}><Clock3 size={14} aria-hidden="true" />{view.status === "expired" ? "Response period ended" : ["offer_sent", "review_requested"].includes(view.status ?? "") ? "Respond by" : "Original response deadline"}: {dateLabel(app.offer_expires_at, true)} (MYT)</p>}
     </div>}
-    <p className={styles.panelNote}>This view tracks saved progress. Application response forms and other unfinished workflow screens are coming in their own phases. No action has been submitted here.</p>
+    <Link prefetch={false} className={styles.textLink} href={`/dashboard/applications/${app.id}`}>Open application details & respond<ArrowUpRight size={14} aria-hidden="true" /></Link>
+    <p className={styles.panelNote}>This summary tracks saved progress. Open the application to read messages, view its details and respond when a step needs your decision. No action is submitted from this summary.</p>
   </section>;
 }

@@ -390,6 +390,8 @@ Home（/home，2026-10-16 用户批准的登录后主入口）
 
 **点进去的详细页：** 估价与 10 笔参考成交、所选新屋与户型、方案计算、换屋计划书、所有状态改变的记录与日期、admin 发来的讯息与拒绝或补件原因。
 
+实现路由（2026-10-20）：在 `/dashboard` 展开本人的申请后，点「Open application details & respond」进入 `/dashboard/applications/[id]`。这是 Dashboard 下的个别申请子视图，不是重新填写第 ⑤ 步。按实际阶段显示回应表单；补件与正式报价复核可附最多 5 张 JPEG / PNG / WebP 照片，每张最多 5 MiB（显示为 5 MB），只给本人及授权团队查看。内部 audit note / payload 不显示给屋主。照片/讯息扩展必须先部署前一阶段 backend migration；未部署时不伪造记录或成功回应。
+
 ## 6. 需要新增的数据
 
 | 新增 | 用在哪里 |
