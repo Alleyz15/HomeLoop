@@ -244,6 +244,7 @@
 - [x] 2026-10-15 Gemini 模型链改为每次尝试最多 8 秒（`GEMINI_ATTEMPT_TIMEOUT_SECONDS`，可覆盖），整条链仍以 `GEMINI_TIMEOUT_SECONDS=20` 为上限；timeout 直接换 fallback，只有 429/503 会重试同一模型；`eval/smoke_explain.py --runs N` 可检查真实成功率与平均延迟（commit `850a632`）
 - [x] 2026-10-15 `/valuation/result/[id]` 的 AI slot 已拆成独立 async Server Component + Suspense；估价数字和参考成交先显示，AI 后续串流，失败时静默隐藏（commit `1fb3620`）
 - [x] 2026-10-15 `AiThinking` 无图标 loading card 已完成：轮换短句、三点错开跳动、admin 文案 preset、reduced-motion 静态显示及 status accessibility（commit `1fb3620`）
+- [x] 2026-10-21 AI 数字 guard 已补上英文数字词解析（commit `3a72485`）：`eight hundred and fifty thousand` 等表达会转换后使用与数字相同的输入 grounding 检查；输入真实包含的计数和年数仍可通过，捏造金额会触发 template fallback
 
 ### B6. 风险模拟 API
 
@@ -294,13 +295,13 @@
 - [x] 2026-10-20 A1 只读申请面板（`/admin`）源码完成：真实每月额度/用量、All + 七个工作队列（含接受后追踪）、完整资料计数、分页、申请人/物业/项目搜索、旧屋 township/方案/警告筛选、明确缺资料/错误状态；沿用 ivory / forest-green / sage，轻动效、键盘操作、reduced-motion 与手机横向表格。读取不调用会修改到期状态的 flags RPC，不新增报价公式或 workflow 写入。94 项 Node 测试、TypeScript、lint 与 production/browser 检查记录见 `Frontend_Implementation_Log.md` F3-01a；hosted migration/权限/额度配置只读核对完成。待用户审核/commit，未部署；真实 LOCAL Supabase / 浏览器 RLS 验证因本机无 Docker/Supabase 未执行。Details 尚未实现，逐案入口诚实注明不可用。
   - [ ] A1.4 每月额度编辑：按计划在 Dashboard 审核后另外实施；不在本次只读面板阶段新增。
   - [x] 2026-10-20 用户批准简化 admin 页头（F3-01b，待 commit）：移除 Refresh records 按钮、Loaded 时间与不用的 DTO 字段/样式；移除 Applications / Risk simulator 导航链接。保留 Logo、账号、Sign out、admin 登录直达 `/admin` 与原有资料读取/API。A1 原始实现 commit 已核实为 `96edfb8`。
-- [ ] A2 申请详情（`/admin/applications/[id]`）：完整资料、AI 估价与参考成交、照片、AI 辅助摘要、操作记录；按当前关卡显示操作按钮与表单（看屋结果、调整原因、公式算出的报价预览）（第 5.5 节）
+- [x] 2026-10-21 A2 申请详情（`/admin/applications/[id]`）本地流程完成：完整资料、AI 估价与参考成交、照片、AI 辅助摘要、操作记录；按当前关卡显示操作按钮与表单（看屋结果、调整原因、数据库公式算出的报价预览）（第 5.5 节）。相关 hosted migrations 与前端仍待部署验证
   - [x] 2026-10-20 本地实现 A2 资料页与现有后台支持的操作（F3-02a，待 commit）：房屋/保存报价/看屋资料、protected audit 分页、owner message 与内部 note 分离、private 照片查看、stage-based review/补件/拒绝/Plan A 初步范围/manual consent/上门/签约确认/后续里程碑、明确发送讯息与受限 AI 辅助。Dashboard 已接逐案入口并保留筛选返回。104 项 Node 测试、TypeScript、lint、production/browser fixture 检查通过；详见前端记录。
   - [x] 2026-10-20 按批准的视觉稿重排 A2（F3-02b，待 commit）：平衡摘要/操作卡片、全宽资料分页、折叠 AI/内部 note、柔和柚橙色操作标题、轻量动画及 reduced-motion；保留原后台与 G1/G2 停点，不改屋主页面。
   - [x] 2026-10-21 G2 Plan B 初步金额完整接通（commits `113a4af`、`3e24a34`、`5ea6195`，未部署）：Admin 在 `under_review` 发送与申请/新屋价格匹配的保存 quote；`indicative_low/high` 是扣除假设销售费用后的预计公开市场净收入区间，75% guarantee floor 独立展示。Server Action 与数据库都会 fail closed；snapshot 缺失、不完整、不合资格、非 whole-RM、不匹配、已切换方案、人工估价或 receipt 被修改均阻止发送。Owner 不读取 private audit；补件后仍等 Admin 明确判断，不自动推进。
   - [x] 2026-10-21 G1 正式报价预览、正式发出及回应一次复核已完成本地实现（commits `3e24a34`、`5ea6195`，未部署）：Admin 输入注册估价确认值；区间外必须写屋主可见说明。页面显示数据库 authoritative preview、资格和额度，再明确 Confirm；finalize 锁定并核对 revision/amount，不信任浏览器报价。Owner 详情及 Dashboard 显示正式计算基础与公开说明，最后决定接受、拒绝、复核或合资格换方案。
-  - [ ] B→A 后重新安排 registered-valuer appointment 仍是独立缺口：现有切换会清空日期并回到 `inspection_scheduled`，但尚无批准的重新预约 RPC/控件。本次不以直接写日期绕过状态机。Hosted migration `20261021054226` 及前端部署另待确认。
-- [ ] A3 风险模拟（`/admin/simulator`）：拉杆与即时结果
+  - [x] 2026-10-21 B→A registered-valuer handoff 已完成本地实现（commit `6b629b3`；migration `20261021074642_add_b_to_a_registered_valuation.sql`，尚待远端 push）：安全 RPC 只允许 Admin 在一次 B→A 切换后预约，锁行并写一笔 event。Admin 录入外部注册估价师的新确认值时，页面保留旧 Plan B 确认值作参考；金额有任何变化都必须提供屋主可见说明，超出 AI 区间亦须说明，valuer/basis 写入内部记录。正式 Plan A offer 仍由数据库按 78.5% 计算，Owner 决定接受、拒绝或复核
+- [x] 2026-10-21 A3 风险模拟（`/admin/simulator`）本地完成（commit `7448fe2`）：Admin-only、server-only 调用现有 B6 API；拉杆 debounce 与手动运行并存，percentage-first 显示 Plan A / Plan B 风险，RM 数字明确区分 RM786,000 reference valuation 与 sample-weighted 基准，直方图笔数会与 `n_cases` 对账；含 loading/error/empty、手机及 reduced-motion 状态
 
 ### F4. 串接与收尾
 
@@ -330,9 +331,10 @@
 | `create_demo_users.py` role 验证（已解决） | commit `0388866` 会检查 update 回传确实包含目标 profile；未命中时非零退出，不再误报 admin role 已设定。 |
 | 每月额度月份归属（已解决） | Migration `20261015084351_fix_monthly_limit_timezone.sql`（commit `93faa61`）已于 2026-10-15 套用线上，统一以 `Asia/Kuala_Lumpur` 计算报价月份；本机重建与 59 项 pgTAP 已通过，远端 migration list 已对齐，linked database lint 无错误。 |
 | `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
-| 风险模拟的 RM 金额要标明估价基准 | 《商业模式》第 5 节算的是**占估价的百分比**；RM3,500 / RM26,000 是套在示例的 RM786,000 上。187 笔的平均估价是 RM944,511，所以按每笔自己估价平均会得到 RM7,354 / RM36,953。`/simulator/run` 三种基准都回传，A3 优先显示百分比 |
+| 风险模拟的 RM 金额基准（已解决） | commit `7448fe2` 的 A3 页面以百分比为主，并把 RM 数字分别标为 RM786,000 reference valuation 与 sample-weighted basis，不再把两种金额误写成同一含义。`/simulator/run` 的三种基准维持不变。 |
 | B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此 priced snapshot 数值仍只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额。人工路径额外核对该屋主保存的 `valuation_status=insufficient_data` 与对应 `road_catalog.n_recent_3y < 10`，不接受单靠客户端自称资料不足。 |
-| B→A 后的 registered-valuer 重新预约仍未完成 | 方案切换会正确清空旧 offer/appointment 并要求重新上门，但目前没有专用安全 RPC/页面控件写入新预约时间。不可直接更新申请日期；需下一项后台合同与 UI 工作补齐。 |
+| B→A registered-valuer 重新预约（本地已解决，待部署） | migration `20261021074642_add_b_to_a_registered_valuation.sql` 与 commit `6b629b3` 已补专用安全 RPC、Admin 预约/录值控件、旧值审计及屋主可见差异说明；不直接更新申请日期或手填 offer。远端 migration push 与 Vercel 部署后才算线上生效。 |
+| Admin flags SQL / TypeScript 门槛必须同步 | `admin_application_flags()` 与 `apps/web/src/lib/admin-applications-model.ts` 目前都使用 valuation gap 10% 与 quota near 80%。migration `20261021074642` 加入数据库 COMMENT 记录此契约但不改逻辑；以后调整任一门槛必须同时修改 SQL、TypeScript 与测试。 |
 
 ## 5. 已确定的关键数字（不要随意改）
 
