@@ -53,7 +53,9 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
       case "reject": result = await rejectApplication(id, input.reason, audit); break;
       case "initial_a": result = await sendIndicative(id, input.low!, input.high!, audit); break;
       case "initial_b": result = await sendIndicative(id, initialB!.low, initialB!.high, { note: input.note || null,
-        payload: { amount_source: "saved_plan_quote_snapshot", indicative_kind: "expected_open_market_proceeds", indicative_floor: initialB!.floor } }); break;
+        payload: { initial_figures_receipt: { version: 1, plan: "B", meaning: "expected_open_market_proceeds",
+          source: "application.plan_quote_snapshot.plan_b", canonical_low: initialB!.low, canonical_high: initialB!.high,
+          canonical_floor: initialB!.floor } } }); break;
       case "manual_consent": result = await requestManualValuation(id, audit); break;
       case "schedule": result = await scheduleInspection(id, input.appointment!, audit); break;
       case "findings": result = await recordInspection(id, { unitTypeConfirmed: input.unitMatch!, condition: input.condition!, confirmedValue: input.value!,
@@ -67,6 +69,8 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
       case "handover": result = await markHandover(id, audit); break;
     }
     if (result!.id !== id || result!.status !== ADMIN_ACTIONS[input.action].result || (input.action === "signing" && !result!.espa_confirmed_at)) throw new Error("Unexpected workflow result");
+    if (input.action === "initial_b" && (result!.plan !== "B" || positive(result!.indicative_low) !== initialB!.low
+      || positive(result!.indicative_high) !== initialB!.high)) throw new Error("Unexpected Plan B initial-figures result");
     invalidate(id);
     return { success: `${ADMIN_ACTIONS[input.action].label}: recorded successfully.`, reload: true };
   } catch (error) {

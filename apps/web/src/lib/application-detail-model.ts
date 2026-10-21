@@ -20,7 +20,7 @@ export function initialPlanBFigures(app: OwnerApplication) {
   if (app.plan !== "B" || app.manual_valuation_required || app.plan_switch_count !== 0 || !validPlanQuote(quote)
     || Number(quote.new_home.price) !== Number(app.new_home_price) || (selected && selected !== "B")) return null;
   const low = Number(quote.plan_b.expected_net_low), high = Number(quote.plan_b.expected_net_high), floor = Number(quote.plan_b.floor);
-  if (![low, high, floor].every(value => Number.isFinite(value) && value > 0) || low > high
+  if (quote.plan_b.eligible !== true || ![low, high, floor].every(value => Number.isSafeInteger(value) && value > 0) || low > high
     || Number(app.indicative_low) !== low || Number(app.indicative_high) !== high) return null;
   return { low, high, floor };
 }

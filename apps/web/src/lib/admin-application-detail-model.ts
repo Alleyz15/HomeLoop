@@ -60,7 +60,9 @@ export function initialARange(app: Application) {
 export function initialBFigures(app: Application) {
   if (app.plan !== "B") return null;
   const quote = savedCaseQuote(app), low = positive(quote?.plan_b.expected_net_low), high = positive(quote?.plan_b.expected_net_high), floor = positive(quote?.plan_b.floor);
-  return low !== null && high !== null && floor !== null && low <= high ? { low, high, floor } : null;
+  const wholeMoney = (value: number | null) => value !== null && Number.isSafeInteger(value);
+  return quote?.plan_b.eligible === true && wholeMoney(low) && wholeMoney(high) && wholeMoney(floor) && low! <= high!
+    ? { low: low!, high: high!, floor: floor! } : null;
 }
 export function adminCaseActions(app: Application, now = Date.now()): AdminAction[] {
   if (!["A", "B"].includes(app.plan)) return [];
@@ -128,15 +130,24 @@ export type ValidAdminInput = { id: string; action: AdminAction; revision: strin
   condition: PropertyCondition | null; value: number | null; adjustment: string; valuer: string; basis: string };
 export function parseAdminAction(form: FormData): ValidAdminInput {
   const keys = ["application_id", "action", "revision", "confirmed", "message", "note", "reason", "category", "low", "high", "appointment", "unit_match", "condition", "value", "adjustment", "valuer", "basis"];
+  const submittedKeys: string[] = [];
   for (const [key, value] of form.entries()) {
     // React adds action transport fields to native forms. They carry no trusted
     // case data here; validate every application-owned field separately below.
     if (key.startsWith("$ACTION_")) continue;
     if (!keys.includes(key) || form.getAll(key).length !== 1 || typeof value !== "string") throw new Error("Invalid form fields. Reload the case before continuing.");
+    submittedKeys.push(key);
   }
   const text = (key: string, limit = 4000) => { const value = String(form.get(key) ?? "").trim(); if ([...value].length > limit) throw new Error(`Use no more than ${limit.toLocaleString("en-GB")} characters.`); return value; };
   const id = text("application_id", 36), action = text("action", 30), revision = text("revision", 64);
   if (!validCaseId(id) || !Object.hasOwn(ADMIN_ACTIONS, action) || !/^[a-f0-9]{64}$/.test(revision)) throw new Error("Invalid case or action. Reload before continuing.");
+  const actionFields: Record<AdminAction, string[]> = {
+    start: [], information: ["reason"], reject: ["category", "reason"], initial_a: ["low", "high"], initial_b: [],
+    manual_consent: [], schedule: ["appointment"], findings: ["unit_match", "condition", "value", "adjustment", "valuer", "basis"],
+    signing: [], listed: [], buyer: [], guarantee: [], completed: [], handover: [], message: ["message"],
+  };
+  const allowed = new Set(["application_id", "action", "revision", "confirmed", "note", ...actionFields[action as AdminAction]]);
+  if (submittedKeys.some(key => !allowed.has(key))) throw new Error("Invalid fields for this action. Reload the case before continuing.");
   if (form.get("confirmed") !== "on") throw new Error("Confirm that you understand this action before submitting.");
   const categories: Record<string, string> = { structural: "Structural concerns", title: "Title or ownership concerns", capacity: "Monthly capacity", other: "Other" };
   const category = text("category", 20), reason = text("reason");

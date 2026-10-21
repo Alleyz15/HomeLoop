@@ -90,6 +90,15 @@ test("owner Plan B initial figures keep expected proceeds and the guarantee floo
   for (const patch of [{ new_home_price: 1 }, { plan_switch_count: 1 }, { manual_valuation_required: true }, { plan: "A" }, { plan_quote_snapshot: {} }, { indicative_low: 1 }]) {
     assert.equal(model.initialPlanBFigures(fixture("indicative_sent", patch).application), null);
   }
+  for (const planB of [
+    { eligible: false },
+    { expected_net_low: 669200.5 },
+    { expected_net_high: Number.NaN },
+    { floor: Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
+    const quote = structuredClone(detail.application.plan_quote_snapshot); Object.assign(quote.plan_b, planB);
+    assert.equal(model.initialPlanBFigures(fixture("indicative_sent", { plan_quote_snapshot: quote, indicative_low: quote.plan_b.expected_net_low, indicative_high: quote.plan_b.expected_net_high }).application), null);
+  }
 });
 test("expired or malformed offers, exhausted limits and ineligible switches fail closed", () => {
   for (const expiry of [null, "bad-date", new Date(now - 1).toISOString()]) assert.deepEqual(model.detailView(fixture("offer_sent", { offer_expires_at: expiry }), now).actions, []);
