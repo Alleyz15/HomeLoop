@@ -11,6 +11,11 @@ Method: claims below were reproduced rather than read off the code. Commands and
 anyone can re-run them. Where a suspicion turned out to be wrong, that is recorded too, so nobody
 re-investigates it.
 
+**Branches checked.** Every finding was verified against `main` at `a4506a4` *and* against the unmerged
+branches, so nothing here duplicates work already done elsewhere. One result of that: **finding 2 is
+already fixed on `origin/QY`** in commit `3f301d2` and only needs merging — see that section. The other
+five are open on `main` and on `QY`.
+
 ---
 
 ## Summary
@@ -18,7 +23,7 @@ re-investigates it.
 | # | Finding | Severity | Blocks the demo? | Fix size |
 |---|---|---|---|---|
 | 1 | The formal offer cannot be issued; 12 RPCs and 10 built UI controls are stranded | **Blocker** | Yes — steps 8–9 | one `case` + a form |
-| 2 | A Plan B application can never leave `under_review` | **Blocker** | Yes — step 6, and Plan B is the 主推 plan | one gate + a decision |
+| 2 | A Plan B application can never leave `under_review` | ~~Blocker~~ **fixed on `QY`** | was step 6 | merge `QY` |
 | 3 | The admin cannot respond to an offer review | High | §5.5 owner option | one `case` + a form |
 | 4 | A3 risk simulator page does not exist | High | Yes — step 10, 原则 13 | one page, API already done |
 | 5 | The 原则 14 number guard misses spelled-out numbers | Medium | Trust risk on camera | ~15 lines + 2 prompt lines |
@@ -142,7 +147,26 @@ owner sees the amount and the countdown → accept → `espa_signed` path opens.
 
 ---
 
-## 2. Blocker — a Plan B application can never leave `under_review`
+## 2. Fixed on `QY` — a Plan B application could never leave `under_review`
+
+> **Status: already fixed, pending merge.** `origin/QY` commit `3f301d2`
+> ("feat(frontend): add Plan B initial figures flow", 2026-10-21) resolves this. It adds `initial_b` to
+> `AdminAction` and `ADMIN_ACTIONS` with `result: "indicative_sent"`, an `initialBFigures()` helper at
+> line 60, and the Plan B branch at line 72. **No further work is needed beyond merging `QY` into
+> `main`.** The problem and the reasoning are kept below because they explain why the merge matters and
+> what to verify after it.
+>
+> **The design question was decided differently from this document's recommendation, and the shipped
+> choice is better.** `initialBFigures()` stores the **expected open-market proceeds range**
+> (`expected_net_low` … `expected_net_high`) as the indicative range and shows the guarantee floor
+> separately, rather than storing the floor as a point. That is closer to §5.5's
+> "并显示预计可拿到的市价范围": the owner is reacting to what they would actually receive, with the floor
+> alongside it. Treat the recommendation in the Solution section below as superseded.
+>
+> **After merging, verify:** a Plan B case at `under_review` offers "Send initial Plan B figures"; the
+> owner sees an expected-proceeds range plus a separate floor, labelled as preliminary and not an offer;
+> 「我有兴趣，继续」 moves it to `owner_proceed`; and a Plan B case whose saved quote is incomplete still
+> shows the honest stage note rather than an invented range.
 
 ### Problem
 
@@ -181,7 +205,7 @@ than finding 1.
 rejects manual-valuation cases and requires `under_review`, validates `low > 0`, `high > 0`,
 `low <= high`, and nothing else. Nothing in the database needs to change.
 
-### Solution
+### Solution (superseded by `QY` `3f301d2` — kept for the reasoning)
 
 The blocking question — what a Plan B indicative range means — is already answered by the spec. §5.5 第 2 关:
 
@@ -527,15 +551,16 @@ together is cheaper than doing them separately — one pass over the admin stage
 
 | Order | Finding | Why first | Rough shape |
 |---|---|---|---|
-| 1 | **2** — Plan B indicative | Stops the demo *earliest*, at the first admin step, and Plan B is the 主推 plan | one decision + a gate + one action |
+| 1 | **2** — Plan B indicative | **Already written on `QY`.** Merging it unblocks the demo's first admin step | merge `QY` into `main` |
 | 2 | **1** — issue formal offer | Unblocks ten finished controls and the end of the journey | one action + a confirm form |
 | 3 | **4** — A3 simulator | 原则 13 mandates it; API is done, deployed, verified | one page, no backend work |
 | 4 | **3** — review response | Completes §5.5's four owner options; only reachable after finding 1 | one action + a form |
 | 5 | **5** — number-word guard | Protects the explanation on camera | ~15 lines + 2 prompt lines |
 | 6 | **6** — flag comment | Housekeeping | a comment |
 
-**Decide finding 2 first**, before writing any code: whether the Plan B indicative stores the floor as a
-point or as a range. Everything else in that group is mechanical, and that one question gates it.
+**Merge `QY` first.** Finding 2 is done there and nothing else should be built on top of a `main` that
+still has the Plan B dead end — findings 1 and 3 touch the same two files, so merging first avoids a
+conflict in `adminCaseActions()` and `ADMIN_ACTIONS`.
 
 **Then run the demo script end to end**, because findings 1 and 2 are exactly the steps a page-by-page
 review would not catch — each page works in isolation; it is the hand-off between stages that breaks.
