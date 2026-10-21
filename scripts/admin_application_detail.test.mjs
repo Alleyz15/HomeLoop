@@ -16,12 +16,23 @@ const readerUrl = url((await read("lib/admin-application-detail.ts")).replace('i
   .replace('import { createClient } from "@/lib/supabase/server";', "const createClient = async () => globalThis.__adminCase.client;")
   .replace('"./admin-application-detail-model"', JSON.stringify(modelUrl)).replace('"./admin-applications-model"', JSON.stringify(listUrl)));
 const reader = await import(readerUrl);
-const functions = ["startReview", "requestInfo", "rejectApplication", "sendIndicative", "requestManualValuation", "scheduleInspection", "recordInspection", "confirmEspa", "markListed", "markBuyerFound", "markGuaranteeTriggered", "markOldHomeCompleted", "markHandover"];
+const functions = ["startReview", "requestInfo", "rejectApplication", "sendIndicative", "requestManualValuation", "scheduleInspection", "recordInspection", "previewApplicationOffer", "issueOfferFromPreview", "respondReviewFromPreview", "confirmEspa", "markListed", "markBuyerFound", "markGuaranteeTriggered", "markOldHomeCompleted", "markHandover"];
 globalThis.__adminCaseFunctions = Object.fromEntries(functions.map(name => [name, async (...args) => {
   const state = globalThis.__adminCase; state.calls.push({ name, args });
   if (state.rpcFailure) throw new Error("Uncertain transport");
+  if (name === "previewApplicationOffer") return state.previewResult ?? {
+    schema_version: 1, application_id: CASE_ID, operation: args[1], plan: state.app.plan, status: state.app.status,
+    case_revision: "a".repeat(32), confirmed_value_used: args[2] ?? state.app.confirmed_value,
+    saved_new_home_price: state.app.new_home_price, offer_kind: state.app.plan === "A" ? "formal_purchase_price" : "formal_guarantee_floor",
+    offer_amount: state.app.plan === "A" ? 628000 : Math.round(Number(args[2] ?? state.app.confirmed_value) * 0.75),
+    eligibility: { eligible: true, reason_codes: [] },
+    capacity: { month_myt: "2026-10-01", configured_limit: 20000000, used_excluding_application: 0, proposed_usage: 600000, remaining_after: 19400000, available: true, reason_code: null },
+    can_finalize: true, checked_at: "2026-10-21T00:00:00Z",
+  };
   return state.rpcResult ?? { ...state.app, id: CASE_ID, status: state.expected,
     ...(name === "sendIndicative" ? { indicative_low: args[1], indicative_high: args[2] } : {}),
+    ...(name === "issueOfferFromPreview" ? { offer_amount: args[2] } : {}),
+    ...(name === "respondReviewFromPreview" ? { offer_amount: args[3], confirmed_value: args[5] ?? state.app.confirmed_value } : {}),
     ...(name === "confirmEspa" ? { espa_confirmed_at: new Date().toISOString() } : {}) };
 }]));
 const actionSource = (await read("app/admin/applications/[id]/actions.ts")).replace('"use server";', "")
@@ -72,19 +83,22 @@ test("evidence tabs allow only known sections and preserve safe return filters a
   assert.equal(selected.searchParams.get("tab"), "messages");
 });
 
-test("admin controls expose saved Plan B initial figures while keeping G1 and owner actions blocked", () => {
-  const expected = { submitted: ["start"], under_review: ["initial_b", "information", "reject"], info_requested: [], indicative_sent: [], manual_valuation_pending: [], owner_proceed: ["schedule"], inspection_scheduled: ["findings"], inspected: ["information", "reject"], offer_sent: [], review_requested: [], accepted: [], espa_signed: [], listed: [], buyer_found: [], guarantee_triggered: [], old_home_completed: [], handover: [], withdrawn: [], declined: [], expired: [], rejected: [] };
+test("admin controls expose Plan B initial figures and the backend-authoritative formal-offer steps", () => {
+  const expected = { submitted: ["start"], under_review: ["initial_b", "information", "reject"], info_requested: [], indicative_sent: [], manual_valuation_pending: [], owner_proceed: ["schedule"], inspection_scheduled: ["findings"], inspected: ["offer", "information", "reject"], offer_sent: [], review_requested: [], accepted: [], espa_signed: [], listed: [], buyer_found: [], guarantee_triggered: [], old_home_completed: [], handover: [], withdrawn: [], declined: [], expired: [], rejected: [] };
   for (const [status, allowed] of Object.entries(expected)) assert.deepEqual(model.adminCaseActions(caseFixture(status)).filter(action => action !== "message"), allowed, status);
   assert.deepEqual(model.adminCaseActions(caseFixture("under_review", { plan: "A" })), ["initial_a", "information", "reject", "message"]);
   assert.ok(model.adminCaseActions(caseFixture("under_review", { manual_valuation_required: true })).includes("manual_consent"));
   assert.deepEqual(model.adminCaseActions(caseFixture("listed", { espa_confirmed_at: "2026-10-20T00:00:00Z" })), ["buyer", "guarantee", "message"]);
   assert.deepEqual(model.adminCaseActions(caseFixture("espa_signed", { plan: "A", espa_confirmed_at: "2026-10-20T00:00:00Z" })), ["completed", "message"]);
   assert.equal(model.caseStatus(caseFixture("offer_sent", { offer_expires_at: "2020-01-01T00:00:00Z" })), "expired");
-  for (const expiry of [null, "invalid", "2020-01-01T00:00:00Z"]) assert.ok(!model.adminCaseActions(caseFixture("review_requested", { offer_expires_at: expiry })).includes("respond_review"));
+  assert.ok(model.adminCaseActions(caseFixture("review_requested", { offer_expires_at: "2099-01-01T00:00:00Z" })).includes("review_response"));
+  for (const expiry of [null, "invalid", "2020-01-01T00:00:00Z"]) assert.ok(!model.adminCaseActions(caseFixture("review_requested", { offer_expires_at: expiry })).includes("review_response"));
 });
 test("saved quotations cannot silently follow plan switches or changed prices; appointment conversion is timezone-independent", () => {
   assert.equal(model.initialARange(caseFixture("under_review", { plan: "A" })).low, 549500);
+  assert.equal(model.initialARange(caseFixture("under_review", { plan: "B" })), null);
   assert.deepEqual(model.initialBFigures(caseFixture("under_review")), { low: 669200, high: 860400, floor: 600000 });
+  assert.equal(model.initialBFigures(caseFixture("under_review", { plan: "A" })), null);
   for (const patch of [{ plan_switch_count: 1 }, { manual_valuation_required: true }, { new_home_price: 1 }, { plan_quote_snapshot: {} }]) assert.equal(model.savedCaseQuote(caseFixture("under_review", patch)), null);
   for (const patch of [{ plan_switch_count: 1 }, { manual_valuation_required: true }, { new_home_price: 1 }, { plan_quote_snapshot: {} }, { plan: "A" }]) assert.equal(model.initialBFigures(caseFixture("under_review", patch)), null);
   for (const planB of [
@@ -185,11 +199,43 @@ test("manual findings require a valuer/basis, avoid AI adjustment and preserve c
   assert.ok((await actions.performAdminAction({}, await formFor("findings", { ...fields, valuer: "Registered QA valuer", basis: "Local QA valuation report", note: "Internal only" }))).success);
   assert.equal(state.calls[0].args[1].valueAdjustReason, null); assert.match(state.calls[0].args[2].note, /Registered QA valuer/);
 });
-test("Plan A keeps its explicit range validation while unsupported formal preview actions stay blocked", async () => {
+test("Plan A keeps its explicit initial-range validation", async () => {
   let state = setup(caseFixture("under_review", { plan: "A" })); state.expected = "indicative_sent";
   assert.ok((await actions.performAdminAction({}, await formFor("initial_a", { low: "549500", high: "706500" }))).success); assert.equal(state.calls[0].name, "sendIndicative");
   for (const [low, high] of [["0", "1"], ["Infinity", "2"], ["5", "4"]]) { state = setup(caseFixture("under_review", { plan: "A" })); assert.ok((await actions.performAdminAction({}, await formFor("initial_a", { low, high }))).error); assert.equal(state.calls.length, 0); }
   state = setup(caseFixture("under_review")); assert.ok((await actions.performAdminAction({}, await formFor("initial_a", { low: "1", high: "2" }))).error); assert.equal(state.calls.length, 0);
+});
+test("human findings require an owner-visible explanation only outside the inclusive saved AI range", async () => {
+  let state = setup(caseFixture("inspection_scheduled")); state.expected = "inspected";
+  assert.ok((await actions.performAdminAction({}, await formFor("findings", { unit_match: "yes", condition: "good", value: "700000" }))).success);
+  assert.equal(state.calls[0].args[1].valueAdjustReason, null);
+  state = setup(caseFixture("inspection_scheduled"));
+  assert.match((await actions.performAdminAction({}, await formFor("findings", { unit_match: "yes", condition: "good", value: "900001" }))).error, /outside/i);
+  assert.equal(state.calls.length, 0);
+  state = setup(caseFixture("inspection_scheduled")); state.expected = "inspected";
+  assert.ok((await actions.performAdminAction({}, await formFor("findings", { unit_match: "yes", condition: "good", value: "900001", adjustment: "The registered assessment reflects the completed extension." }))).success);
+  assert.equal(state.calls[0].args[1].valueAdjustReason, "The registered assessment reflects the completed extension.");
+});
+test("formal offers are previewed before the exact revision and amount are finalized", async () => {
+  let state = setup(caseFixture("inspected", { confirmed_value: 800000 }));
+  let result = await actions.performAdminAction({}, await formFor("offer", { phase: "preview", confirmed: "" }));
+  assert.equal(result.preview.offer_amount, 600000);
+  assert.equal(state.calls.length, 1); assert.equal(state.calls[0].name, "previewApplicationOffer");
+
+  state = setup(caseFixture("inspected", { confirmed_value: 800000 })); state.expected = "offer_sent";
+  result = await actions.performAdminAction({}, await formFor("offer", { phase: "finalize", offer_revision: "a".repeat(32), offer_amount: "600000" }));
+  assert.ok(result.success, result.error); assert.equal(state.calls.length, 1); assert.equal(state.calls[0].name, "issueOfferFromPreview");
+  assert.deepEqual(state.calls[0].args.slice(0, 3), [CASE_ID, "a".repeat(32), 600000]);
+
+  state = setup(caseFixture("review_requested", { confirmed_value: 800000, offer_amount: 600000, offer_expires_at: "2099-01-01T00:00:00Z", review_count: 1 }));
+  result = await actions.performAdminAction({}, await formFor("review_response", { phase: "preview", review_operation: "revise_review", value: "810000", reason: "The additional registered evidence supports this value.", confirmed: "" }));
+  assert.equal(result.preview.operation, "revise_review"); assert.equal(result.preview.offer_amount, 607500);
+  assert.equal(state.calls[0].name, "previewApplicationOffer");
+
+  state = setup(caseFixture("review_requested", { confirmed_value: 800000, offer_amount: 600000, offer_expires_at: "2099-01-01T00:00:00Z", review_count: 1 })); state.expected = "offer_sent";
+  result = await actions.performAdminAction({}, await formFor("review_response", { phase: "finalize", review_operation: "revise_review", value: "810000", reason: "The additional registered evidence supports this value.", offer_revision: "a".repeat(32), offer_amount: "607500" }));
+  assert.ok(result.success, result.error); assert.equal(state.calls[0].name, "respondReviewFromPreview");
+  assert.deepEqual(state.calls[0].args.slice(0, 5), [CASE_ID, "revise_review", "a".repeat(32), 607500, "The additional registered evidence supports this value."]);
 });
 test("stale tabs and uncertain network outcomes do not blindly retry or claim success", async () => {
   const state = setup(); const old = await formFor("start"); state.events.push(eventFixture(2));

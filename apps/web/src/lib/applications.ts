@@ -30,6 +30,32 @@ export type NewHomePriceSource = "from_price" | "sales_quote";
 export type StoredNewHomePriceSource = "price_from" | "sales_quote";
 export type PropertyCondition = "good" | "fair" | "needs_repair";
 export type JsonObject = Record<string, unknown>;
+export type FormalOfferOperation = "issue" | "keep_review" | "revise_review";
+
+export type FormalOfferPreview = {
+  schema_version: 1;
+  application_id: string;
+  operation: FormalOfferOperation;
+  plan: ApplicationPlan;
+  status: ApplicationStatus;
+  case_revision: string;
+  confirmed_value_used: number;
+  saved_new_home_price: number;
+  offer_kind: "formal_purchase_price" | "formal_guarantee_floor";
+  offer_amount: number;
+  eligibility: { eligible: boolean; reason_codes: string[] };
+  capacity: {
+    month_myt: string;
+    configured_limit: number | null;
+    used_excluding_application: number;
+    proposed_usage: number;
+    remaining_after: number | null;
+    available: boolean;
+    reason_code: string | null;
+  };
+  can_finalize: boolean;
+  checked_at: string;
+};
 
 export type Application = {
   id: string;
@@ -260,12 +286,28 @@ export function recordInspection(
   });
 }
 
-export function issueOffer(
+export function previewApplicationOffer(
   applicationId: string,
+  operation: FormalOfferOperation,
+  revisedConfirmedValue?: number | null,
+): Promise<FormalOfferPreview> {
+  return callRpc<FormalOfferPreview>("preview_application_offer", {
+    p_application_id: applicationId,
+    p_operation: operation,
+    p_revised_confirmed_value: revisedConfirmedValue ?? null,
+  });
+}
+
+export function issueOfferFromPreview(
+  applicationId: string,
+  expectedCaseRevision: string,
+  expectedOfferAmount: number,
   audit: AuditInput = {},
 ): Promise<Application> {
-  return callRpc<Application>("issue_offer", {
+  return callRpc<Application>("issue_offer_from_preview", {
     p_application_id: applicationId,
+    p_expected_case_revision: expectedCaseRevision,
+    p_expected_offer_amount: expectedOfferAmount,
     ...auditArgs(audit),
   });
 }
@@ -282,20 +324,22 @@ export function requestReview(
   });
 }
 
-export function respondReview(
+export function respondReviewFromPreview(
   applicationId: string,
-  input: {
-    keepOffer: boolean;
-    reason: string;
-    confirmedValue?: number | null;
-  },
+  operation: Exclude<FormalOfferOperation, "issue">,
+  expectedCaseRevision: string,
+  expectedOfferAmount: number,
+  reason: string,
+  revisedConfirmedValue?: number | null,
   audit: AuditInput = {},
 ): Promise<Application> {
-  return callRpc<Application>("respond_review", {
+  return callRpc<Application>("respond_review_from_preview", {
     p_application_id: applicationId,
-    p_keep_offer: input.keepOffer,
-    p_reason: input.reason,
-    p_confirmed_value: input.confirmedValue ?? null,
+    p_operation: operation,
+    p_expected_case_revision: expectedCaseRevision,
+    p_expected_offer_amount: expectedOfferAmount,
+    p_reason: reason,
+    p_revised_confirmed_value: revisedConfirmedValue ?? null,
     ...auditArgs(audit),
   });
 }

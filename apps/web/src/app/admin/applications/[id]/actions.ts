@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminCaseRevision, getAdminCase, getAdminCaseEvidence, requireAdmin } from "@/lib/admin-application-detail";
-import { ADMIN_ACTIONS, adminCaseActions, initialBFigures, object, parseAdminAction, positive, savedCaseQuote, type AdminActionState } from "@/lib/admin-application-detail-model";
-import { startReview, requestInfo, rejectApplication, sendIndicative, requestManualValuation, scheduleInspection, recordInspection, confirmEspa, markListed, markBuyerFound, markGuaranteeTriggered, markOldHomeCompleted, markHandover, type Application } from "@/lib/applications";
+import { ADMIN_ACTIONS, adminCaseActions, initialBFigures, object, parseAdminAction, positive, savedAiRange, savedCaseQuote, type AdminActionState } from "@/lib/admin-application-detail-model";
+import { startReview, requestInfo, rejectApplication, sendIndicative, requestManualValuation, scheduleInspection, recordInspection, previewApplicationOffer, issueOfferFromPreview, respondReviewFromPreview, confirmEspa, markListed, markBuyerFound, markGuaranteeTriggered, markOldHomeCompleted, markHandover, type Application, type FormalOfferOperation, type FormalOfferPreview } from "@/lib/applications";
 import { applicationPhotoUrl, sendOwnerMessage } from "@/lib/application-photos";
 import { adminAssist, type AdminAssistResponse, type Confidence } from "@/lib/valuation";
 import { getRoadMeta } from "@/lib/valuations";
@@ -17,6 +17,17 @@ async function currentCase(id: string) {
 }
 function invalidate(id: string) {
   for (const path of ["/admin", `/admin/applications/${id}`, "/dashboard", `/dashboard/applications/${id}`, "/home"]) revalidatePath(path);
+}
+function checkedPreview(value: FormalOfferPreview, id: string, operation: FormalOfferOperation) {
+  if (!value || value.schema_version !== 1 || value.application_id !== id || value.operation !== operation
+      || !["A", "B"].includes(value.plan) || !/^[a-f0-9]{32}$/.test(value.case_revision)
+      || !Number.isSafeInteger(value.offer_amount) || value.offer_amount <= 0
+      || !Number.isFinite(value.confirmed_value_used) || value.confirmed_value_used <= 0
+      || typeof value.can_finalize !== "boolean" || typeof value.eligibility?.eligible !== "boolean"
+      || !Array.isArray(value.eligibility?.reason_codes) || typeof value.capacity?.available !== "boolean") {
+    throw new Error("The backend returned an incomplete formal-offer preview. Reload and try again.");
+  }
+  return value;
 }
 
 export async function performAdminAction(_previous: AdminActionState, form: FormData): Promise<AdminActionState> {
@@ -35,7 +46,29 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
     if (input.action === "findings") {
       if (input.unitMatch === null || !input.condition || input.value === null) throw new Error("Confirm the unit match, condition and positive market value.");
       if (app.manual_valuation_required && (!input.valuer || !input.basis)) throw new Error("Name the registered valuer and explain the valuation basis.");
-      if (!app.manual_valuation_required && input.value !== positive(app.valuation_snapshot?.estimate) && !input.adjustment) throw new Error("Explain the change from the saved AI middle estimate. The owner will see this explanation.");
+      const range = savedAiRange(app);
+      if (!app.manual_valuation_required && (!range || input.value < range.low || input.value > range.high) && !input.adjustment) throw new Error("Explain why the confirmed value is outside the saved AI range. The owner will see this explanation.");
+    }
+    if (input.action === "review_response" && !input.reason) throw new Error("Explain the review outcome to the owner.");
+    if (input.action === "review_response" && input.reviewOperation === "revise_review" && input.value === null) throw new Error("Enter a positive revised confirmed value.");
+
+    if (input.action === "offer" || input.action === "review_response") {
+      const operation: FormalOfferOperation = input.action === "offer" ? "issue" : input.reviewOperation!;
+      const revised = operation === "revise_review" ? input.value : null;
+      if (input.phase === "preview") {
+        const preview = checkedPreview(await previewApplicationOffer(id, operation, revised), id, operation);
+        return { preview };
+      }
+      invoked = true;
+      const audit = { note: input.note || null };
+      const result = input.action === "offer"
+        ? await issueOfferFromPreview(id, input.offerRevision, input.expectedOffer!, audit)
+        : await respondReviewFromPreview(id, operation as Exclude<FormalOfferOperation, "issue">,
+          input.offerRevision, input.expectedOffer!, input.reason, revised, audit);
+      if (result.id !== id || result.status !== "offer_sent" || positive(result.offer_amount) !== input.expectedOffer
+          || (operation === "revise_review" && positive(result.confirmed_value) !== revised)) throw new Error("Unexpected formal-offer result");
+      invalidate(id);
+      return { success: input.action === "offer" ? "Formal offer issued to the owner." : "Offer review response sent to the owner.", reload: true };
     }
     // Exactly one existing workflow RPC, or one explicit same-stage message.
     invoked = true;

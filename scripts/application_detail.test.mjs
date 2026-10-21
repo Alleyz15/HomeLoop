@@ -100,6 +100,13 @@ test("owner Plan B initial figures keep expected proceeds and the guarantee floo
     assert.equal(model.initialPlanBFigures(fixture("indicative_sent", { plan_quote_snapshot: quote, indicative_low: quote.plan_b.expected_net_low, indicative_high: quote.plan_b.expected_net_high }).application), null);
   }
 });
+test("owner formal-offer view surfaces the latest owner-visible valuation or review explanation", () => {
+  const detail = fixture();
+  detail.events.unshift({ id: 2, application_id: id, actor_role: "admin", to_status: "inspected", action: "record_inspection", reason: "The registered evidence supports a value above the saved range.", created_at: "2026-10-19T00:00:00Z" });
+  assert.equal(model.detailView(detail).formalExplanation, "The registered evidence supports a value above the saved range.");
+  detail.events.push({ id: 3, application_id: id, actor_role: "admin", to_status: "offer_sent", action: "respond_review", reason: "We reviewed the new evidence and revised the confirmed value.", created_at: "2026-10-21T00:00:00Z" });
+  assert.equal(model.detailView(detail).formalExplanation, "We reviewed the new evidence and revised the confirmed value.");
+});
 test("expired or malformed offers, exhausted limits and ineligible switches fail closed", () => {
   for (const expiry of [null, "bad-date", new Date(now - 1).toISOString()]) assert.deepEqual(model.detailView(fixture("offer_sent", { offer_expires_at: expiry }), now).actions, []);
   assert.deepEqual(model.detailView(fixture("offer_sent", { review_count: 1, plan_switch_count: 1 }), now).actions, ["accept", "decline"]);

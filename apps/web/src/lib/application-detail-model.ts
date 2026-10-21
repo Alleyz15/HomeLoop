@@ -32,6 +32,8 @@ export function detailView(detail: ApplicationDetail, now = Date.now()) {
   const last = (test: (event: OwnerApplicationEvent) => boolean) => [...detail.events].reverse().find(test);
   const context = view.status === "info_requested" ? last(event => event.action === "request_info")
     : view.status === "offer_sent" ? last(event => event.to_status === "offer_sent" && ["issue_offer", "respond_review", "switch_plan"].includes(event.action)) : undefined;
+  const formalExplanation = last(event => typeof event.reason === "string" && event.reason.trim() !== ""
+    && ["record_inspection", "respond_review"].includes(event.action))?.reason ?? null;
   const isSdp = app.valuation_snapshot?.is_sdp === true;
   const confirmed = Number(app.confirmed_value);
   const planAAvailable = isSdp && confirmed > 0 && confirmed <= Number(app.new_home_price);
@@ -53,7 +55,7 @@ export function detailView(detail: ApplicationDetail, now = Date.now()) {
     : view.status === "accepted" && app.plan === "B"
       ? "Arrange your new-home signing with SDP sales through HIMS. A partner agent is expected to contact you within 3 days to discuss listing; this is a service target, not a confirmed appointment."
       : view.description;
-  return { ...view, description, actions, contextEventId: context ? String(context.id) : null,
+  return { ...view, description, actions, contextEventId: context ? String(context.id) : null, formalExplanation,
     request: view.status === "info_requested" ? context?.reason ?? context?.owner_message ?? null : null,
     switchNote: app.plan === "B"
       ? "Switching to Plan A uses your one plan switch, clears this offer and requires a registered valuation before another offer. The team must confirm a new visit."

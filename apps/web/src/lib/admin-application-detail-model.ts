@@ -1,4 +1,4 @@
-import type { Application, PropertyCondition } from "./applications";
+import type { Application, FormalOfferPreview, PropertyCondition } from "./applications";
 import type { ApplicationAuditEvent, ApplicationPhoto } from "./application-photos";
 import type { StoredValuation } from "./valuations";
 import { numeric, safeAdminReturn } from "./admin-applications-model";
@@ -17,7 +17,7 @@ export type AdminCaseEvidence = AdminCase & {
   photos: ApplicationPhoto[] | null;
   errors: string[];
 };
-export type AdminAction = "start" | "information" | "reject" | "initial_a" | "initial_b" | "manual_consent" | "schedule" | "findings" | "signing" | "listed" | "buyer" | "guarantee" | "completed" | "handover" | "message";
+export type AdminAction = "start" | "information" | "reject" | "initial_a" | "initial_b" | "manual_consent" | "schedule" | "findings" | "offer" | "review_response" | "signing" | "listed" | "buyer" | "guarantee" | "completed" | "handover" | "message";
 export const ADMIN_ACTIONS: Record<AdminAction, { label: string; detail: string; result: string }> = {
   start: { label: "Start review", detail: "Move this application into team review. Opening the case alone does not start a review.", result: "under_review" },
   information: { label: "Request information", detail: "The owner sees your request and can reply with text and supporting photos. The case waits for their response.", result: "info_requested" },
@@ -27,6 +27,8 @@ export const ADMIN_ACTIONS: Record<AdminAction, { label: string; detail: string;
   manual_consent: { label: "Request valuation consent", detail: "Ask the owner whether to proceed with a registered valuation. No automatic price or appointment is created.", result: "manual_valuation_pending" },
   schedule: { label: "Schedule home visit", detail: "Record the agreed appointment in Malaysian time. Confirm arrangements with the owner; no named visitor is assigned here.", result: "inspection_scheduled" },
   findings: { label: "Record visit findings", detail: "Record the completed visit and the confirmed market value. This does not issue an offer.", result: "inspected" },
+  offer: { label: "Preview formal offer", detail: "Preview the database-calculated formal amount, eligibility and monthly capacity. Nothing is sent until you explicitly confirm the preview.", result: "offer_sent" },
+  review_response: { label: "Respond to offer review", detail: "Choose whether to keep or revise the confirmed value, preview the recalculated amount, then explicitly send the response.", result: "offer_sent" },
   signing: { label: "Confirm signing", detail: "Confirm that you have verified the owner's external e-SPA signing. No agreement is signed and no payment is collected here.", result: "espa_signed" },
   listed: { label: "Record listing", detail: "Confirm the Plan B home has actually been listed for sale.", result: "listed" },
   buyer: { label: "Record buyer found", detail: "Confirm a buyer has been found. This does not record sale completion.", result: "buyer_found" },
@@ -53,6 +55,7 @@ export function savedCaseQuote(app: Application) {
   return raw;
 }
 export function initialARange(app: Application) {
+  if (app.plan !== "A") return null;
   const quote = savedCaseQuote(app);
   return quote?.plan_a.eligible && positive(quote.plan_a.offer_low) && positive(quote.plan_a.offer_high) && quote.plan_a.offer_low <= quote.plan_a.offer_high
     ? { low: quote.plan_a.offer_low, high: quote.plan_a.offer_high } : null;
@@ -63,6 +66,10 @@ export function initialBFigures(app: Application) {
   const wholeMoney = (value: number | null) => value !== null && Number.isSafeInteger(value);
   return quote?.plan_b.eligible === true && wholeMoney(low) && wholeMoney(high) && wholeMoney(floor) && low! <= high!
     ? { low: low!, high: high!, floor: floor! } : null;
+}
+export function savedAiRange(app: Application) {
+  const low = positive(app.valuation_snapshot?.low), high = positive(app.valuation_snapshot?.high);
+  return low !== null && high !== null && low <= high ? { low, high } : null;
 }
 export function adminCaseActions(app: Application, now = Date.now()): AdminAction[] {
   if (!["A", "B"].includes(app.plan)) return [];
@@ -76,7 +83,9 @@ export function adminCaseActions(app: Application, now = Date.now()): AdminActio
   }
   if (status === "owner_proceed") actions.push("schedule");
   if (status === "inspection_scheduled") actions.push("findings");
-  if (status === "inspected") actions.push("information", "reject");
+  if (status === "inspected") actions.push("offer", "information", "reject");
+  if (status === "review_requested" && Number.isFinite(Date.parse(app.offer_expires_at ?? ""))
+      && Date.parse(app.offer_expires_at ?? "") > now) actions.push("review_response");
   if (status === "espa_signed" && app.espa_signed_at && !app.espa_confirmed_at) actions.push("signing");
   if (app.espa_confirmed_at) {
     if (status === "espa_signed") actions.push(app.plan === "A" ? "completed" : "listed");
@@ -91,7 +100,8 @@ export function caseStageNote(app: Application, now = Date.now()) {
   const status = caseStatus(app, now);
   if (status === "under_review" && !app.manual_valuation_required && app.plan === "B" && !initialBFigures(app)) return "A complete saved Plan B quote matching this case is unavailable. No initial figures have been calculated or invented.";
   if (status === "under_review" && !app.manual_valuation_required && app.plan === "A" && !initialARange(app)) return "A valid saved Plan A proposal matching this case is unavailable. No initial range has been calculated or invented.";
-  if (["inspected", "review_requested"].includes(status)) return "Formal-offer preview is awaiting an admin-only backend preview endpoint. Issuing an offer and responding to an offer review remain unavailable until that authoritative preview is supported.";
+  if (status === "inspected") return "Review the confirmed value, preview the database-calculated formal offer, then explicitly issue it to the owner.";
+  if (status === "review_requested") return "The owner requested one review. Preview either the kept or revised value before sending the team’s response.";
   if (status === "inspection_scheduled" && !app.inspection_scheduled_at) return "No appointment date is recorded. A Plan B to Plan A switch can require a new registered valuation; record findings only after the appropriate visit actually takes place.";
   if (["info_requested", "indicative_sent", "manual_valuation_pending", "offer_sent", "accepted"].includes(status)) return "Waiting for the owner’s next decision or response. The team cannot respond, consent, accept or record signing on the owner’s behalf.";
   if (["expired", "withdrawn", "declined", "rejected", "handover"].includes(status)) return "Workflow history is read-only at this stage. An explicit owner message does not reopen the application.";
@@ -124,12 +134,14 @@ export function malaysiaAppointment(input: string) {
   const local = new Date(date.getTime() + 8 * 3600000).toISOString().slice(0, 16);
   return local === input ? `${input}:00+08:00` : null;
 }
-export type AdminActionState = { error?: string; success?: string; reload?: boolean };
+export type AdminActionState = { error?: string; success?: string; reload?: boolean; preview?: FormalOfferPreview };
 export type ValidAdminInput = { id: string; action: AdminAction; revision: string; message: string; note: string;
   reason: string; low: number | null; high: number | null; appointment: string | null; unitMatch: boolean | null;
-  condition: PropertyCondition | null; value: number | null; adjustment: string; valuer: string; basis: string };
+  condition: PropertyCondition | null; value: number | null; adjustment: string; valuer: string; basis: string;
+  phase: "preview" | "finalize" | null; offerRevision: string; expectedOffer: number | null;
+  reviewOperation: "keep_review" | "revise_review" | null };
 export function parseAdminAction(form: FormData): ValidAdminInput {
-  const keys = ["application_id", "action", "revision", "confirmed", "message", "note", "reason", "category", "low", "high", "appointment", "unit_match", "condition", "value", "adjustment", "valuer", "basis"];
+  const keys = ["application_id", "action", "revision", "confirmed", "message", "note", "reason", "category", "low", "high", "appointment", "unit_match", "condition", "value", "adjustment", "valuer", "basis", "phase", "offer_revision", "offer_amount", "review_operation"];
   const submittedKeys: string[] = [];
   for (const [key, value] of form.entries()) {
     // React adds action transport fields to native forms. They carry no trusted
@@ -144,20 +156,35 @@ export function parseAdminAction(form: FormData): ValidAdminInput {
   const actionFields: Record<AdminAction, string[]> = {
     start: [], information: ["reason"], reject: ["category", "reason"], initial_a: ["low", "high"], initial_b: [],
     manual_consent: [], schedule: ["appointment"], findings: ["unit_match", "condition", "value", "adjustment", "valuer", "basis"],
+    offer: ["phase", "offer_revision", "offer_amount"],
+    review_response: ["phase", "offer_revision", "offer_amount", "review_operation", "value", "reason"],
     signing: [], listed: [], buyer: [], guarantee: [], completed: [], handover: [], message: ["message"],
   };
   const allowed = new Set(["application_id", "action", "revision", "confirmed", "note", ...actionFields[action as AdminAction]]);
   if (submittedKeys.some(key => !allowed.has(key))) throw new Error("Invalid fields for this action. Reload the case before continuing.");
-  if (form.get("confirmed") !== "on") throw new Error("Confirm that you understand this action before submitting.");
+  const rawPhase = text("phase", 20);
+  const phase = rawPhase === "preview" || rawPhase === "finalize" ? rawPhase : null;
+  const formalAction = action === "offer" || action === "review_response";
+  if (formalAction && !phase) throw new Error("Preview the latest formal figures before continuing.");
+  if (!formalAction && rawPhase) throw new Error("Invalid fields for this action. Reload the case before continuing.");
+  if ((!formalAction || phase === "finalize") && form.get("confirmed") !== "on") throw new Error("Confirm that you understand this action before submitting.");
   const categories: Record<string, string> = { structural: "Structural concerns", title: "Title or ownership concerns", capacity: "Monthly capacity", other: "Other" };
   const category = text("category", 20), reason = text("reason");
   if (action === "reject" && !Object.hasOwn(categories, category)) throw new Error("Select a rejection reason.");
   if (action === "reject" && !reason) throw new Error("Explain the rejection to the owner.");
+  const offerRevision = text("offer_revision", 32), expectedOffer = positive(text("offer_amount", 40));
+  if (phase === "preview" && (offerRevision || form.has("offer_amount"))) throw new Error("Preview fields must come from the server.");
+  if (phase === "finalize" && (!/^[a-f0-9]{32}$/.test(offerRevision) || expectedOffer === null)) throw new Error("The formal-offer preview is incomplete. Preview it again.");
+  const rawReviewOperation = text("review_operation", 20);
+  const reviewOperation = rawReviewOperation === "keep_review" || rawReviewOperation === "revise_review" ? rawReviewOperation : null;
+  if (action === "review_response" && !reviewOperation) throw new Error("Choose whether to keep or revise the confirmed value.");
+  if (action !== "review_response" && rawReviewOperation) throw new Error("Invalid fields for this action. Reload the case before continuing.");
   return { id, action: action as AdminAction, revision, message: text("message"), note: text("note"),
     reason: action === "reject" ? `${categories[category]}: ${reason}` : reason,
     low: positive(text("low", 40)), high: positive(text("high", 40)), appointment: malaysiaAppointment(text("appointment", 30)),
     unitMatch: form.get("unit_match") === "yes" ? true : form.get("unit_match") === "no" ? false : null,
     condition: ["good", "fair", "needs_repair"].includes(text("condition", 20)) ? text("condition") as PropertyCondition : null,
     value: positive(text("value", 40)), adjustment: text("adjustment"), valuer: text("valuer", 200), basis: text("basis"),
+    phase, offerRevision, expectedOffer, reviewOperation,
   };
 }
