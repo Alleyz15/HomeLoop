@@ -16,7 +16,7 @@ const readerUrl = url((await read("lib/admin-application-detail.ts")).replace('i
   .replace('import { createClient } from "@/lib/supabase/server";', "const createClient = async () => globalThis.__adminCase.client;")
   .replace('"./admin-application-detail-model"', JSON.stringify(modelUrl)).replace('"./admin-applications-model"', JSON.stringify(listUrl)));
 const reader = await import(readerUrl);
-const functions = ["startReview", "requestInfo", "rejectApplication", "sendIndicative", "requestManualValuation", "scheduleInspection", "recordInspection", "previewApplicationOffer", "issueOfferFromPreview", "respondReviewFromPreview", "confirmEspa", "markListed", "markBuyerFound", "markGuaranteeTriggered", "markOldHomeCompleted", "markHandover"];
+const functions = ["startReview", "requestInfo", "rejectApplication", "sendIndicative", "requestManualValuation", "scheduleInspection", "schedulePlanAValuation", "recordInspection", "previewApplicationOffer", "issueOfferFromPreview", "respondReviewFromPreview", "confirmEspa", "markListed", "markBuyerFound", "markGuaranteeTriggered", "markOldHomeCompleted", "markHandover"];
 globalThis.__adminCaseFunctions = Object.fromEntries(functions.map(name => [name, async (...args) => {
   const state = globalThis.__adminCase; state.calls.push({ name, args });
   if (state.rpcFailure) throw new Error("Uncertain transport");
@@ -93,6 +93,8 @@ test("admin controls expose Plan B initial figures and the backend-authoritative
   assert.equal(model.caseStatus(caseFixture("offer_sent", { offer_expires_at: "2020-01-01T00:00:00Z" })), "expired");
   assert.ok(model.adminCaseActions(caseFixture("review_requested", { offer_expires_at: "2099-01-01T00:00:00Z" })).includes("review_response"));
   for (const expiry of [null, "invalid", "2020-01-01T00:00:00Z"]) assert.ok(!model.adminCaseActions(caseFixture("review_requested", { offer_expires_at: expiry })).includes("review_response"));
+  assert.deepEqual(model.adminCaseActions(caseFixture("inspection_scheduled", { plan: "A", plan_switch_count: 1, confirmed_value: 800000, inspection_scheduled_at: null })), ["schedule_plan_a", "message"]);
+  assert.deepEqual(model.adminCaseActions(caseFixture("inspection_scheduled", { plan: "A", plan_switch_count: 1, confirmed_value: 800000, inspection_scheduled_at: "2026-10-22T02:00:00Z" })), ["findings", "message"]);
 });
 test("saved quotations cannot silently follow plan switches or changed prices; appointment conversion is timezone-independent", () => {
   assert.equal(model.initialARange(caseFixture("under_review", { plan: "A" })).low, 549500);
@@ -198,6 +200,29 @@ test("manual findings require a valuer/basis, avoid AI adjustment and preserve c
   assert.ok((await actions.performAdminAction({}, await formFor("findings", fields))).error); assert.equal(state.calls.length, 0);
   assert.ok((await actions.performAdminAction({}, await formFor("findings", { ...fields, valuer: "Registered QA valuer", basis: "Local QA valuation report", note: "Internal only" }))).success);
   assert.equal(state.calls[0].args[1].valueAdjustReason, null); assert.match(state.calls[0].args[2].note, /Registered QA valuer/);
+});
+test("Plan B to Plan A requires a new appointment, registered valuation and public explanation for any changed value", async () => {
+  const switched = { plan: "A", plan_switch_count: 1, confirmed_value: 800000, inspection_scheduled_at: null };
+  let state = setup(caseFixture("inspection_scheduled", switched)); state.expected = "inspection_scheduled";
+  let result = await actions.performAdminAction({}, await formFor("schedule_plan_a", { appointment: "2026-10-22T14:30", note: "Confirmed externally" }));
+  assert.ok(result.success, result.error); assert.equal(state.calls.length, 1); assert.equal(state.calls[0].name, "schedulePlanAValuation");
+  assert.equal(state.calls[0].args[1], "2026-10-22T14:30:00+08:00");
+
+  const scheduled = { ...switched, inspection_scheduled_at: "2026-10-22T06:30:00Z" };
+  state = setup(caseFixture("inspection_scheduled", scheduled));
+  const fields = { unit_match: "yes", condition: "good", value: "820000", valuer: "Registered QA valuer", basis: "Signed external valuation report" };
+  result = await actions.performAdminAction({}, await formFor("findings", fields));
+  assert.match(result.error, /differs from the previous Plan B confirmed value/i); assert.equal(state.calls.length, 0);
+
+  state = setup(caseFixture("inspection_scheduled", scheduled)); state.expected = "inspected";
+  result = await actions.performAdminAction({}, await formFor("findings", { ...fields, adjustment: "The registered valuer included the verified extension." }));
+  assert.ok(result.success, result.error); assert.equal(state.calls[0].name, "recordInspection");
+  assert.equal(state.calls[0].args[1].valueAdjustReason, "The registered valuer included the verified extension.");
+  assert.match(state.calls[0].args[2].note, /Registered QA valuer/);
+
+  state = setup(caseFixture("inspection_scheduled", scheduled)); state.expected = "inspected";
+  result = await actions.performAdminAction({}, await formFor("findings", { ...fields, value: "800000" }));
+  assert.ok(result.success, result.error); assert.equal(state.calls[0].args[1].valueAdjustReason, null);
 });
 test("Plan A keeps its explicit initial-range validation", async () => {
   let state = setup(caseFixture("under_review", { plan: "A" })); state.expected = "indicative_sent";

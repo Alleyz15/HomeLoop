@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CircleAlert, FolderOpen, LockKeyhole } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { adminCaseRevision, getAdminCase, getAdminCaseCapacity, getAdminCaseEvidence } from "@/lib/admin-application-detail";
-import { adminCaseActions, adminCaseHref, caseStageNote, caseStatus, initialARange, initialBFigures, positive, savedAiRange } from "@/lib/admin-application-detail-model";
+import { adminCaseActions, adminCaseHref, caseStageNote, caseStatus, initialARange, initialBFigures, isPlanBToAValuation, positive, savedAiRange } from "@/lib/admin-application-detail-model";
 import { adminDate, adminMoney, capacityView, monthLabel, safeAdminReturn } from "@/lib/admin-applications-model";
 import { ActionPanel, AssistancePanel, type ActionContext } from "./action-panel";
 import { CaseHistory, CaseOverview, FinancialEvidence, HomeEvidence } from "./case-evidence";
@@ -27,7 +27,7 @@ export default async function AdminApplicationDetails({ params, searchParams }: 
   const status = caseStatus(app), revision = adminCaseRevision(core), view = capacityView(capacity.capacity);
   const context: ActionContext = { id, revision, actions: core.revisionAvailable ? adminCaseActions(app) : [], manual: app.manual_valuation_required,
     visit: app.plan === "A" || app.manual_valuation_required ? "Registered valuation" : "SDP staff / partner inspection", estimate: positive(app.valuation_snapshot?.estimate),
-    range: savedAiRange(app), confirmedValue: positive(app.confirmed_value), plan: app.plan,
+    range: savedAiRange(app), confirmedValue: positive(app.confirmed_value), plan: app.plan, switchedToPlanA: isPlanBToAValuation(app),
     initial: app.plan === "A" ? initialARange(app) : initialBFigures(app), stageNote: caseStageNote(app), href: sectionHref(adminCaseHref(id, returnTo), caseSection(query.tab)) };
   const manualAIneligible = app.manual_valuation_required && app.manual_valuation_resolved_at && app.plan === "A" && positive(app.confirmed_value) && (app.valuation_snapshot?.is_sdp !== true || Number(app.confirmed_value) > Number(app.new_home_price));
   return <div className={styles.page} data-admin-case data-case-status={status}>

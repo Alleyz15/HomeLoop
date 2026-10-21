@@ -17,7 +17,7 @@ export type AdminCaseEvidence = AdminCase & {
   photos: ApplicationPhoto[] | null;
   errors: string[];
 };
-export type AdminAction = "start" | "information" | "reject" | "initial_a" | "initial_b" | "manual_consent" | "schedule" | "findings" | "offer" | "review_response" | "signing" | "listed" | "buyer" | "guarantee" | "completed" | "handover" | "message";
+export type AdminAction = "start" | "information" | "reject" | "initial_a" | "initial_b" | "manual_consent" | "schedule" | "schedule_plan_a" | "findings" | "offer" | "review_response" | "signing" | "listed" | "buyer" | "guarantee" | "completed" | "handover" | "message";
 export const ADMIN_ACTIONS: Record<AdminAction, { label: string; detail: string; result: string }> = {
   start: { label: "Start review", detail: "Move this application into team review. Opening the case alone does not start a review.", result: "under_review" },
   information: { label: "Request information", detail: "The owner sees your request and can reply with text and supporting photos. The case waits for their response.", result: "info_requested" },
@@ -26,6 +26,7 @@ export const ADMIN_ACTIONS: Record<AdminAction, { label: string; detail: string;
   initial_b: { label: "Send initial Plan B figures", detail: "Send the saved expected open-market proceeds range and show the separate indicative guarantee floor. These are preliminary figures, not a formal offer.", result: "indicative_sent" },
   manual_consent: { label: "Request valuation consent", detail: "Ask the owner whether to proceed with a registered valuation. No automatic price or appointment is created.", result: "manual_valuation_pending" },
   schedule: { label: "Schedule home visit", detail: "Record the agreed appointment in Malaysian time. Confirm arrangements with the owner; no named visitor is assigned here.", result: "inspection_scheduled" },
+  schedule_plan_a: { label: "Schedule registered valuation", detail: "After the owner switched from Plan B to Plan A, record the new registered-valuer appointment. The previous Plan B visit and value remain in the audit history.", result: "inspection_scheduled" },
   findings: { label: "Record visit findings", detail: "Record the completed visit and the confirmed market value. This does not issue an offer.", result: "inspected" },
   offer: { label: "Preview formal offer", detail: "Preview the database-calculated formal amount, eligibility and monthly capacity. Nothing is sent until you explicitly confirm the preview.", result: "offer_sent" },
   review_response: { label: "Respond to offer review", detail: "Choose whether to keep or revise the confirmed value, preview the recalculated amount, then explicitly send the response.", result: "offer_sent" },
@@ -71,6 +72,9 @@ export function savedAiRange(app: Application) {
   const low = positive(app.valuation_snapshot?.low), high = positive(app.valuation_snapshot?.high);
   return low !== null && high !== null && low <= high ? { low, high } : null;
 }
+export function isPlanBToAValuation(app: Application) {
+  return app.plan === "A" && app.plan_switch_count === 1 && positive(app.confirmed_value) !== null;
+}
 export function adminCaseActions(app: Application, now = Date.now()): AdminAction[] {
   if (!["A", "B"].includes(app.plan)) return [];
   const status = caseStatus(app, now), actions: AdminAction[] = [];
@@ -82,7 +86,10 @@ export function adminCaseActions(app: Application, now = Date.now()): AdminActio
     actions.push("information", "reject");
   }
   if (status === "owner_proceed") actions.push("schedule");
-  if (status === "inspection_scheduled") actions.push("findings");
+  if (status === "inspection_scheduled") {
+    if (isPlanBToAValuation(app) && !app.inspection_scheduled_at) actions.push("schedule_plan_a");
+    else actions.push("findings");
+  }
   if (status === "inspected") actions.push("offer", "information", "reject");
   if (status === "review_requested" && Number.isFinite(Date.parse(app.offer_expires_at ?? ""))
       && Date.parse(app.offer_expires_at ?? "") > now) actions.push("review_response");
@@ -102,7 +109,8 @@ export function caseStageNote(app: Application, now = Date.now()) {
   if (status === "under_review" && !app.manual_valuation_required && app.plan === "A" && !initialARange(app)) return "A valid saved Plan A proposal matching this case is unavailable. No initial range has been calculated or invented.";
   if (status === "inspected") return "Review the confirmed value, preview the database-calculated formal offer, then explicitly issue it to the owner.";
   if (status === "review_requested") return "The owner requested one review. Preview either the kept or revised value before sending the team’s response.";
-  if (status === "inspection_scheduled" && !app.inspection_scheduled_at) return "No appointment date is recorded. A Plan B to Plan A switch can require a new registered valuation; record findings only after the appropriate visit actually takes place.";
+  if (status === "inspection_scheduled" && isPlanBToAValuation(app) && !app.inspection_scheduled_at) return "The owner switched from Plan B to Plan A. Schedule a new registered valuation before recording findings.";
+  if (status === "inspection_scheduled" && !app.inspection_scheduled_at) return "No appointment date is recorded. Record findings only after the appropriate visit actually takes place.";
   if (["info_requested", "indicative_sent", "manual_valuation_pending", "offer_sent", "accepted"].includes(status)) return "Waiting for the owner’s next decision or response. The team cannot respond, consent, accept or record signing on the owner’s behalf.";
   if (["expired", "withdrawn", "declined", "rejected", "handover"].includes(status)) return "Workflow history is read-only at this stage. An explicit owner message does not reopen the application.";
   return null;
@@ -155,7 +163,7 @@ export function parseAdminAction(form: FormData): ValidAdminInput {
   if (!validCaseId(id) || !Object.hasOwn(ADMIN_ACTIONS, action) || !/^[a-f0-9]{64}$/.test(revision)) throw new Error("Invalid case or action. Reload before continuing.");
   const actionFields: Record<AdminAction, string[]> = {
     start: [], information: ["reason"], reject: ["category", "reason"], initial_a: ["low", "high"], initial_b: [],
-    manual_consent: [], schedule: ["appointment"], findings: ["unit_match", "condition", "value", "adjustment", "valuer", "basis"],
+    manual_consent: [], schedule: ["appointment"], schedule_plan_a: ["appointment"], findings: ["unit_match", "condition", "value", "adjustment", "valuer", "basis"],
     offer: ["phase", "offer_revision", "offer_amount"],
     review_response: ["phase", "offer_revision", "offer_amount", "review_operation", "value", "reason"],
     signing: [], listed: [], buyer: [], guarantee: [], completed: [], handover: [], message: ["message"],

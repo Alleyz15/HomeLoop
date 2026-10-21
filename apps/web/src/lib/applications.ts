@@ -266,6 +266,18 @@ export function scheduleInspection(
   });
 }
 
+export function schedulePlanAValuation(
+  applicationId: string,
+  scheduledAt: string,
+  audit: AuditInput = {},
+): Promise<Application> {
+  return callRpc<Application>("schedule_plan_a_valuation", {
+    p_application_id: applicationId,
+    p_scheduled_at: scheduledAt,
+    ...auditArgs(audit),
+  });
+}
+
 export function recordInspection(
   applicationId: string,
   input: {
