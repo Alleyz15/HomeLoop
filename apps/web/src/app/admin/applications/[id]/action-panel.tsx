@@ -3,12 +3,12 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, ImageIcon, LoaderCircle, LockKeyhole, Sparkles, X } from "lucide-react";
 import { ADMIN_ACTIONS, type AdminAction, type AdminActionState } from "@/lib/admin-application-detail-model";
-import { adminMoney } from "@/lib/admin-applications-model";
+import { adminDate, adminMoney } from "@/lib/admin-applications-model";
 import { generateAdminAssistance, performAdminAction, viewAdminPhoto } from "./actions";
 import styles from "./detail.module.css";
 
 export type ActionContext = { id: string; revision: string; actions: AdminAction[]; manual: boolean; visit: string;
-  estimate: number | null; range: { low: number; high: number } | null; confirmedValue: number | null; plan: "A" | "B";
+  appointment: string | null; estimate: number | null; range: { low: number; high: number } | null; confirmedValue: number | null; plan: "A" | "B";
   switchedToPlanA: boolean; initial: { low: number; high: number; floor?: number } | null; stageNote: string | null; href: string };
 const INITIAL_STATE: AdminActionState = {};
 function ActionForm({ context, messageOnly = false }: { context: ActionContext; messageOnly?: boolean }) {
@@ -45,6 +45,7 @@ function ActionForm({ context, messageOnly = false }: { context: ActionContext; 
       {action === "initial_b" && context.initial?.floor !== undefined && <div className={styles.publicNotice}><p><strong>Expected open-market proceeds</strong><br />{adminMoney(context.initial.low)} – {adminMoney(context.initial.high)}</p><p><strong>Indicative guarantee floor</strong><br />{adminMoney(context.initial.floor)}</p><p>The expected proceeds assume an open-market sale and selling fees. The guarantee floor is a separate fallback amount. These are preliminary figures, not a formal offer.</p></div>}
       {action === "schedule" && <><p className={styles.help}>Visit type: <strong>{context.visit}</strong></p><div className={styles.field}><label htmlFor="workflow-appointment">Agreed appointment (Malaysia, MYT / UTC+8)</label><input {...input("appointment")} type="datetime-local" required /></div></>}
       {action === "schedule_plan_a" && <><div className={styles.publicNotice}><p><strong>Previous Plan B confirmed value</strong><br />{context.confirmedValue ? adminMoney(context.confirmedValue) : "Not recorded"}</p><p>A registered valuer must complete a new Plan A valuation. The previous value remains in the audit history and will not be reused silently.</p></div><div className={styles.field}><label htmlFor="workflow-appointment">Registered valuation appointment (Malaysia, MYT / UTC+8)</label><input {...input("appointment")} type="datetime-local" required /></div></>}
+      {action === "reschedule" && <><p className={styles.help}>Current appointment: <strong>{adminDate(context.appointment, true)}</strong>. Confirm the new time with the owner before recording it.</p><div className={styles.field}><label htmlFor="workflow-appointment">New agreed appointment (Malaysia, MYT / UTC+8)</label><input {...input("appointment")} type="datetime-local" required /></div></>}
       {action === "findings" && <>
         <div className={styles.field}><label htmlFor="workflow-unit_match">Does the unit type match?</label><select {...input("unit_match")} required><option value="">Select yes or no</option><option value="yes">Yes, it matches</option><option value="no">No, it does not match</option></select></div>
         <div className={styles.field}><label htmlFor="workflow-condition">Condition observed at the visit</label><select {...input("condition")} required><option value="">Select condition</option><option value="good">Good</option><option value="fair">Fair</option><option value="needs_repair">Needs repair</option></select></div>

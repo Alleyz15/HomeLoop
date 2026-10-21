@@ -1,3 +1,5 @@
+import { formatRm } from "./units";
+
 export type SimulatorFields = {
   plan_b_floor_ratio: number;
   plan_a_cost_pct: number;
@@ -24,7 +26,7 @@ type ResultLike = {
 };
 
 const percent = (value: number, digits = 1) => `${(value * 100).toFixed(digits)}%`;
-const money = (value: number) => `RM${Math.round(value).toLocaleString("en-MY")}`;
+const money = formatRm;
 
 export function simulatorFormValues(inputs: InputsUsed): SimulatorFields {
   return {

@@ -5,7 +5,8 @@ import test from "node:test";
 
 const urlOf = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`;
 const read = path => readFile(new URL(`../apps/web/src/${path}`, import.meta.url), "utf8");
-const developmentUrl = urlOf(await read("lib/development-model.ts"));
+const unitsUrl = urlOf(await read("lib/units.ts"));
+const developmentUrl = urlOf((await read("lib/development-model.ts")).replace('"./units"', JSON.stringify(unitsUrl)));
 const plansUrl = urlOf((await read("lib/plans-model.ts")).replace('"./development-model"', JSON.stringify(developmentUrl)));
 const modelUrl = urlOf((await read("lib/apply-model.ts")).replace('"./plans-model"', JSON.stringify(plansUrl)));
 const model = await import(modelUrl);

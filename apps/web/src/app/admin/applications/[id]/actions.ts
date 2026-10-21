@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminCaseRevision, getAdminCase, getAdminCaseEvidence, requireAdmin } from "@/lib/admin-application-detail";
 import { ADMIN_ACTIONS, adminCaseActions, initialBFigures, isPlanBToAValuation, object, parseAdminAction, positive, savedAiRange, savedCaseQuote, type AdminActionState } from "@/lib/admin-application-detail-model";
-import { startReview, requestInfo, rejectApplication, sendIndicative, requestManualValuation, scheduleInspection, schedulePlanAValuation, recordInspection, previewApplicationOffer, issueOfferFromPreview, respondReviewFromPreview, confirmEspa, markListed, markBuyerFound, markGuaranteeTriggered, markOldHomeCompleted, markHandover, type Application, type FormalOfferOperation, type FormalOfferPreview } from "@/lib/applications";
+import { startReview, requestInfo, rejectApplication, sendIndicative, requestManualValuation, scheduleInspection, schedulePlanAValuation, rescheduleInspection, recordInspection, previewApplicationOffer, issueOfferFromPreview, respondReviewFromPreview, confirmEspa, markListed, markBuyerFound, markGuaranteeTriggered, markOldHomeCompleted, markHandover, type Application, type FormalOfferOperation, type FormalOfferPreview } from "@/lib/applications";
 import { applicationPhotoUrl, sendOwnerMessage } from "@/lib/application-photos";
 import { adminAssist, type AdminAssistResponse, type Confidence } from "@/lib/valuation";
 import { getRoadMeta } from "@/lib/valuations";
@@ -42,7 +42,7 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
     if (input.action === "initial_a" && (input.low === null || input.high === null || input.low > input.high)) throw new Error("Enter a positive initial range with the lower amount no greater than the upper amount.");
     const initialB = input.action === "initial_b" ? initialBFigures(app) : null;
     if (input.action === "initial_b" && !initialB) throw new Error("A complete saved Plan B quote matching this case is required before sending initial figures.");
-    if (["schedule", "schedule_plan_a"].includes(input.action) && !input.appointment) throw new Error("Enter a valid Malaysian appointment date and time.");
+    if (["schedule", "schedule_plan_a", "reschedule"].includes(input.action) && !input.appointment) throw new Error("Enter a valid Malaysian appointment date and time.");
     if (input.action === "findings") {
       if (input.unitMatch === null || !input.condition || input.value === null) throw new Error("Confirm the unit match, condition and positive market value.");
       const bToA = isPlanBToAValuation(app);
@@ -95,6 +95,7 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
       case "manual_consent": result = await requestManualValuation(id, audit); break;
       case "schedule": result = await scheduleInspection(id, input.appointment!, audit); break;
       case "schedule_plan_a": result = await schedulePlanAValuation(id, input.appointment!, audit); break;
+      case "reschedule": result = await rescheduleInspection(id, input.appointment!, audit); break;
       case "findings": result = await recordInspection(id, { unitTypeConfirmed: input.unitMatch!, condition: input.condition!, confirmedValue: input.value!,
         valueAdjustReason: app.manual_valuation_required ? null : input.adjustment || null }, (app.manual_valuation_required || isPlanBToAValuation(app))
           ? { note: `Registered valuer: ${input.valuer}\nValuation basis: ${input.basis}${input.note ? `\nInternal note: ${input.note}` : ""}` } : audit); break;

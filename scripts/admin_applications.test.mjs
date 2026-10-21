@@ -5,7 +5,8 @@ import { stripTypeScriptTypes } from "node:module";
 
 const read = file => readFile(new URL(`../apps/web/src/${file}`, import.meta.url), "utf8");
 const moduleUrl = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`;
-const modelSource = await read("lib/admin-applications-model.ts");
+const unitsUrl = moduleUrl(await read("lib/units.ts"));
+const modelSource = (await read("lib/admin-applications-model.ts")).replace('"./units"', JSON.stringify(unitsUrl));
 const modelUrl = moduleUrl(modelSource);
 const model = await import(modelUrl);
 const now = Date.parse("2026-10-20T04:00:00Z");
@@ -48,7 +49,7 @@ test("past offers display as expired without mutating rows; missing/malformed de
 test("capacity handles exact thresholds, overuse, zero, missing configuration and failed/inconsistent sources", () => {
   assert.equal(model.capacityView(model.capacityFor("A", month, usage, limits)).tone, "near");
   assert.equal(model.capacityView({ state: "ready", limit: 0.375, used: 0.3 }).tone, "near");
-  assert.equal(model.adminMoney(1234.56), "RM1,234.56");
+  assert.equal(model.adminMoney(1234.56), "RM1,235");
   assert.equal(model.capacityView({ state: "ready", limit: 100, used: 125 }).remaining, -25);
   assert.equal(model.capacityView({ state: "ready", limit: 100, used: 125 }).bar, 100);
   for (const used of [0, 100]) {

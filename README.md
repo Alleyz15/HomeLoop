@@ -87,6 +87,18 @@ Reference data is upserted with the server-only service role. Never expose that 
 
 The transaction and backtest-ratio CSVs have no stable row identifiers. To prevent silent duplicates, the importer loads each of them only into an empty target table and stops with an error otherwise. Treat them as first-load operations unless the source-data contract later provides stable IDs.
 
+If a `backtest_ratios.csv` import stops after writing only some rows, clear only that reference table in the Supabase SQL editor before retrying:
+
+```sql
+truncate table public.backtest_ratios restart identity;
+```
+
+Then rerun the scoped import so `transactions` and the other reference tables are untouched:
+
+```bash
+python scripts/import_csv.py --dir data/processed/homeloop_data --only backtest_ratios.csv
+```
+
 ## Demo users
 
 Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEMO_OWNER_PASSWORD`, and `DEMO_ADMIN_PASSWORD` in your shell, then run:

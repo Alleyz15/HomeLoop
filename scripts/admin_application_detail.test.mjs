@@ -5,9 +5,10 @@ import { stripTypeScriptTypes } from "node:module";
 import { CASE_ID, PHOTO_ID, caseFixture, quoteFixture, valuationFixture, eventFixture, photoFixture } from "./admin_case_fixtures.mjs";
 const read = file => readFile(new URL(`../apps/web/src/${file}`, import.meta.url), "utf8");
 const url = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`;
-const developmentUrl = url(await read("lib/development-model.ts"));
+const unitsUrl = url(await read("lib/units.ts"));
+const developmentUrl = url((await read("lib/development-model.ts")).replace('"./units"', JSON.stringify(unitsUrl)));
 const plansUrl = url((await read("lib/plans-model.ts")).replace('"./development-model"', JSON.stringify(developmentUrl)));
-const listUrl = url(await read("lib/admin-applications-model.ts"));
+const listUrl = url((await read("lib/admin-applications-model.ts")).replace('"./units"', JSON.stringify(unitsUrl)));
 const modelUrl = url((await read("lib/admin-application-detail-model.ts")).replace('"./admin-applications-model"', JSON.stringify(listUrl)).replace('"./plans-model"', JSON.stringify(plansUrl)));
 const model = await import(modelUrl);
 const sections = await import(url(await read("app/admin/applications/[id]/sections.ts")));
@@ -16,7 +17,7 @@ const readerUrl = url((await read("lib/admin-application-detail.ts")).replace('i
   .replace('import { createClient } from "@/lib/supabase/server";', "const createClient = async () => globalThis.__adminCase.client;")
   .replace('"./admin-application-detail-model"', JSON.stringify(modelUrl)).replace('"./admin-applications-model"', JSON.stringify(listUrl)));
 const reader = await import(readerUrl);
-const functions = ["startReview", "requestInfo", "rejectApplication", "sendIndicative", "requestManualValuation", "scheduleInspection", "schedulePlanAValuation", "recordInspection", "previewApplicationOffer", "issueOfferFromPreview", "respondReviewFromPreview", "confirmEspa", "markListed", "markBuyerFound", "markGuaranteeTriggered", "markOldHomeCompleted", "markHandover"];
+const functions = ["startReview", "requestInfo", "rejectApplication", "sendIndicative", "requestManualValuation", "scheduleInspection", "schedulePlanAValuation", "rescheduleInspection", "recordInspection", "previewApplicationOffer", "issueOfferFromPreview", "respondReviewFromPreview", "confirmEspa", "markListed", "markBuyerFound", "markGuaranteeTriggered", "markOldHomeCompleted", "markHandover"];
 globalThis.__adminCaseFunctions = Object.fromEntries(functions.map(name => [name, async (...args) => {
   const state = globalThis.__adminCase; state.calls.push({ name, args });
   if (state.rpcFailure) throw new Error("Uncertain transport");
@@ -94,7 +95,7 @@ test("admin controls expose Plan B initial figures and the backend-authoritative
   assert.ok(model.adminCaseActions(caseFixture("review_requested", { offer_expires_at: "2099-01-01T00:00:00Z" })).includes("review_response"));
   for (const expiry of [null, "invalid", "2020-01-01T00:00:00Z"]) assert.ok(!model.adminCaseActions(caseFixture("review_requested", { offer_expires_at: expiry })).includes("review_response"));
   assert.deepEqual(model.adminCaseActions(caseFixture("inspection_scheduled", { plan: "A", plan_switch_count: 1, confirmed_value: 800000, inspection_scheduled_at: null })), ["schedule_plan_a", "message"]);
-  assert.deepEqual(model.adminCaseActions(caseFixture("inspection_scheduled", { plan: "A", plan_switch_count: 1, confirmed_value: 800000, inspection_scheduled_at: "2026-10-22T02:00:00Z" })), ["findings", "message"]);
+  assert.deepEqual(model.adminCaseActions(caseFixture("inspection_scheduled", { plan: "A", plan_switch_count: 1, confirmed_value: 800000, inspection_scheduled_at: "2026-10-22T02:00:00Z" })), ["findings", "reschedule", "message"]);
 });
 test("saved quotations cannot silently follow plan switches or changed prices; appointment conversion is timezone-independent", () => {
   assert.equal(model.initialARange(caseFixture("under_review", { plan: "A" })).low, 549500);
@@ -149,17 +150,19 @@ test("all supported transitions call exactly one existing helper and check the r
     ["submitted", "start", "startReview", {}], ["under_review", "information", "requestInfo", { reason: "Please provide a rear photo." }],
     ["under_review", "reject", "rejectApplication", { category: "title", reason: "Ownership needs resolution." }],
     ["owner_proceed", "schedule", "scheduleInspection", { appointment: "2026-10-20T14:30" }],
+    ["inspection_scheduled", "reschedule", "rescheduleInspection", { appointment: "2026-10-24T14:30" }],
     ["inspection_scheduled", "findings", "recordInspection", { unit_match: "no", condition: "fair", value: "800000.25", adjustment: "Confirmed extension condition." }],
     ["espa_signed", "signing", "confirmEspa", {}], ["espa_signed", "listed", "markListed", {}],
     ["listed", "buyer", "markBuyerFound", {}], ["listed", "guarantee", "markGuaranteeTriggered", {}],
     ["buyer_found", "completed", "markOldHomeCompleted", {}], ["old_home_completed", "handover", "markHandover", {}],
   ];
   for (const [status, action, name, fields] of scenarios) {
-    const state = setup(caseFixture(status, { espa_signed_at: "2026-10-20T00:00:00Z", espa_confirmed_at: action === "signing" ? null : "2026-10-20T01:00:00Z" })); state.expected = model.ADMIN_ACTIONS[action].result;
+    const state = setup(caseFixture(status, { espa_signed_at: "2026-10-20T00:00:00Z", espa_confirmed_at: action === "signing" ? null : "2026-10-20T01:00:00Z", ...(action === "reschedule" ? { inspection_scheduled_at: "2026-10-22T02:00:00Z" } : {}) })); state.expected = model.ADMIN_ACTIONS[action].result;
     const result = await actions.performAdminAction({}, await formFor(action, { ...fields, note: "Private note" }));
     assert.ok(result.success, `${action}: ${result.error}`); assert.equal(state.calls.length, 1); assert.equal(state.calls[0].name, name);
     assert.ok(state.invalidations.includes(`/dashboard/applications/${CASE_ID}`));
     if (action === "schedule") assert.equal(state.calls[0].args[1], "2026-10-20T14:30:00+08:00");
+    if (action === "reschedule") assert.equal(state.calls[0].args[1], "2026-10-24T14:30:00+08:00");
     if (action === "findings") { assert.equal(state.calls[0].args[1].unitTypeConfirmed, false); assert.equal(state.calls[0].args[1].confirmedValue, 800000.25); }
   }
   const state = setup(); state.rpcResult = { ...state.app, status: "expired" }; assert.ok((await actions.performAdminAction({}, await formFor("start"))).error);
