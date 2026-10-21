@@ -6,6 +6,8 @@
 
 前端每阶段与每项操作的变更、受影响文件、bug、验证结果及 commit 记录见 [Frontend_Implementation_Log.md](Frontend_Implementation_Log.md)。后续前端实现或修复需同步更新该文件。
 
+2026-10-21 全仓代码审查（可复现证据、已修与未修项目、建议顺序）见 [Code_Review_2026-10-21.md](Code_Review_2026-10-21.md)。
+
 > **给 AI 编程助手（Codex / Claude）的规则**
 > 1. 开始任何任务前，先读本文件和 `docs/md-files/` 里的其他文件。产品规则以《HomeLoop_更新_页面与流程.md》为准。
 > 2. 完成一个任务后，把它从「待做」移到「已完成」，写上日期、commit 和一句说明。
@@ -312,6 +314,12 @@
 | `road_catalog` 的 Birai 验收笔数与任务文字不同 | 按指定的 trim/JLN 正规化后，`JLN BIRAI U8/69` 有 13 笔（其中 1 笔原始路名有前导空格）；常见地段 178 m²、建筑 190 m² 均符合预期 |
 | 相同 `road_norm` + 屋型可能横跨多个 scheme | `/roads` 会回传 scheme；这种情况调用 `/valuate` 时必须同时带入所选 scheme，否则回 422，避免使用错误期数的成交 |
 | 估价与方案 API 只能由服务器调用 | `apps/web/src/lib/valuation.ts` 已加 `server-only`；F4 必须从 Server Component、Server Action 或 route handler 调用，绝不能从 client component 调用或把内部 key 改成 `NEXT_PUBLIC_` |
+| **正式报价无法发出（2026-10-21 审查，阻断 demo）** | `app/admin/applications/[id]/actions.ts:48` 的 switch 与 `ADMIN_ACTIONS`（`lib/admin-application-detail-model.ts:21`）共 14 个动作，**没有任何一个的目标状态是 `offer_sent`**；`issue_offer` 全站与所有 SQL wrapper 都没有调用，`findings` 的说明文字本身就写「This does not issue an offer」。申请走到 `inspected` 后永久停住，连带 **12 个 RPC 不可达，其中 10 个 UI 已做好**（屋主 accept / decline / switch_plan / mark_espa_signed，admin signing / listed / buyer / guarantee / completed / handover）。对应第 5.5 节第 4 关的「admin 批准」与 demo 剧本第 8–9 步。Task_track 第 291 行已记录 G1 延后，但没有记录延后会切断整条流程。修法：在现有 switch 加一个 case 加确认表单；报价金额、14 天到期与月度额度都由资料库处理，前端不算价。详见审查文件第 1 项 |
+| **方案 B 申请无法离开 `under_review`（2026-10-21 审查，阻断 demo）** | `lib/admin-application-detail-model.ts:65` 只在 `app.plan === "A"` 时提供 `initial_a`，而 `proceed_application` 要求状态为 `indicative_sent`，所以方案 B 的申请在 `under_review` 只剩 information / reject / message，永远走不到安排看屋。`caseStageNote()` 第 83 行与 Task_track 第 291 行的 G2 已诚实记录这是待确认项目，但后果是：**方案 B 是主推方案**（《商业模式》第 7.3 节），demo 剧本第 5 步就是选方案 B，第 6 步就卡住，比上一项还早两关。**这纯粹是前端闸门**：`send_indicative` 的 SQL 不限制方案，只拒绝人工估价案件并要求 `under_review`。语意其实第 5.5 节第 2 关已写明「方案 B 保底 = AI 中间值 × 75%，并显示预计可拿到的市价范围」；建议 `indicative_low = indicative_high = plan_b.floor`（点值），市价范围从 `plan_quote_snapshot` 显示。详见审查文件第 2 项 |
+| 复核的 admin 回应端没有 UI | 屋主端**已做好**：`app/dashboard/applications/[id]/actions.ts:70` 以 `purpose: "offer_review"` 呼叫 `submitApplicationResponse`，而 `submit_application_response` 内部会呼叫 `public.request_review(...)`（同一个 wrapper 也以 `info_response` 呼叫 `provide_info`）。所以只搜 TypeScript helper 名字会误判这两个未接线。缺的是 **admin 端**：`respondReview` 没有任何调用，`ADMIN_ACTIONS` 也没有对应动作，因此申请一旦进入 `review_requested` 又是一个死路。要与上一项一起做，否则只是把死路往后推一步 |
+| A3 风险模拟页不存在 | 没有 `/admin/simulator` 路由，`lib/valuation.ts:373` 的 `simulate()` 从未被调用，导航也没有入口。原则 13 明订要做，且是 demo 第 10 步。B6 API 已部署并验证可重现《商业模式》第 5 节全部八个数字。**建页面时**优先显示百分比；若显示 RM 必须注明用的是哪个估价（见 1.8 与审查文件第 3 项） |
+| 原则 14 的数字 guard 漏掉用英文单字写的数字 | `app/ai/guard.py:12` 的 `NUMBER_PATTERN` 只比对阿拉伯数字。以真实 facts payload 实测：`RM950,000` 与 `14` 会被拦下，但 "roughly eight hundred and fifty thousand ringgit" 与 "fourteen recent sales" 会通过。prompt 有写「Do not invent … numbers」，但那是提示而非确定性控制，而「around eight hundred thousand」正好是三句白话解说最自然的写法。修法：两个 prompt 加「数字一律用阿拉伯数字」，并在 guard 加数字单字侦测，违反就照现有机制回退 template |
+| 标记规则有两份实作 | SQL 的 `admin_application_flags` 与 `lib/admin-applications-model.ts:132` 的 TypeScript 版（已有 `// Parity:` 注解说明唯读模型不能触发 lazy expiry）。理由合理，但 80% 额度门槛与「确认市值低于 AI low 超过 10%」要两边同时改；建议在 SQL 侧加注解指回 TypeScript |
 | **估价对地段面积不单调（已接受的 deadline 限制）** | 估价 = 可比成交「每平方米建筑面积」中位数 × 建筑面积，地段面积只影响选哪 10 笔，不直接参与价格换算。团队决定截止日前不改模型，避免破坏 Bukit Jelutong golden result 与既有回测；产品需清楚披露这是初步估价限制，并以注册估价师上门检查及正式确认市值作风险缓解。截止日后若改核权重等方法，必须重跑完整回测。 |
 | Prototype 只支援 landed homes | 现阶段即使是方案 B，也只处理可由现有 road/floor 数据估价的 landed old homes。高楼 49,749 笔的 `floor` 为空、`road` 是空白字串，无法进入当前 `road_catalog`/KNN；高楼支援列为下一阶段，届时需新增期数层级目录并以 `area_sqm` 作为面积基准。长期产品范围仍可扩至 7 个县任何发展商，但 prototype 的 Plan B 文案不得暗示现已支援高楼。 |
 | 方案 A/B 报价公式有两处来源 | `private.application_offer` 写死 `0.785` / `0.75`，`services/valuation/app/plans/constants.py` 则由 11.5% + 10% / 75% 推导。目前两边一致（RM786,000 都得出 617,010 / 589,500），但改任何一个比率都要同时改 Python **和新增一个 migration**（规则 4 不准改已套用的 migration） |
