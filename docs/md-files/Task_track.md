@@ -102,6 +102,8 @@
 
 人工估价路径补充：2026-10-17｜commits `83f88e3`、`2014084`
 
+正式报价与 Plan B 初步金额补强：2026-10-21｜commits `3e24a34`、`5ea6195`（migration 尚待 hosted push）
+
 - [x] 提交时执行第 1 关资格、必填资料与 PDPA 检查；每位屋主同一时间只允许一份活跃申请
 - [x] PostgreSQL SECURITY DEFINER RPC 状态机：锁定申请、验证调用者与合法转换，并在同一交易写入一笔 `application_events`
 - [x] Admin 操作：开始审核、要求补件、初步范围、拒绝、安排/记录上门、发正式报价、回应复核及接受后追踪
@@ -114,6 +116,10 @@
 - [x] 人工 `record_inspection` 必须有正数 `confirmed_value`，并在 note 写注册估价师与估价依据；不使用 AI adjustment reason，同时记录 `manual_valuation_resolved_at / by`
 - [x] 方案 A 的 SDP township 与「确认市值不高于新屋价格」规则在 `issue_offer`、`respond_review`、`switch_plan` 再检查。人工估价后若方案 A 不合格，屋主可在正式报价前改方案 B，且不消耗一次正式 `plan_switch_count`
 - [x] `admin_application_flags` 增加 `manual_valuation_required`；新 RPC 维持 SECURITY DEFINER、空 search path、owner/admin 检查、`FOR UPDATE`、每动作一笔 event、只授权 authenticated。全新本地 reset 后 pgTAP 94 项通过，schema lint 无警告
+- [x] Admin 记录注册估价结果时可输入正数确认市值；落在保存的 AI low/high（含边界）内不需额外说明，超出范围必须写给屋主看的原因。人工估价没有 AI 区间，仍须写注册估价师与估价依据。正式 offer 不能手填，数据库继续按方案 A 78.5% / 方案 B 75% 重算
+- [x] 新增只读 `preview_application_offer` 与带 revision/amount 的 `issue_offer_from_preview`、`respond_review_from_preview`：Admin 必须 Preview → Confirm；finalize 会锁行、检查 stale revision、方案 A 资格、MYT 月度额度及 14 天期限，再写一笔 event。旧的一步式 `issue_offer` / `respond_review` 已从 API roles 撤权
+- [x] Plan B `send_indicative` 在数据库内锁行并核对申请保存的 quote、原新屋价格、eligible、whole-RM expected proceeds low/high、独立 75% floor 及 versioned receipt；不能透过直接 RPC 发送浏览器自订数字。Owner 仍只看已发送预计净收入区间与独立保底，不读取 private audit payload
+- [x] 本地 Docker 从零 reset 后 pgTAP **178 项**及 schema lint 通过；Web Node **112 项**、TypeScript、lint（0 errors）与 production build 通过。真实本地 Owner/Admin/Auth/Storage/浏览器流程已覆盖补件、Plan B 初步金额、继续、上门、正式报价、一次复核、一次切换、过期保护与资料清理
 
 申请补件照片与讯息隐私扩展：2026-10-20｜后端 commit `fe21d07`；用户批准后已套用 hosted Supabase migration `20261019191115`
 
@@ -133,6 +139,9 @@
 - 屋主从 `accepted` 标记 e-SPA 已签后进入 `espa_signed`；admin 以 `espa_confirmed_at` / `espa_confirmed_by` 确认，不新增状态。所有挂牌及之后的追踪动作必须等 admin 确认。
 - `insufficient_data` 不制造临时价格：屋主选择方案时只看结构/公式；方案 A 仅先检查 SDP township，金额资格等注册估价师确认市值后才决定。`not_found` 与 `unsupported_property_type` 不可沿用此路径。
 - 人工路径的正式转换为 `submitted → under_review → manual_valuation_pending → owner_proceed → inspection_scheduled → inspected → offer_sent`；其中 `manual_valuation_pending → withdrawn` 也是合法结束。
+- 注册估价确认值在保存 AI 区间内可直接记录；超出区间必须提供屋主可见解释。Admin 提供证据与说明，正式 offer 由数据库计算，接受、拒绝、一次复核及一次方案切换仍由屋主决定。
+- Plan B Stage 3 的 `indicative_low/high` 代表扣除假设销售费用后的预计公开市场净收入；75% guarantee floor 独立展示，不混入该区间。发送金额必须精确匹配申请提交时保存的后台 quote。
+- 正式报价采用两步式 Preview → Confirm，并以数据库生成的 case revision 防止预览后申请、估值、事件、月份或报价基础改变。
 
 ### 1.7 B2 估价 API 修正（2026-10-14，commit `d5056d7`）
 
@@ -288,8 +297,9 @@
 - [ ] A2 申请详情（`/admin/applications/[id]`）：完整资料、AI 估价与参考成交、照片、AI 辅助摘要、操作记录；按当前关卡显示操作按钮与表单（看屋结果、调整原因、公式算出的报价预览）（第 5.5 节）
   - [x] 2026-10-20 本地实现 A2 资料页与现有后台支持的操作（F3-02a，待 commit）：房屋/保存报价/看屋资料、protected audit 分页、owner message 与内部 note 分离、private 照片查看、stage-based review/补件/拒绝/Plan A 初步范围/manual consent/上门/签约确认/后续里程碑、明确发送讯息与受限 AI 辅助。Dashboard 已接逐案入口并保留筛选返回。104 项 Node 测试、TypeScript、lint、production/browser fixture 检查通过；详见前端记录。
   - [x] 2026-10-20 按批准的视觉稿重排 A2（F3-02b，待 commit）：平衡摘要/操作卡片、全宽资料分页、折叠 AI/内部 note、柔和柚橙色操作标题、轻量动画及 reduced-motion；保留原后台与 G1/G2 停点，不改屋主页面。
-  - [x] 2026-10-21 G2 Plan B 初步金额基础流程已接通（待 commit，未部署）：Admin 在 `under_review` 只可发送与申请/新屋价格匹配的保存 quote；`indicative_low/high` 明确定义为扣除假设销售费用后的预计公开市场净收入区间，75% guarantee floor 独立展示。Server Action 会重新读取当前申请，不采用浏览器金额、不重算或复制公式；snapshot 缺失、不完整、不匹配、已切换方案或人工估价流程均 fail closed。发送沿用现有 `send_indicative`，在 private audit payload 记录本次 range/floor 及金额含义；Owner 只从申请读取已发送区间，并从匹配的本人 quote 读取 floor，不开放 private audit。补件成功后仍需 Admin 明确发送，不自动推进。此阶段性实现不等于 P1 完整验收；仍需补齐 eligible/whole-RM 校验、拒绝意外金额字段、完整 versioned receipt、RPC 返回 plan/range 校验，以及 isolated DB/browser 流程证据。
-  - [ ] G1 正式报价预览 API、正式发出/回应复核，以及 B→A 后重新安排 registered-valuer appointment 仍未完成；对应控件继续不开放，不自行算价或扩写后台。真实 LOCAL Supabase / Storage / RLS 完整验收及 hosted 部署另行确认；不把 fixture browser 检查当成线上流程完成。
+  - [x] 2026-10-21 G2 Plan B 初步金额完整接通（commits `113a4af`、`3e24a34`、`5ea6195`，未部署）：Admin 在 `under_review` 发送与申请/新屋价格匹配的保存 quote；`indicative_low/high` 是扣除假设销售费用后的预计公开市场净收入区间，75% guarantee floor 独立展示。Server Action 与数据库都会 fail closed；snapshot 缺失、不完整、不合资格、非 whole-RM、不匹配、已切换方案、人工估价或 receipt 被修改均阻止发送。Owner 不读取 private audit；补件后仍等 Admin 明确判断，不自动推进。
+  - [x] 2026-10-21 G1 正式报价预览、正式发出及回应一次复核已完成本地实现（commits `3e24a34`、`5ea6195`，未部署）：Admin 输入注册估价确认值；区间外必须写屋主可见说明。页面显示数据库 authoritative preview、资格和额度，再明确 Confirm；finalize 锁定并核对 revision/amount，不信任浏览器报价。Owner 详情及 Dashboard 显示正式计算基础与公开说明，最后决定接受、拒绝、复核或合资格换方案。
+  - [ ] B→A 后重新安排 registered-valuer appointment 仍是独立缺口：现有切换会清空日期并回到 `inspection_scheduled`，但尚无批准的重新预约 RPC/控件。本次不以直接写日期绕过状态机。Hosted migration `20261021054226` 及前端部署另待确认。
 - [ ] A3 风险模拟（`/admin/simulator`）：拉杆与即时结果
 
 ### F4. 串接与收尾
@@ -322,6 +332,7 @@
 | `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
 | 风险模拟的 RM 金额要标明估价基准 | 《商业模式》第 5 节算的是**占估价的百分比**；RM3,500 / RM26,000 是套在示例的 RM786,000 上。187 笔的平均估价是 RM944,511，所以按每笔自己估价平均会得到 RM7,354 / RM36,953。`/simulator/run` 三种基准都回传，A3 优先显示百分比 |
 | B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此 priced snapshot 数值仍只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额。人工路径额外核对该屋主保存的 `valuation_status=insufficient_data` 与对应 `road_catalog.n_recent_3y < 10`，不接受单靠客户端自称资料不足。 |
+| B→A 后的 registered-valuer 重新预约仍未完成 | 方案切换会正确清空旧 offer/appointment 并要求重新上门，但目前没有专用安全 RPC/页面控件写入新预约时间。不可直接更新申请日期；需下一项后台合同与 UI 工作补齐。 |
 
 ## 5. 已确定的关键数字（不要随意改）
 
