@@ -64,3 +64,25 @@ test("manual workflow wrappers call the authenticated RPCs with audit fields", a
     },
   ]);
 });
+
+test("formal-offer helpers pass the preview revision and expected amount to the guarded database RPCs", async () => {
+  const calls = [];
+  globalThis.__applicationsClient = {
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      return { data: name === "preview_application_offer" ? { schema_version: 1 } : { id: "application-1" }, error: null };
+    },
+  };
+
+  await applicationHelpers.previewApplicationOffer("application-1", "revise_review", 810000);
+  await applicationHelpers.issueOfferFromPreview("application-1", "a".repeat(32), 600000, { note: "Private check" });
+  await applicationHelpers.respondReviewFromPreview("application-1", "keep_review", "b".repeat(32), 600000,
+    "We reviewed the evidence and kept the confirmed value.", null, { payload: { ui: "admin" } });
+
+  assert.deepEqual(calls, [
+    { name: "preview_application_offer", args: { p_application_id: "application-1", p_operation: "revise_review", p_revised_confirmed_value: 810000 } },
+    { name: "issue_offer_from_preview", args: { p_application_id: "application-1", p_expected_case_revision: "a".repeat(32), p_expected_offer_amount: 600000, p_note: "Private check", p_payload: {} } },
+    { name: "respond_review_from_preview", args: { p_application_id: "application-1", p_operation: "keep_review", p_expected_case_revision: "b".repeat(32), p_expected_offer_amount: 600000,
+      p_reason: "We reviewed the evidence and kept the confirmed value.", p_revised_confirmed_value: null, p_note: null, p_payload: { ui: "admin" } } },
+  ]);
+});

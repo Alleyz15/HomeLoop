@@ -2,6 +2,7 @@ import type { Application } from "./applications";
 import type { OwnerApplicationEvent, ApplicationPhoto } from "./application-photos";
 import type { StoredValuation } from "./valuations";
 import { dashboardView } from "./dashboard-model";
+import { validPlanQuote } from "./plans-model";
 
 export type OwnerApplication = Omit<Application, "value_adjust_reason" | "condition" | "unit_type_confirmed" | "manual_valuation_resolved_by" | "espa_confirmed_by">;
 export type ApplicationDetail = {
@@ -14,6 +15,16 @@ export type DetailActionState = { error?: string; success?: string; reload?: boo
 export const validApplicationId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 export const applicationHref = (id: string) => `/dashboard/applications/${id}`;
 
+export function initialPlanBFigures(app: OwnerApplication) {
+  const quote = app.plan_quote_snapshot, selected = quote?.selected_plan;
+  if (app.plan !== "B" || app.manual_valuation_required || app.plan_switch_count !== 0 || !validPlanQuote(quote)
+    || Number(quote.new_home.price) !== Number(app.new_home_price) || (selected && selected !== "B")) return null;
+  const low = Number(quote.plan_b.expected_net_low), high = Number(quote.plan_b.expected_net_high), floor = Number(quote.plan_b.floor);
+  if (quote.plan_b.eligible !== true || ![low, high, floor].every(value => Number.isSafeInteger(value) && value > 0) || low > high
+    || Number(app.indicative_low) !== low || Number(app.indicative_high) !== high) return null;
+  return { low, high, floor };
+}
+
 export function detailView(detail: ApplicationDetail, now = Date.now()) {
   const app = detail.application;
   const view = dashboardView({ ...detail, project: detail.project?.project ?? null, error: false, contextError: false }, now);
@@ -21,6 +32,8 @@ export function detailView(detail: ApplicationDetail, now = Date.now()) {
   const last = (test: (event: OwnerApplicationEvent) => boolean) => [...detail.events].reverse().find(test);
   const context = view.status === "info_requested" ? last(event => event.action === "request_info")
     : view.status === "offer_sent" ? last(event => event.to_status === "offer_sent" && ["issue_offer", "respond_review", "switch_plan"].includes(event.action)) : undefined;
+  const formalExplanation = last(event => typeof event.reason === "string" && event.reason.trim() !== ""
+    && ["record_inspection", "respond_review"].includes(event.action))?.reason ?? null;
   const isSdp = app.valuation_snapshot?.is_sdp === true;
   const confirmed = Number(app.confirmed_value);
   const planAAvailable = isSdp && confirmed > 0 && confirmed <= Number(app.new_home_price);
@@ -42,7 +55,7 @@ export function detailView(detail: ApplicationDetail, now = Date.now()) {
     : view.status === "accepted" && app.plan === "B"
       ? "Arrange your new-home signing with SDP sales through HIMS. A partner agent is expected to contact you within 3 days to discuss listing; this is a service target, not a confirmed appointment."
       : view.description;
-  return { ...view, description, actions, contextEventId: context ? String(context.id) : null,
+  return { ...view, description, actions, contextEventId: context ? String(context.id) : null, formalExplanation,
     request: view.status === "info_requested" ? context?.reason ?? context?.owner_message ?? null : null,
     switchNote: app.plan === "B"
       ? "Switching to Plan A uses your one plan switch, clears this offer and requires a registered valuation before another offer. The team must confirm a new visit."

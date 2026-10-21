@@ -23,6 +23,20 @@ const nextCli = path.join(web, "node_modules/next/dist/bin/next"), accounts = []
 const launchId = randomInt(9000000, 9999999), errors = []; let launchCreated = false, server, browser, page, changedBuild = false;
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=", "base64");
 const env = { ...process.env, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_SUPABASE_URL: settings.API_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: settings.ANON_KEY };
+const planBQuote = { selected_plan: "B", new_home: { price: 900000 },
+  plan_b: { eligible: true, floor: 600000, expected_net_low: 669200, expected_net_high: 860400 } };
+const planBReceipt = { initial_figures_receipt: { version: 1, plan: "B", meaning: "expected_open_market_proceeds",
+  source: "application.plan_quote_snapshot.plan_b", canonical_low: 669200, canonical_high: 860400, canonical_floor: 600000 } };
+async function previewAndIssue(client, id) {
+  const preview = value(await client.rpc("preview_application_offer", { p_application_id: id, p_operation: "issue" }));
+  return value(await client.rpc("issue_offer_from_preview", { p_application_id: id,
+    p_expected_case_revision: preview.case_revision, p_expected_offer_amount: preview.offer_amount }));
+}
+async function previewAndKeepReview(client, id, reason) {
+  const preview = value(await client.rpc("preview_application_offer", { p_application_id: id, p_operation: "keep_review" }));
+  return value(await client.rpc("respond_review_from_preview", { p_application_id: id, p_operation: "keep_review",
+    p_expected_case_revision: preview.case_revision, p_expected_offer_amount: preview.offer_amount, p_reason: reason }));
+}
 async function build(environment) {
   const child = spawn(process.execPath, [nextCli, "build"], { cwd: web, env: environment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   let output = ""; child.stdout.on("data", chunk => output += chunk); child.stderr.on("data", chunk => output += chunk);
@@ -38,7 +52,7 @@ async function account(role) {
 }
 async function makeCase(owner) {
   const saved = value(await service.from("valuation_requests").insert({ user_id: owner.id, road_norm: "JLN LOCAL TEST", scheme: "Local browser test township", ptype: "Terrace", tenure: "Freehold", valuation_status: "ok", estimate: 800000, low: 700000, high: 900000, confidence: "medium", comps: [] }).select("id").single()); valuations.push(saved.id);
-  const app = value(await service.from("applications").insert({ user_id: owner.id, valuation_id: saved.id, launch_id: launchId, unit_type: "Standard home type", plan: "B", new_home_price: 900000, new_home_price_source: "price_from", address_line: "12, JLN LOCAL TEST", postcode: "40150", pdpa_consent: true, status: "under_review", valuation_snapshot: { is_sdp: true, estimate: 800000 } }).select("id").single()); applications.push(app.id); return app.id;
+  const app = value(await service.from("applications").insert({ user_id: owner.id, valuation_id: saved.id, launch_id: launchId, unit_type: "Standard home type", plan: "B", new_home_price: 900000, new_home_price_source: "price_from", address_line: "12, JLN LOCAL TEST", postcode: "40150", pdpa_consent: true, status: "under_review", valuation_snapshot: { is_sdp: true, estimate: 800000, low: 700000, high: 900000 }, plan_quote_snapshot: planBQuote }).select("id").single()); applications.push(app.id); return app.id;
 }
 async function open(id) { await page.goto(`${origin}/dashboard/applications/${id}`); await page.locator("[data-application-detail]").waitFor(); }
 async function send(label) {
@@ -83,16 +97,16 @@ try {
   await page.waitForFunction(() => { const img = document.querySelector("dialog img"); return img?.complete && img.naturalWidth > 0; });
   await page.getByRole("button", { name: "Close photo" }).click();
   console.log("PASS real owner login, foreign-case denial, audit privacy, exact-5-MiB browser upload, reply and private photo viewing");
-  value(await team.client.rpc("send_indicative", { p_application_id: id, p_indicative_low: 540000, p_indicative_high: 630000 })); await open(id);
+  value(await team.client.rpc("send_indicative", { p_application_id: id, p_indicative_low: 669200, p_indicative_high: 860400, p_payload: planBReceipt })); await open(id);
   await mkdir(artifacts, { recursive: true }); await page.screenshot({ path: path.join(artifacts, "initial-range-desktop.png"), fullPage: true, animations: "disabled" });
   await send("I’m interested, continue"); await statusIs(id, "owner_proceed");
   value(await team.client.rpc("schedule_inspection", { p_application_id: id, p_scheduled_at: new Date(Date.now() + 86400000).toISOString() }));
   value(await team.client.rpc("record_inspection", { p_application_id: id, p_unit_type_confirmed: true, p_condition: "good", p_confirmed_value: 800000, p_value_adjust_reason: "Local QA assessment", p_note: "INTERNAL registered assessment" }));
-  value(await team.client.rpc("issue_offer", { p_application_id: id })); await open(id);
+  await previewAndIssue(team.client, id); await open(id);
   await panel.getByRole("button", { name: "Request offer review", exact: true }).click(); await page.getByLabel("What would you like the team to review?").fill("Please review the recorded extension condition.");
   await page.locator("#supporting-photos").setInputFiles({ name: "review.png", mimeType: "image/png", buffer: png }); await panel.getByText("Uploaded · not yet sent to the team").waitFor();
   await panel.getByRole("checkbox").check(); await panel.locator("button[type=submit]").click(); await statusIs(id, "review_requested");
-  value(await team.client.rpc("respond_review", { p_application_id: id, p_keep_offer: true, p_reason: "We rechecked the condition and kept the confirmed offer." })); await open(id);
+  await previewAndKeepReview(team.client, id, "We rechecked the condition and kept the confirmed offer."); await open(id);
   assert.equal(await panel.getByRole("button", { name: "Request offer review", exact: true }).count(), 0);
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -110,7 +124,7 @@ try {
   await stale.waitForFunction(() => document.querySelector("[data-application-status]")?.getAttribute("data-application-status") === "inspection_scheduled");
   assert.equal(value(await service.from("applications").select("status").eq("id", id).single()).status, "inspection_scheduled"); await stale.close();
   value(await team.client.rpc("record_inspection", { p_application_id: id, p_unit_type_confirmed: true, p_condition: "good", p_confirmed_value: 800000, p_value_adjust_reason: "Registered local QA", p_note: "INTERNAL valuation evidence" }));
-  value(await team.client.rpc("issue_offer", { p_application_id: id })); await open(id);
+  await previewAndIssue(team.client, id); await open(id);
   assert.equal(await panel.getByRole("button", { name: "Switch plan", exact: true }).count(), 0);
   await send("Accept offer"); await statusIs(id, "accepted"); await send("I have signed the e-SPA"); await statusIs(id, "espa_signed");
   console.log("PASS initial consent, real visit/offer, review photo, one-review/one-switch limits, stale tab, accept and e-SPA declaration");
