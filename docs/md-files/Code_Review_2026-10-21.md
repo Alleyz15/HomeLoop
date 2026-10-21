@@ -40,6 +40,59 @@ Plus three findings from the 2026-10-14 review that are still open (see *Previou
 
 ---
 
+## Unmerged work: what `origin/QY` already delivers
+
+`origin/QY` is one non-merge commit ahead of `main`: **`3f301d2` "feat(frontend): add Plan B initial
+figures flow"** (Alleyz15, 2026-10-21), touching 9 files, +69/−16. It closes finding 2 and nothing else,
+so the other five findings below are open on `main` and on `QY` alike.
+
+**What it does.** An admin reviewing a Plan B case at `under_review` can now send initial figures:
+
+- `initial_b` added to `AdminAction` and to `ADMIN_ACTIONS` with `result: "indicative_sent"`
+- `initialBFigures()` (`lib/admin-application-detail-model.ts:60`) reads the saved quote and returns
+  `{ low, high, floor }` only when all three are positive and ordered
+- `adminCaseActions()` line 72 offers it for Plan B, mirroring the existing Plan A branch
+- `initialPlanBFigures()` in `lib/application-detail-model.ts` gives the owner's side the same figures
+- the admin panel renders **"Expected open-market proceeds"** as a range and **"Indicative guarantee
+  floor"** as a separate amount, with the sentence that the proceeds assume an open-market sale and
+  selling fees while the floor is a separate fallback — explicitly "preliminary figures, not a formal
+  offer"
+- 39 lines of new test coverage across `scripts/admin_application_detail.test.mjs` and
+  `scripts/application_detail.test.mjs`
+
+**The semantic decision, which this review had left open.** `indicative_low` / `indicative_high` are now
+defined as the **expected open-market net proceeds** (after assumed selling fees), with the 75% guarantee
+floor shown alongside rather than stored. That is a better reading of §5.5's
+"并显示预计可拿到的市价范围" than the point-value this document originally recommended: the owner reacts to
+what they would actually receive, and the floor is presented as the fallback it is. **Treat this as the
+decided answer.**
+
+**What makes it safe, and worth preserving in later work:**
+
+- the server action re-reads the application and derives the amounts server-side — no browser-supplied
+  figure is trusted, and no formula is recomputed or copied
+- it fails closed on every doubtful case: missing, incomplete or mismatched snapshot, a quote whose
+  `new_home.price` differs from the application's, a selected plan other than B, a case that has already
+  switched plan, or a manual-valuation case
+- the range, the floor and the meaning of the amounts are recorded in the **private** audit payload
+  (`indicative_kind: "expected_open_market_proceeds"`), while the owner reads the sent range from the
+  application and the floor from their own matching quote — the private audit is not exposed
+- an information reply still requires the admin to send explicitly; nothing auto-advances
+
+**Still outstanding on it**, per the author's own Task_track note — this is a working flow, not a
+completed acceptance: eligibility and whole-ringgit validation, rejecting unexpected amount fields, a
+full versioned receipt, validating the plan and range returned by the RPC, and isolated database and
+browser evidence.
+
+**Also recorded in that note, and not previously captured in this review:** after a B→A plan switch, the
+case returns to `inspection_scheduled` and needs a fresh registered-valuer appointment, and **that
+re-scheduling is not implemented**. It sits in the same area as finding 1 and should be handled with it.
+
+**Merge this before starting findings 1 or 3.** All three touch `adminCaseActions()` and `ADMIN_ACTIONS`;
+merging first avoids a conflict in exactly those two places.
+
+---
+
 ## 1. Blocker — the formal offer cannot be issued
 
 ### Problem
@@ -145,28 +198,31 @@ exceptions:
 **Verify:** owner submits → admin start → indicative → owner continue → schedule → findings → **offer** →
 owner sees the amount and the countdown → accept → `espa_signed` path opens. That is demo steps 6 to 9.
 
+**Handle the B→A return path in the same pass.** `switch_plan` from B to A clears the offer and returns
+the case to `inspection_scheduled` to await a registered valuer, but **re-scheduling that appointment is
+not implemented** — `adminCaseActions()` only offers `findings` at `inspection_scheduled`, never
+`schedule` again. So a case that switches B→A lands in a state whose appointment cannot be set. The
+author of `3f301d2` records this in Task_track as still open. Fix it by allowing `schedule` at
+`inspection_scheduled` as well, so an appointment can be set or revised:
+
+```ts
+if (status === "inspection_scheduled") actions.push("findings", "schedule");
+```
+
 ---
 
 ## 2. Fixed on `QY` — a Plan B application could never leave `under_review`
 
-> **Status: already fixed, pending merge.** `origin/QY` commit `3f301d2`
-> ("feat(frontend): add Plan B initial figures flow", 2026-10-21) resolves this. It adds `initial_b` to
-> `AdminAction` and `ADMIN_ACTIONS` with `result: "indicative_sent"`, an `initialBFigures()` helper at
-> line 60, and the Plan B branch at line 72. **No further work is needed beyond merging `QY` into
-> `main`.** The problem and the reasoning are kept below because they explain why the merge matters and
-> what to verify after it.
->
-> **The design question was decided differently from this document's recommendation, and the shipped
-> choice is better.** `initialBFigures()` stores the **expected open-market proceeds range**
-> (`expected_net_low` … `expected_net_high`) as the indicative range and shows the guarantee floor
-> separately, rather than storing the floor as a point. That is closer to §5.5's
-> "并显示预计可拿到的市价范围": the owner is reacting to what they would actually receive, with the floor
-> alongside it. Treat the recommendation in the Solution section below as superseded.
+> **Status: fixed on `origin/QY` in `3f301d2`, pending merge.** See
+> [*Unmerged work: what `origin/QY` already delivers*](#unmerged-work-what-originqy-already-delivers)
+> above for what it does, the semantic decision it settles, and what its author lists as still
+> outstanding. **No further implementation is needed — only the merge.** The problem is kept below
+> because it explains why the merge matters and what to verify afterwards.
 >
 > **After merging, verify:** a Plan B case at `under_review` offers "Send initial Plan B figures"; the
-> owner sees an expected-proceeds range plus a separate floor, labelled as preliminary and not an offer;
-> 「我有兴趣，继续」 moves it to `owner_proceed`; and a Plan B case whose saved quote is incomplete still
-> shows the honest stage note rather than an invented range.
+> owner sees an expected-proceeds range plus a separate guarantee floor, labelled preliminary and not an
+> offer; 「我有兴趣，继续」 moves it to `owner_proceed`; and a Plan B case whose saved quote is missing or
+> mismatched still shows the honest stage note rather than an invented range.
 
 ### Problem
 
