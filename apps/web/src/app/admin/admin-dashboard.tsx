@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, CircleAlert, ClipboardList, Inbox, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CircleAlert, ClipboardList, Inbox, RefreshCw, Search, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { adminCaseHref } from "@/lib/admin-application-detail-model";
 import { ADMIN_QUEUES, adminDate, adminHref, adminMoney, capacityView, monthLabel, selectAdminPage, type AdminDashboardData, type AdminParams, type AdminRecord, type Capacity } from "@/lib/admin-applications-model";
 import styles from "./admin.module.css";
@@ -34,7 +34,7 @@ export function AdminDashboard({ data, params }: { data: AdminDashboardData; par
   const townshipOptions = [...new Set([...page.townships, ...(filters.township ? [filters.township] : [])])].sort();
   return <div className={styles.dashboard} data-admin-dashboard data-record-page={filters.page}>
     <header className={styles.heading}>
-      <div><p className={styles.eyebrow}><span aria-hidden="true" />THE TRADE-IN WORKBENCH</p><h1>Applications<span>.</span></h1><p>Find the next step. Keep every home moving.</p></div>
+      <div><p className={styles.eyebrow}><span aria-hidden="true" />THE TRADE-IN WORKBENCH</p><h1>Applications<span>.</span></h1><p>Find the next step. Keep every home moving.</p></div><a className={styles.retryButton} href="/admin/simulator">Risk simulator<SlidersHorizontal size={14} aria-hidden="true" /></a>
     </header>
 
     <section aria-labelledby="capacity-heading" className={styles.capacitySection}>
