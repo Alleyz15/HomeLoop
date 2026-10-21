@@ -523,6 +523,16 @@ The admin role guard is implemented in F1-03; workflow and AI helpers are implem
 - Security advisor notices and remediation links, exact migration hash and compatibility note for teammates using raw `application_events.note/payload` are recorded in [backend-application-photos.md](../backend-application-photos.md). Existing unrelated notices were not changed; five deliberately protected authenticated RPCs add the expected SECURITY DEFINER advisory notices.
 - Files affected by this action: hosted schema/storage policies/functions and its one migration-history entry; deployment documentation only in `docs/backend-application-photos.md`, `docs/md-files/Task_track.md`, and this file. The source migration was not edited. Earlier frontend changes in the worktree were preserved.
 
+### F4-05 — Round 2 review remediation
+
+- Date / commit: 2026-10-21; implementation commit `9afd563`, migration deployed, frontend deploy pending.
+- Problem: the second full-repository review found inconsistent money rendering, no safe way to change an existing inspection appointment, ambiguous confirmed-value mismatch wording, formula-parity drift risk, fraction-word AI guard bypasses, incomplete backtest retry instructions and four misleading unused workflow exports.
+- Changes: all homeowner/admin monetary display models now share the whole-RM formatter; the valuation result discloses the accepted land-area model limitation; an admin can reschedule an existing future appointment through a guarded same-stage RPC that preserves both dates in audit history; AI says “mid-point estimate” and rejects ungrounded fraction/multiplier words; the database remains the formal-offer authority with an automated Python/SQL parity test; README documents a table-scoped backtest recovery; unused exports were removed.
+- Affected frontend files: `apps/web/src/lib/{development-model,dashboard-model,admin-applications-model,admin-simulator-model,applications}.ts`, `apps/web/src/lib/admin-application-detail-model.ts`, `apps/web/src/app/admin/applications/[id]/*`, `apps/web/src/app/valuation/result/[id]/page.tsx`, and their Node tests.
+- Verification: clean local Supabase reset; 204/204 pgTAP assertions; local DB lint with no errors; 119/119 Node tests; 154 Python tests passed, 10 skipped and the two documented Windows `TestClient` hang cases deselected; importer 17/17; TypeScript clean; ESLint 0 errors (one pre-existing `<img>` performance warning); production build passed.
+- Deployment: migration `20261021130515_reschedule_inspection.sql` was applied after an approved dry-run; local/remote history aligns and linked database lint reports no errors.
+- Remaining checks: frontend commit, Vercel deployment and signed-in browser acceptance remain separate. The valuation algorithm itself is unchanged until a future model decision and full backtest.
+
 ### F4-03 — Remaining integration and release actions
 
 Status: pending. No completion or deployment is claimed.
