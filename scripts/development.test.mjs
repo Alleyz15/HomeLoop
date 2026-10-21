@@ -4,7 +4,9 @@ import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 const file=(name)=>readFile(new URL("../apps/web/src/"+name,import.meta.url),"utf8");
 const moduleFor=(source)=>import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`);
-const model=await file("lib/development-model.ts");
+const urlFor=(source)=>`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`;
+const unitsUrl=urlFor(await file("lib/units.ts"));
+const model=(await file("lib/development-model.ts")).replace('"./units"',JSON.stringify(unitsUrl));
 const {validValuationId,hasValuationRange,valuationJourneyState,canContinueWithValuation,INSUFFICIENT_DATA_MESSAGE,pricePreview,publishedLayouts,developmentHref,marketRm}=await moduleFor(model);
 const id="20000000-0000-4000-8000-000000000001";
 const valuation={id,scheme:"Saved property",road_norm:"JLN TEST",valuation_status:"ok",estimate:785635.36,low:720000,high:840000};
@@ -27,8 +29,8 @@ test("only priced and insufficient-data valuations may continue to home selectio
   assert.equal(canContinueWithValuation("manual"),true);
   assert.equal(INSUFFICIENT_DATA_MESSAGE,"Not enough recent sales to estimate automatically. You can still apply — a registered valuer will value your home after you agree to proceed.");
 });
-test("preview uses published or overriding sales price, preserves cents and whole-RM old-home rounding",()=>{
-  assert.equal(marketRm(720000),"RM720,000");assert.equal(marketRm(-40000.25),"-RM40,000.25");
+test("preview uses published or overriding sales price and whole-RM monetary formatting",()=>{
+  assert.equal(marketRm(720000),"RM720,000");assert.equal(marketRm(-40000.25),"-RM40,000");
   assert.deepEqual(pricePreview(2789000,"",valuation).range,{low:1949000,high:2069000});
   const quote=pricePreview(2789000,"850,000.25",valuation);
   assert.equal(quote.source,"sales_quote");assert.equal(quote.price,850000.25);assert.deepEqual(quote.range,{low:10000.25,high:130000.25});
@@ -68,7 +70,9 @@ test("development phase handoff: validated GET selection, no writes and no saved
   assert.match(panel,/canContinueWithValuation\(context.state\)/);
   assert.doesNotMatch(panel,/quotePlans|localStorage|sessionStorage|fetch\(/);
   assert.doesNotMatch(await file("app/new-home/valuation-context.tsx"),/href=|View saved valuation/);
-  assert.match(await file("app/valuation/result/[id]/page.tsx"),/new-home\?valuation=\$\{encodeURIComponent\(valuation.id\)\}/);
+  const resultPage=await file("app/valuation/result/[id]/page.tsx");
+  assert.match(resultPage,/new-home\?valuation=\$\{encodeURIComponent\(valuation.id\)\}/);
+  assert.match(resultPage,/larger land area does not always produce a higher preliminary estimate/i);
   const {catalogueHref}=await moduleFor(await file("lib/catalogue-model.ts"));
   assert.equal(catalogueHref({tier:"upcoming",query:"",location:"",type:"all"},id),`/new-home?tier=upcoming&valuation=${id}`);
 });

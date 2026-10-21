@@ -26,7 +26,7 @@ export default async function AdminApplicationDetails({ params, searchParams }: 
   const [detail, capacity] = await Promise.all([getAdminCaseEvidence(core), getAdminCaseCapacity(core)]);
   const status = caseStatus(app), revision = adminCaseRevision(core), view = capacityView(capacity.capacity);
   const context: ActionContext = { id, revision, actions: core.revisionAvailable ? adminCaseActions(app) : [], manual: app.manual_valuation_required,
-    visit: app.plan === "A" || app.manual_valuation_required ? "Registered valuation" : "SDP staff / partner inspection", estimate: positive(app.valuation_snapshot?.estimate),
+    visit: app.plan === "A" || app.manual_valuation_required ? "Registered valuation" : "SDP staff / partner inspection", appointment: app.inspection_scheduled_at, estimate: positive(app.valuation_snapshot?.estimate),
     range: savedAiRange(app), confirmedValue: positive(app.confirmed_value), plan: app.plan, switchedToPlanA: isPlanBToAValuation(app),
     initial: app.plan === "A" ? initialARange(app) : initialBFigures(app), stageNote: caseStageNote(app), href: sectionHref(adminCaseHref(id, returnTo), caseSection(query.tab)) };
   const manualAIneligible = app.manual_valuation_required && app.manual_valuation_resolved_at && app.plan === "A" && positive(app.confirmed_value) && (app.valuation_snapshot?.is_sdp !== true || Number(app.confirmed_value) > Number(app.new_home_price));

@@ -1,6 +1,6 @@
 # HomeLoop Task Track
 
-最后更新：2026-10-20｜截止：**10/23 23:59**
+最后更新：2026-10-21｜截止：**10/23 23:59**
 
 本文件记录整个系统的任务进度，分为**后端**与**前端**两部分。
 
@@ -8,7 +8,7 @@
 
 2026-10-21 全仓代码审查分两轮：
 - 第一轮 [Code_Review_2026-10-21.md](Code_Review_2026-10-21.md)：**✅ 已全部修复并复验**（`main` `f06f071`），七项（正式报价无法发出、方案 B 卡在 `under_review`、复核无 admin 回应、A3 缺页、数字 guard 漏字母写法、标记规则重复、B→A 重新预约）保留为纪录，不需再处理。
-- 第二轮 [Code_Review_2026-10-21_Round2.md](Code_Review_2026-10-21_Round2.md)：修完第一轮后重新全仓检查，**仍有 8 项未修**，每项都附建议修法。值得在截止前处理的只有第 1 项（同一金额全站三种显示，与 1.5 节「所有金额四舍五入到 RM 整数」冲突，且 demo 看得到）；第 2 项（估价对地段面积不单调）需团队决定并重跑回测，不宜赶工改。
+- 第二轮 [Code_Review_2026-10-21_Round2.md](Code_Review_2026-10-21_Round2.md)：**✅ 2026-10-21 已在 `QY` commit `9afd563` 完成处置并复验（frontend deploy 待办）**。第 1、3–8 项已修；第 2 项依既定 deadline 决策不改估价模型，以结果页明确披露限制并保留注册估价师复核。新 `reschedule_inspection` migration 已于同日获确认并应用远端，migration list 对齐且 linked lint 无错误。
 
 > **给 AI 编程助手（Codex / Claude）的规则**
 > 1. 开始任何任务前，先读本文件和 `docs/md-files/` 里的其他文件。产品规则以《HomeLoop_更新_页面与流程.md》为准。
@@ -328,7 +328,7 @@
 | `road_catalog` 的 Birai 验收笔数与任务文字不同 | 按指定的 trim/JLN 正规化后，`JLN BIRAI U8/69` 有 13 笔（其中 1 笔原始路名有前导空格）；常见地段 178 m²、建筑 190 m² 均符合预期 |
 | 相同 `road_norm` + 屋型可能横跨多个 scheme | `/roads` 会回传 scheme；这种情况调用 `/valuate` 时必须同时带入所选 scheme，否则回 422，避免使用错误期数的成交 |
 | 估价与方案 API 只能由服务器调用 | `apps/web/src/lib/valuation.ts` 已加 `server-only`；F4 必须从 Server Component、Server Action 或 route handler 调用，绝不能从 client component 调用或把内部 key 改成 `NEXT_PUBLIC_` |
-| B→A 换方案后无法重新安排估价师上门 | `switch_plan` 由 B 换 A 会清空报价并回到 `inspection_scheduled` 等注册估价师，但 `adminCaseActions()` 在 `inspection_scheduled` 只提供 `findings`，没有再次 `schedule`，所以换过方案的案件停在一个无法设定预约的状态。`3f301d2` 的作者已在 Task_track 记录此项未完成。建议与上一项（发出正式报价）同一批处理：`if (status === "inspection_scheduled") actions.push("findings", "schedule");` |
+| B→A 换方案后重新安排估价师上门（已解决） | 首次 B→A 注册估价预约已由 migration `20261021074642` 的专用动作处理；一般已预约案件改期则由 migration `20261021130515_reschedule_inspection.sql` 的 admin-only RPC 处理。RPC 锁行、只接受未来且不同的时间、维持 `inspection_scheduled`，并把旧/新时间写入一笔 audit event；本地 pgTAP 通过，远端已应用且 linked lint 无错误。 |
 | **正式报价无法发出（2026-10-21 审查，阻断 demo）** | `app/admin/applications/[id]/actions.ts:48` 的 switch 与 `ADMIN_ACTIONS`（`lib/admin-application-detail-model.ts:21`）共 14 个动作，**没有任何一个的目标状态是 `offer_sent`**；`issue_offer` 全站与所有 SQL wrapper 都没有调用，`findings` 的说明文字本身就写「This does not issue an offer」。申请走到 `inspected` 后永久停住，连带 **12 个 RPC 不可达，其中 10 个 UI 已做好**（屋主 accept / decline / switch_plan / mark_espa_signed，admin signing / listed / buyer / guarantee / completed / handover）。对应第 5.5 节第 4 关的「admin 批准」与 demo 剧本第 8–9 步。Task_track 第 291 行已记录 G1 延后，但没有记录延后会切断整条流程。修法：在现有 switch 加一个 case 加确认表单；报价金额、14 天到期与月度额度都由资料库处理，前端不算价。详见审查文件第 1 项 |
 | **方案 B 申请无法离开 `under_review`（2026-10-21 审查｜已在 `QY` 修好，待 merge）** | **`origin/QY` commit `3f301d2` 已修**：新增 `initial_b` 动作、`initialBFigures()` helper 与第 72 行的方案 B 分支，只差 merge 进 `main`。采用的做法与审查文件原本的建议不同、且更好：存的是**预计公开市场净额区间**（`expected_net_low` … `expected_net_high`），保底价另外单独显示，更贴近第 5.5 节「并显示预计可拿到的市价范围」。原本的问题说明保留如下，供 merge 后验收参考。 |
 | ↳ merge 后要验收的点（原问题说明） | `lib/admin-application-detail-model.ts:65` 只在 `app.plan === "A"` 时提供 `initial_a`，而 `proceed_application` 要求状态为 `indicative_sent`，所以方案 B 的申请在 `under_review` 只剩 information / reject / message，永远走不到安排看屋。`caseStageNote()` 第 83 行与 Task_track 第 291 行的 G2 已诚实记录这是待确认项目，但后果是：**方案 B 是主推方案**（《商业模式》第 7.3 节），demo 剧本第 5 步就是选方案 B，第 6 步就卡住，比上一项还早两关。**这纯粹是前端闸门**：`send_indicative` 的 SQL 不限制方案，只拒绝人工估价案件并要求 `under_review`。语意其实第 5.5 节第 2 关已写明「方案 B 保底 = AI 中间值 × 75%，并显示预计可拿到的市价范围」；建议 `indicative_low = indicative_high = plan_b.floor`（点值），市价范围从 `plan_quote_snapshot` 显示。详见审查文件第 2 项 |
@@ -336,17 +336,18 @@
 | A3 风险模拟页不存在 | 没有 `/admin/simulator` 路由，`lib/valuation.ts:373` 的 `simulate()` 从未被调用，导航也没有入口。原则 13 明订要做，且是 demo 第 10 步。B6 API 已部署并验证可重现《商业模式》第 5 节全部八个数字。**建页面时**优先显示百分比；若显示 RM 必须注明用的是哪个估价（见 1.8 与审查文件第 3 项） |
 | 原则 14 的数字 guard 漏掉用英文单字写的数字 | `app/ai/guard.py:12` 的 `NUMBER_PATTERN` 只比对阿拉伯数字。以真实 facts payload 实测：`RM950,000` 与 `14` 会被拦下，但 "roughly eight hundred and fifty thousand ringgit" 与 "fourteen recent sales" 会通过。prompt 有写「Do not invent … numbers」，但那是提示而非确定性控制，而「around eight hundred thousand」正好是三句白话解说最自然的写法。修法：两个 prompt 加「数字一律用阿拉伯数字」，并在 guard 加数字单字侦测，违反就照现有机制回退 template |
 | 标记规则有两份实作 | SQL 的 `admin_application_flags` 与 `lib/admin-applications-model.ts:132` 的 TypeScript 版（已有 `// Parity:` 注解说明唯读模型不能触发 lazy expiry）。理由合理，但 80% 额度门槛与「确认市值低于 AI low 超过 10%」要两边同时改；建议在 SQL 侧加注解指回 TypeScript |
-| **估价对地段面积不单调（已接受的 deadline 限制）** | 估价 = 可比成交「每平方米建筑面积」中位数 × 建筑面积，地段面积只影响选哪 10 笔，不直接参与价格换算。团队决定截止日前不改模型，避免破坏 Bukit Jelutong golden result 与既有回测；产品需清楚披露这是初步估价限制，并以注册估价师上门检查及正式确认市值作风险缓解。截止日后若改核权重等方法，必须重跑完整回测。 |
+| **估价对地段面积不单调（已接受并披露的 deadline 限制）** | 估价 = 可比成交「每平方米建筑面积」中位数 × 建筑面积，地段面积只影响选哪 10 笔，不直接参与价格换算。团队决定截止日前不改模型，避免破坏 Bukit Jelutong golden result 与既有回测；估价结果页现已明确披露较大地段不保证较高初步估价，并以注册估价师上门检查及正式确认市值作风险缓解。截止日后若改核权重等方法，必须重跑完整回测。 |
 | Prototype 只支援 landed homes | 现阶段即使是方案 B，也只处理可由现有 road/floor 数据估价的 landed old homes。高楼 49,749 笔的 `floor` 为空、`road` 是空白字串，无法进入当前 `road_catalog`/KNN；高楼支援列为下一阶段，届时需新增期数层级目录并以 `area_sqm` 作为面积基准。长期产品范围仍可扩至 7 个县任何发展商，但 prototype 的 Plan B 文案不得暗示现已支援高楼。 |
-| 方案 A/B 报价公式有两处来源 | `private.application_offer` 写死 `0.785` / `0.75`，`services/valuation/app/plans/constants.py` 则由 11.5% + 10% / 75% 推导。目前两边一致（RM786,000 都得出 617,010 / 589,500），但改任何一个比率都要同时改 Python **和新增一个 migration**（规则 4 不准改已套用的 migration） |
+| 方案 A/B 报价公式有两处来源（已加契约保护） | 数据库 `private.application_offer` 仍是正式报价权威来源，Python 常数只供初步报价及模拟复用。新 migration 与 Python 常数互相注解，并新增 parity test 读取既有 workflow migration，验证 Plan A `0.785` / Plan B `0.75` 始终一致；未来改率仍须同时改 Python 与新增 migration。 |
 | `net_at_floor` 保底净额（已解决） | commit `0388866` 已按《商业模式》第 0.2、4 节改为保底价本身；RM786,000 对应 RM589,500。公开市场的 `expected_net` 仍保留 3.2% 代理费及 1.2% 律师费假设。 |
 | `create_demo_users.py` role 验证（已解决） | commit `0388866` 会检查 update 回传确实包含目标 profile；未命中时非零退出，不再误报 admin role 已设定。 |
 | 每月额度月份归属（已解决） | Migration `20261015084351_fix_monthly_limit_timezone.sql`（commit `93faa61`）已于 2026-10-15 套用线上，统一以 `Asia/Kuala_Lumpur` 计算报价月份；本机重建与 59 项 pgTAP 已通过，远端 migration list 已对齐，linked database lint 无错误。 |
-| `backtest_ratios` 部分导入后无法重试 | `requires_empty=True`，187 笔导入中途失败后必须先手动 truncate 才能重跑；README 只说明了 `transactions` 需要 truncate |
+| `backtest_ratios` 部分导入后无法重试（操作文件已补） | 保留正确的 `requires_empty=True` 防重复保护；README 现已写明只 truncate `public.backtest_ratios restart identity`，再以 `--only backtest_ratios.csv` 重跑，不碰其他参考表。 |
 | 风险模拟的 RM 金额基准（已解决） | commit `7448fe2` 的 A3 页面以百分比为主，并把 RM 数字分别标为 RM786,000 reference valuation 与 sample-weighted basis，不再把两种金额误写成同一含义。`/simulator/run` 的三种基准维持不变。 |
 | B4 提交时的 valuation / plan snapshot 可由恶意屋主伪造 | `submit_application` 从 Next.js server 接收 snapshot，因此 priced snapshot 数值仍只作初步参考；admin 会在上门检查时重新核实，正式报价始终由数据库根据 `confirmed_value` 按固定公式重算，不信任客户端报价金额。人工路径额外核对该屋主保存的 `valuation_status=insufficient_data` 与对应 `road_catalog.n_recent_3y < 10`，不接受单靠客户端自称资料不足。 |
-| B→A registered-valuer 重新预约（本地已解决，待部署） | migration `20261021074642_add_b_to_a_registered_valuation.sql` 与 commit `6b629b3` 已补专用安全 RPC、Admin 预约/录值控件、旧值审计及屋主可见差异说明；不直接更新申请日期或手填 offer。远端 migration push 与 Vercel 部署后才算线上生效。 |
+| B→A registered-valuer 与一般预约改期（数据库已部署） | migration `20261021074642_add_b_to_a_registered_valuation.sql` 与 commit `6b629b3` 已补 B→A 专用安全 RPC、Admin 预约/录值控件、旧值审计及屋主可见差异说明；migration `20261021130515_reschedule_inspection.sql` 再补任何已预约 `inspection_scheduled` 案件的安全改期与 audit。两项 migration 已在远端对齐；新增前端控件仍待 commit / Vercel 部署。 |
 | Admin flags SQL / TypeScript 门槛必须同步 | `admin_application_flags()` 与 `apps/web/src/lib/admin-applications-model.ts` 目前都使用 valuation gap 10% 与 quota near 80%。migration `20261021074642` 加入数据库 COMMENT 记录此契约但不改逻辑；以后调整任一门槛必须同时修改 SQL、TypeScript 与测试。 |
+| 第二轮其余修复（commit `9afd563`） | 全站金额统一走 whole-RM formatter；AI mismatch 明确写为 mid-point estimate；number guard 对 `half` / `third` / `quarter` / `double` / `triple` / `dozen` 直接回退；删除 4 个误导审查的未使用 TS exports。完整 Node 119/119、Python 154 passed + 10 skipped + 2 个 Windows 已知挂起用例明确 deselect、importer 17/17、pgTAP 204/204、TS、lint 与 production build 通过。 |
 
 ## 5. 已确定的关键数字（不要随意改）
 

@@ -3,7 +3,10 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 
-const source = await readFile(new URL("../apps/web/src/lib/admin-simulator-model.ts", import.meta.url), "utf8");
+const unitsSource = await readFile(new URL("../apps/web/src/lib/units.ts", import.meta.url), "utf8");
+const unitsUrl = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(unitsSource)).toString("base64")}`;
+const source = (await readFile(new URL("../apps/web/src/lib/admin-simulator-model.ts", import.meta.url), "utf8"))
+  .replace('"./units"', JSON.stringify(unitsUrl));
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`;
 const model = await import(moduleUrl);
 

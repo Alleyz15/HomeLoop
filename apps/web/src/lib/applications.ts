@@ -118,14 +118,6 @@ export type SubmitApplicationInput = {
   titleNo?: string | null;
 };
 
-export type AdminApplicationFlags = {
-  application_id: string;
-  valuation_gap: boolean;
-  low_confidence: boolean;
-  quota_near: boolean;
-  manual_valuation_required: boolean;
-};
-
 async function callRpc<T>(
   functionName: string,
   args: Record<string, unknown> = {},
@@ -184,16 +176,6 @@ export function requestInfo(
   return callRpc<Application>("request_info", {
     p_application_id: applicationId,
     p_reason: reason,
-    ...auditArgs(audit),
-  });
-}
-
-export function provideInfo(
-  applicationId: string,
-  audit: AuditInput = {},
-): Promise<Application> {
-  return callRpc<Application>("provide_info", {
-    p_application_id: applicationId,
     ...auditArgs(audit),
   });
 }
@@ -278,6 +260,18 @@ export function schedulePlanAValuation(
   });
 }
 
+export function rescheduleInspection(
+  applicationId: string,
+  scheduledAt: string,
+  audit: AuditInput = {},
+): Promise<Application> {
+  return callRpc<Application>("reschedule_inspection", {
+    p_application_id: applicationId,
+    p_scheduled_at: scheduledAt,
+    ...auditArgs(audit),
+  });
+}
+
 export function recordInspection(
   applicationId: string,
   input: {
@@ -320,18 +314,6 @@ export function issueOfferFromPreview(
     p_application_id: applicationId,
     p_expected_case_revision: expectedCaseRevision,
     p_expected_offer_amount: expectedOfferAmount,
-    ...auditArgs(audit),
-  });
-}
-
-export function requestReview(
-  applicationId: string,
-  reason: string,
-  audit: AuditInput = {},
-): Promise<Application> {
-  return callRpc<Application>("request_review", {
-    p_application_id: applicationId,
-    p_reason: reason,
     ...auditArgs(audit),
   });
 }
@@ -478,12 +460,4 @@ export function markHandover(
     p_application_id: applicationId,
     ...auditArgs(audit),
   });
-}
-
-export function expireOffers(): Promise<number> {
-  return callRpc<number>("expire_offers");
-}
-
-export function getAdminApplicationFlags(): Promise<AdminApplicationFlags[]> {
-  return callRpc<AdminApplicationFlags[]>("admin_application_flags");
 }

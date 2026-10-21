@@ -10,6 +10,13 @@ were all resolved in `f06f071` and are **not** repeated here.
 
 This document lists **only what is still wrong**, each flaw paired with a recommended fix.
 
+> **Resolution update — 2026-10-21 (`QY` commit `9afd563`, frontend deploy pending):** findings 1 and 3–8 have been
+> implemented and verified. Finding 2 remains an explicitly accepted deadline limitation: the model was
+> not changed without a fresh backtest, and the valuation result now discloses the limitation. The new
+> appointment-reschedule migration passed a clean local reset, 204 pgTAP assertions and schema lint, and
+> was applied to the linked project after a separately approved dry-run; local/remote history aligns and
+> linked database lint reports no errors.
+
 Scope: the whole repository — all 17 documents, `services/valuation` including the `app/ai` package, all
 twelve migrations, and the `apps/web` frontend, with particular attention to the ~1,050 lines of SQL
 added by the Round 1 fixes and to areas Round 1 had not examined closely (the apply flow, money

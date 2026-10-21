@@ -377,6 +377,23 @@ def test_number_guard_parses_hyphenated_and_scaled_english_numbers() -> None:
     assert ungrounded_numbers("The amount is one million.", payload) == ["one million"]
 
 
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "Prices rose by a third.",
+        "The result is half the recorded amount.",
+        "The price could double.",
+        "The sample represents a quarter of the road.",
+        "The value may triple.",
+        "The estimate uses a dozen sales.",
+    ],
+)
+def test_number_guard_rejects_ungrounded_fraction_and_multiplier_words(
+    phrase: str,
+) -> None:
+    assert numbers_are_grounded(phrase, {"estimate_rm": "RM785,635"}) is False
+
+
 def test_missing_key_uses_complete_template_fallback() -> None:
     service = AiService(
         Settings(
@@ -1229,7 +1246,7 @@ def test_admin_mismatches_are_deterministic_and_cover_all_thresholds() -> None:
         "Entered land area 220 m² differs from the road-typical 164 m² by 34.1%.",
         "Entered floor area 230 m² differs from the road-typical 180 m² by 27.8%.",
         "The AI valuation confidence is low.",
-        "The confirmed value RM680,000 is 15.0% below the AI estimate RM800,000.",
+        "The confirmed value RM680,000 is 15.0% below the AI mid-point estimate RM800,000.",
     ]
 
 

@@ -5,7 +5,8 @@ import { stripTypeScriptTypes } from "node:module";
 
 const read = file => readFile(new URL(`../apps/web/src/${file}`, import.meta.url), "utf8");
 const url = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`;
-const modelUrl = url(await read("lib/admin-simulator-model.ts"));
+const unitsUrl = url(await read("lib/units.ts"));
+const modelUrl = url((await read("lib/admin-simulator-model.ts")).replace('"./units"', JSON.stringify(unitsUrl)));
 globalThis.__simulator = { admin: true, calls: [] };
 const source = (await read("app/admin/simulator/actions.ts"))
   .replace('"use server";', "")

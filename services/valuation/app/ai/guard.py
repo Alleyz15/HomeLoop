@@ -61,6 +61,18 @@ NUMBER_WORD_PATTERN = re.compile(
     rf"(?:(?:[\s-]+(?:and[\s-]+)?)(?:{_NUMBER_WORD_ALTERNATION}))*\b",
     re.IGNORECASE,
 )
+_UNGROUNDED_RELATION_WORDS = (
+    "half",
+    "third",
+    "quarter",
+    "double",
+    "triple",
+    "dozen",
+)
+UNGROUNDED_RELATION_WORD_PATTERN = re.compile(
+    rf"\b(?:{'|'.join(_UNGROUNDED_RELATION_WORDS)})\b",
+    re.IGNORECASE,
+)
 
 
 def _parse_number_words(phrase: str) -> Decimal:
@@ -198,6 +210,8 @@ def ungrounded_numbers(text: str, payload: Any) -> list[str]:
             for value in allowed
         ):
             offending.append(match.group(0).strip())
+    for match in UNGROUNDED_RELATION_WORD_PATTERN.finditer(text):
+        offending.append(match.group(0).strip())
     return offending
 
 
