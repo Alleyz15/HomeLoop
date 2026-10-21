@@ -1,4 +1,27 @@
-# HomeLoop Code Review — 2026-10-21
+# HomeLoop Code Review — 2026-10-21 (Round 1) — ✅ DONE
+
+> **Status: closed. Every finding in this document was resolved on 2026-10-21, in `main` at `f06f071`.**
+> Verified by re-running each original reproduction against the fixed code. Nothing here is outstanding.
+> The document is kept unchanged below as the record of what was wrong, what was done, and what to
+> re-check if any of it regresses.
+>
+> | # | Finding | Fixed by |
+> |---|---|---|
+> | 1 | Formal offer could not be issued | `3e24a34`, `5ea6195` + migration `20261021054226` |
+> | 2 | Plan B stuck at `under_review` | `3f301d2`, `113a4af` |
+> | 3 | Admin could not answer a review | `3e24a34`, `5ea6195` (`respondReviewFromPreview`) |
+> | 4 | A3 simulator missing | `7448fe2` |
+> | 5 | Guard missed spelled-out numbers | `3a72485` |
+> | 6 | Flag rules duplicated | migration `20261021074642` |
+> | — | B→A re-scheduling (found while writing the solutions) | `6b629b3` + migration `20261021074642` |
+>
+> Three of these were fixed more thoroughly than this document proposed: the formal offer became a
+> preview-then-finalize flow with a revision token, the number guard parses word phrases and grounds them
+> instead of rejecting them outright, and the simulator followed the ringgit-basis guidance exactly.
+>
+> **Flaws found *after* these fixes are in a separate document:**
+> [Code_Review_2026-10-21_Round2.md](Code_Review_2026-10-21_Round2.md).
+
 
 Reviewer: Claude (Damian's session) · Branch reviewed: `main` at `a4506a4` · Deadline: **10/23 23:59** (about 2.5 days)
 
