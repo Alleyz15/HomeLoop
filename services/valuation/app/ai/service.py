@@ -135,7 +135,7 @@ def detect_mismatches(request: AdminAssistRequest) -> list[str]:
             direction = "below" if request.confirmed_value < estimate else "above"
             mismatches.append(
                 f"The confirmed value RM{request.confirmed_value:,.0f} is "
-                f"{gap * 100:.1f}% {direction} the AI estimate RM{float(estimate):,.0f}."
+                f"{gap * 100:.1f}% {direction} the AI mid-point estimate RM{float(estimate):,.0f}."
             )
     return mismatches
 

@@ -287,9 +287,17 @@ select results_eq(
   'manual resolution is audited without an AI adjustment reason'
 );
 
+create temporary table manual_plan_a_issue_preview as
+select public.preview_application_offer(
+  (select id from public.applications where valuation_id = '42000000-0000-0000-0000-000000000001'),
+  'issue', null
+) as payload;
+
 select throws_ok(
-  $$select public.issue_offer(
+  $$select public.issue_offer_from_preview(
     (select id from public.applications where valuation_id = '42000000-0000-0000-0000-000000000001'),
+    (select payload ->> 'case_revision' from manual_plan_a_issue_preview),
+    (select (payload ->> 'offer_amount')::numeric from manual_plan_a_issue_preview),
     null, '{}'::jsonb
   )$$,
   '22023',
@@ -319,9 +327,17 @@ select results_eq(
 
 set local request.jwt.claim.sub = '41000000-0000-0000-0000-000000000099';
 
+create temporary table manual_plan_b_issue_preview as
+select public.preview_application_offer(
+  (select id from public.applications where valuation_id = '42000000-0000-0000-0000-000000000001'),
+  'issue', null
+) as payload;
+
 select lives_ok(
-  $$select public.issue_offer(
+  $$select public.issue_offer_from_preview(
     (select id from public.applications where valuation_id = '42000000-0000-0000-0000-000000000001'),
+    (select payload ->> 'case_revision' from manual_plan_b_issue_preview),
+    (select (payload ->> 'offer_amount')::numeric from manual_plan_b_issue_preview),
     null, '{}'::jsonb
   )$$,
   'admin can issue the normal Plan B offer after manual valuation resolution'
@@ -458,9 +474,16 @@ values
 set local role authenticated;
 set local request.jwt.claim.sub = '41000000-0000-0000-0000-000000000099';
 
+create temporary table manual_review_preview as
+select public.preview_application_offer(
+  '43000000-0000-0000-0000-000000000001', 'revise_review', 950000
+) as payload;
+
 select throws_ok(
-  $$select public.respond_review(
-    '43000000-0000-0000-0000-000000000001', false,
+  $$select public.respond_review_from_preview(
+    '43000000-0000-0000-0000-000000000001', 'revise_review',
+    (select payload ->> 'case_revision' from manual_review_preview),
+    (select (payload ->> 'offer_amount')::numeric from manual_review_preview),
     'Revised registered valuation', 950000, null, '{}'::jsonb
   )$$,
   '22023',

@@ -3,12 +3,24 @@ import { readFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 
-const modelSource = await readFile(new URL("../apps/web/src/lib/dashboard-model.ts", import.meta.url), "utf8");
+const unitsSource = await readFile(new URL("../apps/web/src/lib/units.ts", import.meta.url), "utf8");
+const unitsUrl = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(unitsSource)).toString("base64")}`;
+const modelSource = (await readFile(new URL("../apps/web/src/lib/dashboard-model.ts", import.meta.url), "utf8"))
+  .replace('"./units"', JSON.stringify(unitsUrl));
 const { dashboardView, dateLabel, money, stageDate } = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(modelSource)).toString("base64")}`);
 const now = Date.parse("2026-10-16T12:00:00Z");
 const valuation = { id: "valuation-1", estimate: 785635.36, low: 720000, high: 840000, created_at: "2026-10-10T12:00:00Z" };
 const app = { id: "app-1", valuation_id: valuation.id, launch_id: 7, status: "under_review", plan: "A", created_at: "2026-10-11T12:00:00Z", updated_at: "2026-10-12T12:00:00Z", offer_expires_at: "2026-10-30T12:00:00Z" };
 const empty = { valuation: null, application: null, events: [], project: null, error: false, contextError: false };
+
+test("application progress keeps its detail entry point without a duplicate saved-valuation link", async () => {
+  const progress = await readFile(new URL("../apps/web/src/app/dashboard/case-progress.tsx", import.meta.url), "utf8");
+  const records = await readFile(new URL("../apps/web/src/app/dashboard/dashboard-screen.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(progress, /View saved valuation|\/valuation\/result\//i);
+  assert.match(progress, /href=\{`\/dashboard\/applications\/\$\{app\.id\}`\}/);
+  assert.match(progress, /Open application details &amp; respond|Open application details & respond/);
+  assert.match(records, /href=\{`\/valuation\/result\/\$\{record\.id\}`\}/);
+});
 
 test("new / priced / insufficient-data accounts have honest distinct states", () => {
   assert.equal(dashboardView(empty, now).stage, 0);
@@ -48,7 +60,7 @@ test("closed records retain last known progress, never imply completion", () => 
 test("dates use Malaysia time and missing money is not zero", () => {
   assert.match(dateLabel("2026-10-15T17:00:00Z"), /16 Oct 2026/);
   assert.equal(money(null), "Not recorded");
-  assert.match(money(785635.36), /785,635/);
+  assert.equal(money(785635.36), "RM785,635");
   assert.equal(stageDate(3, empty), null);
   assert.equal(stageDate(0, { ...empty, valuation }), valuation.created_at);
 });

@@ -350,6 +350,50 @@ def test_number_guard_allows_counts_and_documented_lookback_derived_from_payload
     ) is False
 
 
+def test_number_guard_rejects_a_fabricated_english_number_phrase() -> None:
+    payload = {"estimate_rm": "RM785,635", "range_width_pct": "17%"}
+
+    assert ungrounded_numbers(
+        "A buyer may pay eight hundred and fifty thousand ringgit.", payload
+    ) == ["eight hundred and fifty thousand"]
+
+
+def test_number_guard_accepts_grounded_english_number_phrases() -> None:
+    payload = {
+        "comparable_sales": {"count": 10},
+        "documented_lookback_years": 3,
+        "estimate_rm": "RM785,635",
+    }
+
+    assert numbers_are_grounded(
+        "Ten recent sales from the last three years support the estimate.", payload
+    ) is True
+
+
+def test_number_guard_parses_hyphenated_and_scaled_english_numbers() -> None:
+    payload = {"allowed": 85_000}
+
+    assert numbers_are_grounded("The recorded amount is eighty-five thousand.", payload)
+    assert ungrounded_numbers("The amount is one million.", payload) == ["one million"]
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "Prices rose by a third.",
+        "The result is half the recorded amount.",
+        "The price could double.",
+        "The sample represents a quarter of the road.",
+        "The value may triple.",
+        "The estimate uses a dozen sales.",
+    ],
+)
+def test_number_guard_rejects_ungrounded_fraction_and_multiplier_words(
+    phrase: str,
+) -> None:
+    assert numbers_are_grounded(phrase, {"estimate_rm": "RM785,635"}) is False
+
+
 def test_missing_key_uses_complete_template_fallback() -> None:
     service = AiService(
         Settings(
@@ -1202,7 +1246,7 @@ def test_admin_mismatches_are_deterministic_and_cover_all_thresholds() -> None:
         "Entered land area 220 m² differs from the road-typical 164 m² by 34.1%.",
         "Entered floor area 230 m² differs from the road-typical 180 m² by 27.8%.",
         "The AI valuation confidence is low.",
-        "The confirmed value RM680,000 is 15.0% below the AI estimate RM800,000.",
+        "The confirmed value RM680,000 is 15.0% below the AI mid-point estimate RM800,000.",
     ]
 
 

@@ -4,8 +4,11 @@ import { readFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 const read = file => readFile(new URL(`../apps/web/src/${file}`, import.meta.url), "utf8");
 const url = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`;
-const dashboardUrl = url(await read("lib/dashboard-model.ts"));
-const modelUrl = url((await read("lib/application-detail-model.ts")).replace('"./dashboard-model"', JSON.stringify(dashboardUrl)));
+const unitsUrl = url(await read("lib/units.ts"));
+const dashboardUrl = url((await read("lib/dashboard-model.ts")).replace('"./units"', JSON.stringify(unitsUrl)));
+const developmentUrl = url((await read("lib/development-model.ts")).replace('"./units"', JSON.stringify(unitsUrl)));
+const plansUrl = url((await read("lib/plans-model.ts")).replace('"./development-model"', JSON.stringify(developmentUrl)));
+const modelUrl = url((await read("lib/application-detail-model.ts")).replace('"./dashboard-model"', JSON.stringify(dashboardUrl)).replace('"./plans-model"', JSON.stringify(plansUrl)));
 const model = await import(modelUrl);
 const reader = await import(url((await read("lib/application-detail.ts")).replace('import "server-only";', "")
   .replace('import { createClient } from "@/lib/supabase/server";', "const createClient = async () => globalThis.__detail.client;")
@@ -39,7 +42,10 @@ function fixture(status = "offer_sent", patch = {}) {
     address_line: "12, Local test road", unit_type: "Standard home type", new_home_price: 900000,
     offer_amount: 600000, offer_expires_at: new Date(now + 86400000).toISOString(), offer_sent_at: new Date(now).toISOString(),
     indicative_low: 540000, indicative_high: 630000, confirmed_value: 800000, review_count: 0, plan_switch_count: 0,
-    valuation_snapshot: { is_sdp: true }, manual_valuation_required: false, manual_valuation_resolved_at: null,
+    valuation_snapshot: { is_sdp: true }, plan_quote_snapshot: { selected_plan: "B", new_home: { name: "Local test SDP project", price: 900000, price_source: "sales_quote" },
+      plan_a: { eligible: true, reasons: [], offer: 628000, offer_low: 549500, offer_high: 706500, price_gap: 272000, rpgt_retention: 18840, deposit: { cash_gap: 27200, new_home_deposit: 90000, old_home_deposit_offset: 62800, note: "Assumed offset" } },
+      plan_b: { eligible: true, floor: 600000, floor_low: 525000, floor_high: 675000, expected_net: 764800, expected_net_low: 669200, expected_net_high: 860400, net_at_floor: 600000, deposit_gap: 90000, price_gap: 135200, rpgt_retention: 24000 } },
+    manual_valuation_required: false, manual_valuation_resolved_at: null,
     info_return_status: null, created_at: "2026-10-18T00:00:00Z", updated_at: "2026-10-20T00:00:00Z", ...patch },
     valuation: { id: "20000000-0000-4000-8000-000000000001", user_id: ownerId, estimate: 800000, low: 700000, high: 900000 },
     project: { project: "Local test SDP project", township: "Local test" },
@@ -78,6 +84,29 @@ test("owner response choices follow every application stage, including manual co
   const detail = fixture("info_requested"); detail.events.push({ id: 2, action: "request_info", reason: "Please clarify the rear extension" });
   assert.deepEqual(model.detailView(detail).actions, ["reply"]); assert.equal(model.detailView(detail).contextEventId, "2");
   assert.equal(model.detailView(detail).request, "Please clarify the rear extension");
+});
+test("owner Plan B initial figures keep expected proceeds and the guarantee floor separate", () => {
+  const detail = fixture("indicative_sent", { offer_amount: null, offer_sent_at: null, offer_expires_at: null, indicative_low: 669200, indicative_high: 860400 });
+  assert.deepEqual(model.initialPlanBFigures(detail.application), { low: 669200, high: 860400, floor: 600000 });
+  for (const patch of [{ new_home_price: 1 }, { plan_switch_count: 1 }, { manual_valuation_required: true }, { plan: "A" }, { plan_quote_snapshot: {} }, { indicative_low: 1 }]) {
+    assert.equal(model.initialPlanBFigures(fixture("indicative_sent", patch).application), null);
+  }
+  for (const planB of [
+    { eligible: false },
+    { expected_net_low: 669200.5 },
+    { expected_net_high: Number.NaN },
+    { floor: Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
+    const quote = structuredClone(detail.application.plan_quote_snapshot); Object.assign(quote.plan_b, planB);
+    assert.equal(model.initialPlanBFigures(fixture("indicative_sent", { plan_quote_snapshot: quote, indicative_low: quote.plan_b.expected_net_low, indicative_high: quote.plan_b.expected_net_high }).application), null);
+  }
+});
+test("owner formal-offer view surfaces the latest owner-visible valuation or review explanation", () => {
+  const detail = fixture();
+  detail.events.unshift({ id: 2, application_id: id, actor_role: "admin", to_status: "inspected", action: "record_inspection", reason: "The registered evidence supports a value above the saved range.", created_at: "2026-10-19T00:00:00Z" });
+  assert.equal(model.detailView(detail).formalExplanation, "The registered evidence supports a value above the saved range.");
+  detail.events.push({ id: 3, application_id: id, actor_role: "admin", to_status: "offer_sent", action: "respond_review", reason: "We reviewed the new evidence and revised the confirmed value.", created_at: "2026-10-21T00:00:00Z" });
+  assert.equal(model.detailView(detail).formalExplanation, "We reviewed the new evidence and revised the confirmed value.");
 });
 test("expired or malformed offers, exhausted limits and ineligible switches fail closed", () => {
   for (const expiry of [null, "bad-date", new Date(now - 1).toISOString()]) assert.deepEqual(model.detailView(fixture("offer_sent", { offer_expires_at: expiry }), now).actions, []);

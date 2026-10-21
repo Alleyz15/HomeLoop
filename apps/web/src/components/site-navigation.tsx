@@ -10,19 +10,10 @@ import { brandPathFor, isApplicationPath, type Role } from "@/lib/auth-routing";
 
 type NavigationUser = { email: string | null; role: Role };
 
-const NAVIGATION: Record<Role, Array<{ href: string; label: string }>> = {
-  owner: [],
-  admin: [
-    { href: "/admin", label: "Applications" },
-    { href: "/admin/simulator", label: "Risk simulator" },
-  ],
-};
-
 /** Presentation only. Session verification and role authorization stay server-side. */
 export function SiteNavigation({ user }: { user: NavigationUser | null }) {
   const pathname = usePathname();
   const applicationUser = isApplicationPath(pathname) ? user : null;
-  const links = applicationUser ? NAVIGATION[applicationUser.role] : [];
 
   return (
     <nav aria-label="Primary navigation"
@@ -31,12 +22,6 @@ export function SiteNavigation({ user }: { user: NavigationUser | null }) {
         <span className="site-brand-mark"><House size={19} strokeWidth={1.6} aria-hidden="true" /></span>
         HomeLoop<span className="brand-period">.</span>
       </Link>
-      {links.map((item) => (
-        <Link key={item.href} href={item.href}
-          className="text-sm font-medium text-muted-foreground hover:text-foreground">
-          {item.label}
-        </Link>
-      ))}
       <div className="ms-auto flex items-center gap-3">
         {applicationUser ? (
           <>

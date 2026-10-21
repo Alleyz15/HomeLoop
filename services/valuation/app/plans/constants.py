@@ -4,6 +4,8 @@ from typing import Final
 
 PLAN_A_COST_RATE: Final = Decimal("0.115")
 PLAN_A_RISK_BUFFER_RATE: Final = Decimal("0.10")
+# Formal offers are recomputed by Postgres in private.application_offer.
+# Keep these Python indicative rates and the database function in parity.
 PLAN_A_OFFER_RATE: Final = 1 - PLAN_A_COST_RATE - PLAN_A_RISK_BUFFER_RATE
 
 PLAN_B_FLOOR_RATE: Final = Decimal("0.75")

@@ -18,6 +18,91 @@ NUMBER_PATTERN = re.compile(
     r"(?![A-Za-z0-9])"
 )
 
+_SMALL_NUMBER_WORDS = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+}
+_TENS_NUMBER_WORDS = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+_NUMBER_WORDS = tuple(
+    [*_SMALL_NUMBER_WORDS, *_TENS_NUMBER_WORDS, "hundred", "thousand", "million", "billion"]
+)
+_NUMBER_WORD_ALTERNATION = "|".join(
+    sorted(_NUMBER_WORDS, key=len, reverse=True)
+)
+NUMBER_WORD_PATTERN = re.compile(
+    rf"\b(?:{_NUMBER_WORD_ALTERNATION})"
+    rf"(?:(?:[\s-]+(?:and[\s-]+)?)(?:{_NUMBER_WORD_ALTERNATION}))*\b",
+    re.IGNORECASE,
+)
+_UNGROUNDED_RELATION_WORDS = (
+    "half",
+    "third",
+    "quarter",
+    "double",
+    "triple",
+    "dozen",
+)
+UNGROUNDED_RELATION_WORD_PATTERN = re.compile(
+    rf"\b(?:{'|'.join(_UNGROUNDED_RELATION_WORDS)})\b",
+    re.IGNORECASE,
+)
+
+
+def _parse_number_words(phrase: str) -> Decimal:
+    """Parse an English cardinal phrase so word-numbers cannot bypass grounding."""
+
+    tokens = [
+        token
+        for token in re.findall(r"[A-Za-z]+", phrase.casefold())
+        if token != "and"
+    ]
+    total = 0
+    current = 0
+    for token in tokens:
+        if token in _SMALL_NUMBER_WORDS:
+            current += _SMALL_NUMBER_WORDS[token]
+        elif token in _TENS_NUMBER_WORDS:
+            current += _TENS_NUMBER_WORDS[token]
+        elif token == "hundred":
+            current = max(current, 1) * 100
+        elif token == "thousand":
+            total += max(current, 1) * 1_000
+            current = 0
+        elif token == "million":
+            total += max(current, 1) * 1_000_000
+            current = 0
+        elif token == "billion":
+            total += max(current, 1) * 1_000_000_000
+            current = 0
+    return Decimal(total + current)
+
 
 def _parse_match(match: re.Match[str]) -> tuple[Decimal, bool, Decimal]:
     raw_number = match.group("number").replace(",", "")
@@ -118,6 +203,15 @@ def ungrounded_numbers(text: str, payload: Any) -> list[str]:
             for value in allowed
         ):
             offending.append(match.group(0).strip())
+    for match in NUMBER_WORD_PATTERN.finditer(text):
+        candidate = _parse_number_words(match.group(0))
+        if not any(
+            _matches_allowed(candidate, value, False, Decimal("0"))
+            for value in allowed
+        ):
+            offending.append(match.group(0).strip())
+    for match in UNGROUNDED_RELATION_WORD_PATTERN.finditer(text):
+        offending.append(match.group(0).strip())
     return offending
 
 

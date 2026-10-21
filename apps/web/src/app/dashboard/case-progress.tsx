@@ -8,6 +8,8 @@ export function CaseProgress({ data }: { data: DashboardData }) {
   if (!app) return null;
   const view = dashboardView(data);
   const request = [...data.events].reverse().find((event) => event.to_status === "info_requested" && event.reason);
+  const formalExplanation = [...data.events].reverse().find((event) => event.reason
+    && ["record_inspection", "respond_review"].includes(event.action))?.reason;
   const listed = data.events.find((event) => event.to_status === "listed");
   return <section className={styles.casePanel} aria-label={`Progress for ${app.address_line}`}>
     <div className={styles.panelTop}><div><p className={styles.eyebrow}>ONE CONNECTED JOURNEY · THIS APPLICATION</p><h3>{view.title}</h3></div><span className={styles.pill} data-group={view.closed ? "closed" : "progress"}>{view.closed ? "Application closed" : view.stage === 8 ? "Journey completed" : `Step ${view.stage + 1} of 8`}</span></div>
@@ -28,15 +30,15 @@ export function CaseProgress({ data }: { data: DashboardData }) {
     <div className={styles.detailGrid}>
       <div><span className={styles.detailLabel}>CURRENT PROPERTY</span><strong>{data.valuation?.scheme ?? "Your saved property"}</strong><p>{app.address_line}</p>
         <p>Preliminary value: {hasPrice(data.valuation) ? data.valuation?.low != null && data.valuation.high != null ? `${money(data.valuation.low)} – ${money(data.valuation.high)}` : money(data.valuation?.estimate) : "Not available"}</p>
-        {data.valuation && <Link prefetch={false} className={styles.textLink} href={`/valuation/result/${data.valuation.id}`}>View saved valuation<ArrowUpRight size={14} aria-hidden="true" /></Link>}
       </div>
       <div><span className={styles.detailLabel}>SELECTED NEW HOME & PLAN</span><strong>{data.project ?? "Project details unavailable"}</strong><p>{app.unit_type}</p><p>{app.plan === "A" ? "Plan A · Direct Purchase" : "Plan B · Open-Market Selling"}</p><p>Last updated {dateLabel(app.updated_at)}</p></div>
     </div>
     {view.status === "info_requested" && <div className={styles.message}><strong>Information requested</strong><p>{request?.reason ?? "The team has requested more information. The request details are currently unavailable."}</p></div>}
     {view.status === "rejected" && app.reject_reason && <div className={styles.message}><strong>Reason from the team</strong><p>{app.reject_reason}</p></div>}
-    {view.status === "indicative_sent" && <div className={styles.message}><strong>Initial price range · not a formal offer</strong><p className={styles.amount}>{app.indicative_low != null && app.indicative_high != null ? `${money(app.indicative_low)} – ${money(app.indicative_high)}` : "Range not recorded"}</p></div>}
+    {view.status === "indicative_sent" && <div className={styles.message}><strong>{app.plan === "B" ? "Expected open-market proceeds · not a formal offer" : "Initial price range · not a formal offer"}</strong><p className={styles.amount}>{app.indicative_low != null && app.indicative_high != null ? `${money(app.indicative_low)} – ${money(app.indicative_high)}` : "Range not recorded"}</p></div>}
     {view.status === "inspection_scheduled" && <div className={styles.message}><strong>Scheduled home visit</strong><p>{dateLabel(app.inspection_scheduled_at, true)}{app.inspection_scheduled_at ? " (MYT)" : ""}</p></div>}
     {["offer_sent", "review_requested", "expired", "accepted", "listed", "buyer_found", "guarantee_triggered"].includes(view.status ?? "") && <div className={styles.message}><strong>{app.plan === "B" ? "Formal offer · agreed price floor, conditions apply" : "Formal purchase offer"}</strong><p className={styles.amount}>{money(app.offer_amount)}</p>
+      {formalExplanation && <p><strong>Team explanation:</strong> {formalExplanation}</p>}
       {app.offer_expires_at && <p className={styles.deadline}><Clock3 size={14} aria-hidden="true" />{view.status === "expired" ? "Response period ended" : ["offer_sent", "review_requested"].includes(view.status ?? "") ? "Respond by" : "Original response deadline"}: {dateLabel(app.offer_expires_at, true)} (MYT)</p>}
     </div>}
     <Link prefetch={false} className={styles.textLink} href={`/dashboard/applications/${app.id}`}>Open application details & respond<ArrowUpRight size={14} aria-hidden="true" /></Link>

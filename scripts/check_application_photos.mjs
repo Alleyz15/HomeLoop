@@ -38,6 +38,15 @@ const helpers = await import(dataUrl((await readFile(new URL("../apps/web/src/li
   .replace('"./application-photo-policy"', JSON.stringify(policy))));
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=", "base64");
 const file = () => new File([png], "rear.png", { type: "image/png" });
+const planBQuote = { selected_plan: "B", new_home: { price: 900000 },
+  plan_b: { eligible: true, floor: 600000, expected_net_low: 669200, expected_net_high: 860400 } };
+const planBReceipt = { initial_figures_receipt: { version: 1, plan: "B", meaning: "expected_open_market_proceeds",
+  source: "application.plan_quote_snapshot.plan_b", canonical_low: 669200, canonical_high: 860400, canonical_floor: 600000 } };
+async function previewAndIssue(client, id) {
+  const preview = value(await client.rpc("preview_application_offer", { p_application_id: id, p_operation: "issue" }));
+  return value(await client.rpc("issue_offer_from_preview", { p_application_id: id,
+    p_expected_case_revision: preview.case_revision, p_expected_offer_amount: preview.offer_amount }));
+}
 
 async function account(role) {
   const email = `photo-local-${randomUUID()}@example.test`, password = randomUUID() + "aA1!";
@@ -58,6 +67,8 @@ async function caseFor(owner) {
     user_id: owner.id, valuation_id: valuation.id, launch_id: launchId, unit_type: "Standard home type",
     plan: "B", new_home_price: 900000, new_home_price_source: "price_from", address_line: "12, LOCAL PHOTO TEST",
     postcode: "40150", pdpa_consent: true, status: "under_review",
+    valuation_snapshot: { is_sdp: true, estimate: 800000, low: 700000, high: 900000 },
+    plan_quote_snapshot: planBQuote,
   }).select("id").single());
   applications.push(application.id);
   return application.id;
@@ -140,12 +151,12 @@ try {
   console.log("PASS explicit customer message, admin-only audit, direct API column privacy and case isolation");
 
   // Exercise the existing, real state machine before testing review attachments.
-  value(await team.client.rpc("send_indicative", { p_application_id: otherId, p_indicative_low: 540000, p_indicative_high: 630000 }));
+  value(await team.client.rpc("send_indicative", { p_application_id: otherId, p_indicative_low: 669200, p_indicative_high: 860400, p_payload: planBReceipt }));
   value(await other.client.rpc("proceed_application", { p_application_id: otherId }));
   value(await team.client.rpc("schedule_inspection", { p_application_id: otherId, p_scheduled_at: new Date(Date.now()+86400000).toISOString() }));
   value(await team.client.rpc("record_inspection", { p_application_id: otherId, p_unit_type_confirmed: true,
     p_condition: "good", p_confirmed_value: 800000, p_value_adjust_reason: "Local test assessment", p_note: "Local test inspection" }));
-  value(await team.client.rpc("issue_offer", { p_application_id: otherId }));
+  await previewAndIssue(team.client, otherId);
   const offer = value(await other.client.from("application_events").select("id").eq("application_id", otherId).eq("action", "issue_offer").single());
   globalThis.__localPhotoClient = other.client;
   const reviewSelection = { applicationId: otherId, purpose: "offer_review", contextEventId: String(offer.id) };
