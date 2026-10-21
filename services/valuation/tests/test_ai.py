@@ -350,6 +350,33 @@ def test_number_guard_allows_counts_and_documented_lookback_derived_from_payload
     ) is False
 
 
+def test_number_guard_rejects_a_fabricated_english_number_phrase() -> None:
+    payload = {"estimate_rm": "RM785,635", "range_width_pct": "17%"}
+
+    assert ungrounded_numbers(
+        "A buyer may pay eight hundred and fifty thousand ringgit.", payload
+    ) == ["eight hundred and fifty thousand"]
+
+
+def test_number_guard_accepts_grounded_english_number_phrases() -> None:
+    payload = {
+        "comparable_sales": {"count": 10},
+        "documented_lookback_years": 3,
+        "estimate_rm": "RM785,635",
+    }
+
+    assert numbers_are_grounded(
+        "Ten recent sales from the last three years support the estimate.", payload
+    ) is True
+
+
+def test_number_guard_parses_hyphenated_and_scaled_english_numbers() -> None:
+    payload = {"allowed": 85_000}
+
+    assert numbers_are_grounded("The recorded amount is eighty-five thousand.", payload)
+    assert ungrounded_numbers("The amount is one million.", payload) == ["one million"]
+
+
 def test_missing_key_uses_complete_template_fallback() -> None:
     service = AiService(
         Settings(
