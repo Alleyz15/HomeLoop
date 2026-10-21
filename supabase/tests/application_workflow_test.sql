@@ -173,7 +173,7 @@ select lives_ok(
       '40150',
       true,
       '{"status":"ok","estimate":800000,"low":700000,"high":900000,"confidence":"low","scheme":"TEST SCHEME","district":"PETALING","is_sdp":true}',
-      '{"plan_a":{"offer":628000},"plan_b":{"floor":600000}}',
+      '{"selected_plan":"B","new_home":{"price":900000},"plan_a":{"offer":628000},"plan_b":{"eligible":true,"floor":600000,"expected_net_low":525000,"expected_net_high":675000}}',
       null
     )
   $$,
@@ -208,7 +208,7 @@ select lives_ok(
       '40150',
       true,
       '{"status":"ok","estimate":800000,"low":700000,"high":900000,"confidence":"medium","scheme":"TEST SCHEME","district":"PETALING","is_sdp":true}',
-      '{"plan_a":{"offer":628000},"plan_b":{"floor":600000}}',
+      '{"selected_plan":"B","new_home":{"price":900000},"plan_a":{"offer":628000},"plan_b":{"eligible":true,"floor":600000,"expected_net_low":525000,"expected_net_high":675000}}',
       null
     )
   $$,
@@ -381,7 +381,7 @@ select lives_ok(
       525000,
       675000,
       null,
-      '{}'::jsonb
+      '{"initial_figures_receipt":{"version":1,"plan":"B","meaning":"expected_open_market_proceeds","source":"application.plan_quote_snapshot.plan_b","canonical_low":525000,"canonical_high":675000,"canonical_floor":600000}}'::jsonb
     )
   $$,
   'admin can send an indicative range'
@@ -471,11 +471,20 @@ select is(
 
 set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000003';
 
+create temporary table workflow_issue_preview as
+select public.preview_application_offer(
+  (select id from public.applications
+   where valuation_id = '20000000-0000-0000-0000-000000000001'),
+  'issue', null
+) as payload;
+
 select lives_ok(
   $$
-    select public.issue_offer(
+    select public.issue_offer_from_preview(
       (select id from public.applications
        where valuation_id = '20000000-0000-0000-0000-000000000001'),
+      (select payload ->> 'case_revision' from workflow_issue_preview),
+      (select (payload ->> 'offer_amount')::numeric from workflow_issue_preview),
       null,
       '{}'::jsonb
     )
@@ -523,12 +532,21 @@ select lives_ok(
 
 set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000003';
 
+create temporary table workflow_review_preview as
+select public.preview_application_offer(
+  (select id from public.applications
+   where valuation_id = '20000000-0000-0000-0000-000000000001'),
+  'keep_review', null
+) as payload;
+
 select lives_ok(
   $$
-    select public.respond_review(
+    select public.respond_review_from_preview(
       (select id from public.applications
        where valuation_id = '20000000-0000-0000-0000-000000000001'),
-      true,
+      'keep_review',
+      (select payload ->> 'case_revision' from workflow_review_preview),
+      (select (payload ->> 'offer_amount')::numeric from workflow_review_preview),
       'Offer kept after review',
       null,
       null,
@@ -735,8 +753,18 @@ where month = date_trunc('month', now())::date;
 set local role authenticated;
 set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000003';
 
+create temporary table quota_issue_preview as
+select public.preview_application_offer(
+  '30000000-0000-0000-0000-000000000004', 'issue', null
+) as payload;
+
 select throws_ok(
-  $$select public.issue_offer('30000000-0000-0000-0000-000000000004', null, '{}'::jsonb)$$,
+  $$select public.issue_offer_from_preview(
+    '30000000-0000-0000-0000-000000000004',
+    (select payload ->> 'case_revision' from quota_issue_preview),
+    (select (payload ->> 'offer_amount')::numeric from quota_issue_preview),
+    null, '{}'::jsonb
+  )$$,
   'P0001',
   'Plan A monthly limit exceeded: RM0 used + RM785000 offer > RM100 limit',
   'monthly limit blocks an offer before any application change'
