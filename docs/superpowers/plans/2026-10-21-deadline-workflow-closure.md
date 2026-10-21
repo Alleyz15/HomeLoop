@@ -35,4 +35,3 @@
 - Run `supabase db push --dry-run`, report the new SQL summary, and wait for
   explicit `确认 push` before any linked push.
 - Commit each logical unit on `QY`; do not git push.
-

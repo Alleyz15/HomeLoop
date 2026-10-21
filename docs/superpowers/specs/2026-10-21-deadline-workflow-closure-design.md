@@ -63,4 +63,3 @@ fallback; grounded word-numbers remain valid.
 - Existing application columns, formulas, offer preview contract and API
   response shapes are unchanged.
 - No service-role key or secret is added to app code.
-
