@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 from decimal import Decimal
 
+from app.area_limits import validate_subject_areas
 from app.model.comps_knn import estimate_from_transactions, resolve_subject_sizes
 from app.plans.calc import calculate_plan_quote
 from app.repository import normalize_road
@@ -44,6 +45,10 @@ class Repository(Protocol):
     ) -> list[dict[str, Any]]: ...
 
     def scheme_lacks_floor_area(self, scheme: str, property_type: str) -> bool: ...
+
+    def maximum_sizes_for_road(
+        self, road_norm: str, scheme: str, property_type: str
+    ) -> dict[str, float | None]: ...
 
 
 class PlanRepository(Protocol):
@@ -135,6 +140,21 @@ def perform_valuation(
         land_sqm=request.land_sqm,
         floor_sqm=request.floor_sqm,
         catalog=catalog if request.road_norm else None,
+    )
+    maxima = (
+        repository.maximum_sizes_for_road(
+            road_norm, scheme, request.property_type
+        )
+        if request.road_norm and request.road_norm.strip()
+        else {"max_land_sqm": None, "max_floor_sqm": None}
+    )
+    validate_subject_areas(
+        land_sqm=sizes["land_sqm"],
+        floor_sqm=sizes["floor_sqm"],
+        max_land_sqm=maxima.get("max_land_sqm"),
+        max_floor_sqm=maxima.get("max_floor_sqm"),
+        typical_land_sqm=catalog.get("typical_land_sqm"),
+        typical_floor_sqm=catalog.get("typical_floor_sqm"),
     )
     transactions = repository.comparable_transactions(scheme, request.property_type)
     result = estimate_from_transactions(

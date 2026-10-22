@@ -4,7 +4,13 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.repository import ValuationRepository, group_road_rows, normalize_road
+from app.area_limits import area_limit_sqm, validate_subject_areas
+from app.repository import (
+    ValuationRepository,
+    area_maxima_from_rows,
+    group_road_rows,
+    normalize_road,
+)
 from app.schemas import ValuationRequest
 from app.service import DISCLAIMER, MODEL_VERSION, perform_valuation
 
@@ -16,10 +22,15 @@ class FakeRepository:
         catalog: dict[str, Any] | None,
         transactions: list[dict[str, Any]] | None = None,
         lacks_floor_area: bool = False,
+        maximum_sizes: dict[str, float | None] | None = None,
     ) -> None:
         self.catalog = catalog
         self.transaction_rows = transactions or []
         self.lacks_floor_area = lacks_floor_area
+        self.maximum_sizes = maximum_sizes or {
+            "max_land_sqm": None,
+            "max_floor_sqm": None,
+        }
         self.requested_road: tuple[str, str, str | None] | None = None
         self.requested_scheme: tuple[str, str] | None = None
 
@@ -45,6 +56,11 @@ class FakeRepository:
 
     def scheme_lacks_floor_area(self, scheme: str, property_type: str) -> bool:
         return self.lacks_floor_area
+
+    def maximum_sizes_for_road(
+        self, road_norm: str, scheme: str, property_type: str
+    ) -> dict[str, float | None]:
+        return self.maximum_sizes
 
 
 class QueryStub:
@@ -141,6 +157,8 @@ def test_road_rows_are_grouped_with_property_type_details() -> None:
                     "property_type": "Terrace",
                     "typical_land_sqm": 164.0,
                     "typical_floor_sqm": 180.0,
+                    "max_land_sqm": None,
+                    "max_floor_sqm": None,
                     "typical_share": 0.75,
                     "n_recent_3y": 12,
                 },
@@ -148,12 +166,98 @@ def test_road_rows_are_grouped_with_property_type_details() -> None:
                     "property_type": "Semi-D",
                     "typical_land_sqm": 300.0,
                     "typical_floor_sqm": 250.0,
+                    "max_land_sqm": None,
+                    "max_floor_sqm": None,
                     "typical_share": 0.5,
                     "n_recent_3y": 4,
                 },
             ],
         }
     ]
+
+
+def test_area_limit_prefers_recorded_max_then_typical_then_safe_fallback() -> None:
+    assert area_limit_sqm(295, 245) == (395.0, "recorded")
+    assert area_limit_sqm(None, 245) == (345.0, "typical")
+    assert area_limit_sqm(None, None) == (1_000.0, "fallback")
+
+
+def test_area_maxima_are_scoped_to_normalised_road_scheme_and_type() -> None:
+    rows = [
+        {
+            "road": "Jalan Tinggi",
+            "scheme": "TEST SCHEME",
+            "ptype": "Terrace",
+            "land_sqm": 245,
+            "floor_sqm": 210,
+        },
+        {
+            "road": "JLN. TINGGI",
+            "scheme": "TEST SCHEME",
+            "ptype": "Terrace",
+            "land_sqm": 295,
+            "floor_sqm": 260,
+        },
+        {
+            "road": "JLN TINGGI",
+            "scheme": "OTHER SCHEME",
+            "ptype": "Terrace",
+            "land_sqm": 900,
+            "floor_sqm": 900,
+        },
+        {
+            "road": "JLN TINGGI",
+            "scheme": "TEST SCHEME",
+            "ptype": "Terrace",
+            "land_sqm": -1,
+            "floor_sqm": None,
+        },
+    ]
+
+    maxima = area_maxima_from_rows(rows)
+
+    assert maxima[("JLN TINGGI", "TEST SCHEME", "Terrace")] == {
+        "max_land_sqm": 295.0,
+        "max_floor_sqm": 260.0,
+    }
+
+
+def test_subject_area_validation_rejects_values_above_dynamic_limit() -> None:
+    with pytest.raises(ValueError, match="Land area must not exceed 395 m²"):
+        validate_subject_areas(
+            land_sqm=396,
+            floor_sqm=250,
+            max_land_sqm=295,
+            max_floor_sqm=260,
+            typical_land_sqm=245,
+            typical_floor_sqm=210,
+        )
+
+
+def test_valuation_rejects_recorded_size_outlier_before_model_runs() -> None:
+    repository = FakeRepository(
+        catalog={
+            "road_norm": "JLN TINGGI",
+            "scheme": "TEST SCHEME",
+            "district": "PETALING",
+            "is_sdp": True,
+            "typical_land_sqm": 245,
+            "typical_floor_sqm": 210,
+        },
+        maximum_sizes={"max_land_sqm": 295, "max_floor_sqm": 260},
+        transactions=recent_transactions(),
+    )
+    request = ValuationRequest(
+        road_norm="JLN TINGGI",
+        scheme="TEST SCHEME",
+        property_type="Terrace",
+        unit_position="custom",
+        land_sqm=396,
+        floor_sqm=250,
+    )
+
+    with pytest.raises(ValueError, match="Land area must not exceed 395 m²"):
+        perform_valuation(request, repository)
 
 
 def test_ambiguous_road_without_scheme_is_rejected() -> None:
