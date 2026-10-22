@@ -1,3 +1,5 @@
+import { formatRm } from "./units";
+
 export type JourneyValuationStatus = "ok" | "insufficient_data" | "not_found" | "unsupported_property_type";
 export type JourneyValuation = { id: string; scheme: string | null; road_norm: string | null; valuation_status: JourneyValuationStatus; estimate: number | null; low: number | null; high: number | null };
 export type ValuationJourneyState = "none" | "missing" | "error" | "ready" | "manual" | "unavailable";
@@ -19,8 +21,7 @@ export function canContinueWithValuation(state: ValuationJourneyState) {
   return state === "ready" || state === "manual";
 }
 export function marketRm(value: number) {
-  // Keep the site's RM-prefix style consistent across browser/Node ICU versions.
-  return `${value < 0 ? "-" : ""}RM${new Intl.NumberFormat("en-MY", { maximumFractionDigits: 2 }).format(Math.abs(value))}`;
+  return `${value < 0 ? "-" : ""}${formatRm(Math.abs(value))}`;
 }
 export function pricePreview(published: number | null, quotation: string, valuation: JourneyValuation | null) {
   const text = quotation.trim();

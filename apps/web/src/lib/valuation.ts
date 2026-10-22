@@ -106,6 +106,8 @@ export type AdminAssistInput = {
   unit_type: string;
   confidence: Confidence;
   confirmed_value?: number | null;
+  condition?: "good" | "fair" | "needs_repair" | null;
+  value_adjust_reason?: string | null;
   events: Array<Record<string, unknown>>;
   flags: string[];
 };

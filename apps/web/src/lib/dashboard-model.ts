@@ -1,5 +1,6 @@
 import type { Application } from "./applications";
 import type { StoredValuation } from "./valuations";
+import { formatRm } from "./units";
 
 export type DashboardApplication = Pick<Application,
   "id" | "valuation_id" | "launch_id" | "plan" | "status" | "address_line" |
@@ -90,7 +91,7 @@ export function dashboardView(data: DashboardData, now = Date.now()) {
 
 export function money(value: number | null | undefined) {
   if (value == null || !Number.isFinite(Number(value))) return "Not recorded";
-  return new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 0 }).format(Number(value));
+  return formatRm(Number(value));
 }
 
 export function dateLabel(value: string | null | undefined, includeTime = false) {

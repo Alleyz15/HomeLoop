@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminCaseRevision, getAdminCase, getAdminCaseEvidence, requireAdmin } from "@/lib/admin-application-detail";
-import { ADMIN_ACTIONS, adminCaseActions, object, parseAdminAction, positive, savedCaseQuote, type AdminActionState } from "@/lib/admin-application-detail-model";
-import { startReview, requestInfo, rejectApplication, sendIndicative, requestManualValuation, scheduleInspection, recordInspection, confirmEspa, markListed, markBuyerFound, markGuaranteeTriggered, markOldHomeCompleted, markHandover, type Application } from "@/lib/applications";
+import { ADMIN_ACTIONS, adminCaseActions, initialBFigures, isPlanBToAValuation, object, parseAdminAction, positive, savedAiRange, savedCaseQuote, type AdminActionState } from "@/lib/admin-application-detail-model";
+import { startReview, requestInfo, rejectApplication, sendIndicative, requestManualValuation, scheduleInspection, schedulePlanAValuation, rescheduleInspection, recordInspection, previewApplicationOffer, issueOfferFromPreview, respondReviewFromPreview, confirmEspa, markListed, markBuyerFound, markGuaranteeTriggered, markOldHomeCompleted, markHandover, type Application, type FormalOfferOperation, type FormalOfferPreview } from "@/lib/applications";
 import { applicationPhotoUrl, sendOwnerMessage } from "@/lib/application-photos";
 import { adminAssist, type AdminAssistResponse, type Confidence } from "@/lib/valuation";
 import { getRoadMeta } from "@/lib/valuations";
@@ -18,6 +18,17 @@ async function currentCase(id: string) {
 function invalidate(id: string) {
   for (const path of ["/admin", `/admin/applications/${id}`, "/dashboard", `/dashboard/applications/${id}`, "/home"]) revalidatePath(path);
 }
+function checkedPreview(value: FormalOfferPreview, id: string, operation: FormalOfferOperation) {
+  if (!value || value.schema_version !== 1 || value.application_id !== id || value.operation !== operation
+      || !["A", "B"].includes(value.plan) || !/^[a-f0-9]{32}$/.test(value.case_revision)
+      || !Number.isSafeInteger(value.offer_amount) || value.offer_amount <= 0
+      || !Number.isFinite(value.confirmed_value_used) || value.confirmed_value_used <= 0
+      || typeof value.can_finalize !== "boolean" || typeof value.eligibility?.eligible !== "boolean"
+      || !Array.isArray(value.eligibility?.reason_codes) || typeof value.capacity?.available !== "boolean") {
+    throw new Error("The backend returned an incomplete formal-offer preview. Reload and try again.");
+  }
+  return value;
+}
 
 export async function performAdminAction(_previous: AdminActionState, form: FormData): Promise<AdminActionState> {
   let invoked = false, id = "";
@@ -29,11 +40,38 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
     if (input.action === "information" && !input.reason) throw new Error("Tell the owner what information is needed.");
     if (input.action === "message" && !input.message) throw new Error("Enter the message you want to share with the owner.");
     if (input.action === "initial_a" && (input.low === null || input.high === null || input.low > input.high)) throw new Error("Enter a positive initial range with the lower amount no greater than the upper amount.");
-    if (input.action === "schedule" && !input.appointment) throw new Error("Enter a valid Malaysian appointment date and time.");
+    const initialB = input.action === "initial_b" ? initialBFigures(app) : null;
+    if (input.action === "initial_b" && !initialB) throw new Error("A complete saved Plan B quote matching this case is required before sending initial figures.");
+    if (["schedule", "schedule_plan_a", "reschedule"].includes(input.action) && !input.appointment) throw new Error("Enter a valid Malaysian appointment date and time.");
     if (input.action === "findings") {
       if (input.unitMatch === null || !input.condition || input.value === null) throw new Error("Confirm the unit match, condition and positive market value.");
-      if (app.manual_valuation_required && (!input.valuer || !input.basis)) throw new Error("Name the registered valuer and explain the valuation basis.");
-      if (!app.manual_valuation_required && input.value !== positive(app.valuation_snapshot?.estimate) && !input.adjustment) throw new Error("Explain the change from the saved AI middle estimate. The owner will see this explanation.");
+      const bToA = isPlanBToAValuation(app);
+      if ((app.manual_valuation_required || bToA) && (!input.valuer || !input.basis)) throw new Error("Name the registered valuer and explain the valuation basis.");
+      const range = savedAiRange(app);
+      const differsFromPlanB = bToA && input.value !== positive(app.confirmed_value);
+      if (differsFromPlanB && !input.adjustment) throw new Error("Explain why the registered value differs from the previous Plan B confirmed value. The owner will see this explanation.");
+      if (!app.manual_valuation_required && (!range || input.value < range.low || input.value > range.high) && !input.adjustment) throw new Error("Explain why the confirmed value is outside the saved AI range. The owner will see this explanation.");
+    }
+    if (input.action === "review_response" && !input.reason) throw new Error("Explain the review outcome to the owner.");
+    if (input.action === "review_response" && input.reviewOperation === "revise_review" && input.value === null) throw new Error("Enter a positive revised confirmed value.");
+
+    if (input.action === "offer" || input.action === "review_response") {
+      const operation: FormalOfferOperation = input.action === "offer" ? "issue" : input.reviewOperation!;
+      const revised = operation === "revise_review" ? input.value : null;
+      if (input.phase === "preview") {
+        const preview = checkedPreview(await previewApplicationOffer(id, operation, revised), id, operation);
+        return { preview };
+      }
+      invoked = true;
+      const audit = { note: input.note || null };
+      const result = input.action === "offer"
+        ? await issueOfferFromPreview(id, input.offerRevision, input.expectedOffer!, audit)
+        : await respondReviewFromPreview(id, operation as Exclude<FormalOfferOperation, "issue">,
+          input.offerRevision, input.expectedOffer!, input.reason, revised, audit);
+      if (result.id !== id || result.status !== "offer_sent" || positive(result.offer_amount) !== input.expectedOffer
+          || (operation === "revise_review" && positive(result.confirmed_value) !== revised)) throw new Error("Unexpected formal-offer result");
+      invalidate(id);
+      return { success: input.action === "offer" ? "Formal offer issued to the owner." : "Offer review response sent to the owner.", reload: true };
     }
     // Exactly one existing workflow RPC, or one explicit same-stage message.
     invoked = true;
@@ -50,10 +88,16 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
       case "information": result = await requestInfo(id, input.reason, audit); break;
       case "reject": result = await rejectApplication(id, input.reason, audit); break;
       case "initial_a": result = await sendIndicative(id, input.low!, input.high!, audit); break;
+      case "initial_b": result = await sendIndicative(id, initialB!.low, initialB!.high, { note: input.note || null,
+        payload: { initial_figures_receipt: { version: 1, plan: "B", meaning: "expected_open_market_proceeds",
+          source: "application.plan_quote_snapshot.plan_b", canonical_low: initialB!.low, canonical_high: initialB!.high,
+          canonical_floor: initialB!.floor } } }); break;
       case "manual_consent": result = await requestManualValuation(id, audit); break;
       case "schedule": result = await scheduleInspection(id, input.appointment!, audit); break;
+      case "schedule_plan_a": result = await schedulePlanAValuation(id, input.appointment!, audit); break;
+      case "reschedule": result = await rescheduleInspection(id, input.appointment!, audit); break;
       case "findings": result = await recordInspection(id, { unitTypeConfirmed: input.unitMatch!, condition: input.condition!, confirmedValue: input.value!,
-        valueAdjustReason: app.manual_valuation_required ? null : input.adjustment || null }, app.manual_valuation_required
+        valueAdjustReason: app.manual_valuation_required ? null : input.adjustment || null }, (app.manual_valuation_required || isPlanBToAValuation(app))
           ? { note: `Registered valuer: ${input.valuer}\nValuation basis: ${input.basis}${input.note ? `\nInternal note: ${input.note}` : ""}` } : audit); break;
       case "signing": result = await confirmEspa(id, audit); break;
       case "listed": result = await markListed(id, audit); break;
@@ -63,6 +107,8 @@ export async function performAdminAction(_previous: AdminActionState, form: Form
       case "handover": result = await markHandover(id, audit); break;
     }
     if (result!.id !== id || result!.status !== ADMIN_ACTIONS[input.action].result || (input.action === "signing" && !result!.espa_confirmed_at)) throw new Error("Unexpected workflow result");
+    if (input.action === "initial_b" && (result!.plan !== "B" || positive(result!.indicative_low) !== initialB!.low
+      || positive(result!.indicative_high) !== initialB!.high)) throw new Error("Unexpected Plan B initial-figures result");
     invalidate(id);
     return { success: `${ADMIN_ACTIONS[input.action].label}: recorded successfully.`, reload: true };
   } catch (error) {
@@ -110,6 +156,7 @@ export async function generateAdminAssistance(id: string): Promise<{ assistance?
       road_typical_sizes: { land_sqm: meta?.typical_land_sqm ?? null, floor_sqm: meta?.typical_floor_sqm ?? null },
       entered_sizes: { land_sqm: positive(sizes.land_sqm) ?? saved?.land_sqm ?? null, floor_sqm: positive(sizes.floor_sqm) ?? saved?.floor_sqm ?? null },
       unit_type: app.unit_type, confidence: snapshot.confidence as Confidence, confirmed_value: positive(app.confirmed_value),
+      condition: app.condition, value_adjust_reason: app.value_adjust_reason,
       events: (evidence.audit ?? []).slice(-10).map(event => ({ action: event.action, to_status: event.to_status, created_at: event.created_at })), flags: [],
     });
     if (!assistance || !["llm", "template"].includes(assistance.source) || typeof assistance.summary !== "string" || typeof assistance.draft_message !== "string"

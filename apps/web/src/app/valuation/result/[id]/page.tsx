@@ -127,7 +127,7 @@ export default async function ValuationResultPage({
           <div className={styles.valueTop}><p className={styles.eyebrow}>YOUR PRELIMINARY ESTIMATE</p><span className={styles.valueIcon}><ChartColumn size={22} strokeWidth={1.3} aria-hidden="true" /></span></div>
           <h2 id="value-heading">Estimated market value</h2>
           <p className={styles.amount}>{formatRm(valuation.estimate!)}</p>
-          <p className={styles.valueDescription}>A range, not a single number. The middle figure is the median of the comparable sales below.</p>
+          <p className={styles.valueDescription}>A range, not a single number. Land size helps select similar sales, but the estimate is scaled from built-up area; when the nearest sales change, a larger land area does not always produce a higher preliminary estimate. A registered valuer confirms the final figure.</p>
           <div className={styles.range} aria-label="Estimated value range">
             <div><span>Range · lower estimate</span><strong>{formatRm(valuation.low!)}</strong></div>
             <span className={styles.rangeConnector} aria-hidden="true" />

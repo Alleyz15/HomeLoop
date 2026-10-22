@@ -1,3 +1,5 @@
+import { formatRm } from "./units";
+
 /** Display rules only. No workflow writes or formal-offer calculations. */
 export const ADMIN_QUEUES = [
   { id: "all", label: "All applications", statuses: [] },
@@ -88,7 +90,7 @@ export function monthLabel(month: string) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "long", year: "numeric" }).format(new Date(`${month}T00:00:00+08:00`));
 }
 export function adminMoney(value: number) {
-  return "RM" + new Intl.NumberFormat("en-MY", { maximumFractionDigits: 2 }).format(value);
+  return formatRm(value);
 }
 export function capacityFor(plan: "A" | "B", month: string, usage: CapacityRow[] | null, limits: LimitRow[] | null): Capacity {
   if (!usage || !limits) return { state: "unavailable" };
