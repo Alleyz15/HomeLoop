@@ -282,9 +282,11 @@ test("messages explicitly separate published text and private notes; photo signi
   assert.ok((await actions.viewAdminPhoto(CASE_ID, "valuation", "999")).error);
 });
 test("AI excludes identity, private messages and arbitrary payloads; unpriced manual cases never call AI", async () => {
-  let state = setup(); state.app.valuation_snapshot.private = "DO NOT SEND IDENTITY";
+  let state = setup(caseFixture("inspected", { condition: "needs_repair", value_adjust_reason: "Owner-visible condition explanation." })); state.app.valuation_snapshot.private = "DO NOT SEND IDENTITY";
   const result = await actions.generateAdminAssistance(CASE_ID); assert.ok(result.assistance); assert.equal(state.ai.length, 1);
   const sent = JSON.stringify(state.ai[0]); for (const privateText of ["INTERNAL QA ONLY", "PRIVATE QA PAYLOAD", "12, Local QA Road", "DO NOT SEND IDENTITY"]) assert.ok(!sent.includes(privateText));
+  assert.equal(state.ai[0].condition, "needs_repair");
+  assert.equal(state.ai[0].value_adjust_reason, "Owner-visible condition explanation.");
   assert.deepEqual(state.meta[0], ["LOCAL QA TOWNSHIP", "Terrace", "JLN LOCAL QA"]);
   state = setup(caseFixture("under_review", { manual_valuation_required: true, valuation_snapshot: { confidence: null } }));
   assert.ok((await actions.generateAdminAssistance(CASE_ID)).error); assert.equal(state.ai.length, 0);

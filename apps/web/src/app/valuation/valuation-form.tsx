@@ -10,10 +10,12 @@ import type { RoadPropertyType, RoadResult, UnitPosition } from "@/lib/valuation
 import { intermediateAutoFillCopy } from "@/lib/valuation-copy";
 import {
   TERRACE_LOTS,
+  areaLimit,
   formatArea,
   fromSqm,
   lotAreaSqm,
   toSqm,
+  validateAreaInput,
   type AreaUnit,
 } from "@/lib/units";
 import { createValuation, findRoads } from "./actions";
@@ -61,6 +63,8 @@ export function ValuationForm() {
   const [unit, setUnit] = useState<AreaUnit>("sqm");
   const [land, setLand] = useState("");
   const [floor, setFloor] = useState("");
+  const [landTouched, setLandTouched] = useState(false);
+  const [floorTouched, setFloorTouched] = useState(false);
   const [tenure, setTenure] = useState("Freehold");
   const [step, setStep] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -71,6 +75,8 @@ export function ValuationForm() {
     setRoad(null);
     setType(null);
     setPosition(null);
+    setLandTouched(false);
+    setFloorTouched(false);
     setStep(0);
   }, [search.results]);
 
@@ -110,14 +116,24 @@ export function ValuationForm() {
     setUnit(next);
   }
 
-  const landSqm = land.trim() ? toSqm(Number(land), unit) : null;
-  const floorSqm = floor.trim() ? toSqm(Number(floor), unit) : null;
+  const landLimit = areaLimit(type?.max_land_sqm, type?.typical_land_sqm);
+  const floorLimit = areaLimit(type?.max_floor_sqm, type?.typical_floor_sqm);
+  const landValidation = validateAreaInput(land, unit, "Land area", landLimit);
+  const floorValidation = validateAreaInput(
+    floor,
+    unit,
+    "Built-up area",
+    floorLimit,
+  );
+  const landSqm = landValidation.sqm;
+  const floorSqm = floorValidation.sqm;
+  const enteredSizesRequired = !autoFilled;
   const canSubmit =
     Boolean(road || type) &&
     Boolean(type) &&
     Boolean(position) &&
-    (!needsSizes || (landSqm != null && floorSqm != null)) &&
-    (position !== "intermediate" || autoFilled || (landSqm != null && floorSqm != null));
+    (!enteredSizesRequired ||
+      (landValidation.error == null && floorValidation.error == null));
 
   return (
     <div className={styles.formLayout}>
@@ -171,7 +187,7 @@ export function ValuationForm() {
           <div className={styles.options}>
             {road.property_types.map(item => {
               const selected = type?.property_type === item.property_type;
-              return <button key={item.property_type} type="button" aria-pressed={selected} onClick={() => { setType(item); setPosition(null); setLand(""); setFloor(""); setStep(2); }} className={styles.choice}>
+              return <button key={item.property_type} type="button" aria-pressed={selected} onClick={() => { setType(item); setPosition(null); setLand(""); setFloor(""); setLandTouched(false); setFloorTouched(false); setStep(2); }} className={styles.choice}>
                 <span className={styles.choiceTop}><House size={19} strokeWidth={1.5} aria-hidden="true" /><span className={styles.selectionMark} aria-hidden="true">{selected && <Check size={13} />}</span></span>
                 <strong>{item.property_type}</strong>
                 <span className={styles.optionHint}>{item.n_recent_3y} sale{item.n_recent_3y === 1 ? "" : "s"} on this road in the last 3 years{item.typical_land_sqm && item.typical_floor_sqm ? ` · usually ${formatArea(item.typical_land_sqm, unit)} land, ${formatArea(item.typical_floor_sqm, unit)} built-up` : null}</span>
@@ -210,8 +226,8 @@ export function ValuationForm() {
           <input type="hidden" name="scheme" value={road?.scheme ?? ""} />
           <input type="hidden" name="property_type" value={type.property_type} />
           <input type="hidden" name="unit_position" value={position ?? ""} />
-          <input type="hidden" name="land_sqm" value={needsSizes && landSqm != null ? String(landSqm) : ""} />
-          <input type="hidden" name="floor_sqm" value={needsSizes && floorSqm != null ? String(floorSqm) : ""} />
+          <input type="hidden" name="land_sqm" value={enteredSizesRequired && landSqm != null ? String(landSqm) : ""} />
+          <input type="hidden" name="floor_sqm" value={enteredSizesRequired && floorSqm != null ? String(floorSqm) : ""} />
           <input type="hidden" name="tenure" value={tenure} />
           <section className={styles.formCard} aria-labelledby="size-heading" data-valuation-step="sizes">
             <div className={styles.cardHeading}>
@@ -223,8 +239,18 @@ export function ValuationForm() {
             </div></div>
             {autoFilled && !needsSizes ? <p className={styles.autoFilled}><Check size={17} aria-hidden="true" /><span>{intermediateAutoFillCopy({ recentSales: type.n_recent_3y, land: formatArea(type.typical_land_sqm!, unit), floor: formatArea(type.typical_floor_sqm!, unit), typicalShare: type.typical_share })}</span></p> : <>
               <div className={styles.areaFields}>
-                <div><Label htmlFor="land">Land area</Label><Input id="land" value={land} onChange={event => setLand(event.target.value)} inputMode="decimal" className={styles.areaInput} /></div>
-                <div><Label htmlFor="floor">Built-up area</Label><Input id="floor" value={floor} onChange={event => setFloor(event.target.value)} inputMode="decimal" className={styles.areaInput} /></div>
+                <div>
+                  <Label htmlFor="land">Land area</Label>
+                  <Input id="land" value={land} onChange={event => { setLand(event.target.value); setLandTouched(true); }} onBlur={() => setLandTouched(true)} inputMode="decimal" aria-invalid={landTouched && landValidation.error != null} aria-describedby="land-limit land-error" className={styles.areaInput} />
+                  <p id="land-limit" className={styles.limitHint}>Maximum: {formatArea(landLimit.maxSqm, unit)}</p>
+                  {landTouched && landValidation.error && <p id="land-error" role="alert" className={styles.fieldError}>{landValidation.error}</p>}
+                </div>
+                <div>
+                  <Label htmlFor="floor">Built-up area</Label>
+                  <Input id="floor" value={floor} onChange={event => { setFloor(event.target.value); setFloorTouched(true); }} onBlur={() => setFloorTouched(true)} inputMode="decimal" aria-invalid={floorTouched && floorValidation.error != null} aria-describedby="floor-limit floor-error" className={styles.areaInput} />
+                  <p id="floor-limit" className={styles.limitHint}>Maximum: {formatArea(floorLimit.maxSqm, unit)}</p>
+                  {floorTouched && floorValidation.error && <p id="floor-error" role="alert" className={styles.fieldError}>{floorValidation.error}</p>}
+                </div>
               </div>
               <div className={styles.lotPresets}><span>Common terrace lots</span>{TERRACE_LOTS.map(lot => <Button key={lot.label} type="button" size="sm" variant="outline" className={styles.presetButton} onClick={() => setAreaFromSqm(setLand, lotAreaSqm(lot.widthFt, lot.depthFt))}>{lot.label}</Button>)}</div>
             </>}

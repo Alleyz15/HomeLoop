@@ -85,6 +85,31 @@ test("owner response choices follow every application stage, including manual co
   assert.deepEqual(model.detailView(detail).actions, ["reply"]); assert.equal(model.detailView(detail).contextEventId, "2");
   assert.equal(model.detailView(detail).request, "Please clarify the rear extension");
 });
+test("a single owner action opens directly without a duplicate choice button", () => {
+  assert.equal(model.resolveOwnerAction(["reply"], null), "reply");
+  assert.equal(model.showOwnerActionChoices(["reply"]), false);
+  assert.equal(model.ownerActionSubmitLabel("reply"), "Confirm and send information");
+});
+test("final submission labels are distinct from every action-choice label", () => {
+  const expected = {
+    proceed: "Confirm and continue", proceed_manual: "Confirm registered valuation",
+    withdraw: "Confirm withdrawal", reply: "Confirm and send information",
+    review: "Submit review request", accept: "Confirm acceptance",
+    decline: "Confirm decline", switch: "Confirm plan switch",
+    switch_manual: "Confirm and continue with Plan B", signed: "Confirm e-SPA signing",
+  };
+  for (const [action, label] of Object.entries(expected)) {
+    assert.equal(model.ownerActionSubmitLabel(action), label, action);
+    assert.notEqual(label, model.ACTION_LABELS[action], action);
+  }
+});
+test("multiple owner actions still require an explicit choice", () => {
+  const available = ["accept", "decline", "review", "switch"];
+  assert.equal(model.resolveOwnerAction(available, null), null);
+  assert.equal(model.resolveOwnerAction(available, "review"), "review");
+  assert.equal(model.resolveOwnerAction(available, "signed"), null);
+  assert.equal(model.showOwnerActionChoices(available), true);
+});
 test("owner Plan B initial figures keep expected proceeds and the guarantee floor separate", () => {
   const detail = fixture("indicative_sent", { offer_amount: null, offer_sent_at: null, offer_expires_at: null, indicative_low: 669200, indicative_high: 860400 });
   assert.deepEqual(model.initialPlanBFigures(detail.application), { low: 669200, high: 860400, floor: 600000 });

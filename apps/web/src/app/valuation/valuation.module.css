@@ -102,6 +102,9 @@
 .areaFields > div { min-width: 0; }
 .areaFields label, .tenure > label { display: block; font-size: 12px; color: #637c52; margin-bottom: 9px; font-weight: 400; }
 .page .areaInput { min-width: 0; width: 100%; height: 46px; padding: 12px; border: 1px solid #d5dfc7; background: #fffffb; color: #36552e; border-radius: 7px; font-size: 14px; }
+.page .areaInput[aria-invalid=true] { border-color: #bd8065; box-shadow: 0 0 0 3px #bd80651a; }
+.limitHint { margin: 7px 0 0; color: #879576; font-size: 9px; line-height: 1.7; }
+.fieldError { margin: 5px 0 0; color: #8b4f39; font-size: 10px; line-height: 1.65; }
 .lotPresets { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: 17px 0 25px; }
 .lotPresets > span { width: 100%; font-size: 10px; color: #869574; margin-bottom: 3px; }
 .page .presetButton { border-color: #dce4cf; background: #f9fbf0; color: #728863; min-height: 31px; font-size: 10px; cursor: pointer; }

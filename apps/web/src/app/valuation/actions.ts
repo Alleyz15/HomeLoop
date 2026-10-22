@@ -37,13 +37,18 @@ export async function findRoads(
   }
 }
 
-function optionalNumber(value: FormDataEntryValue | null): number | null {
+function parseArea(value: FormDataEntryValue | null): {
+  value: number | null;
+  state: "missing" | "invalid" | "valid";
+} {
   const text = String(value ?? "").trim();
   if (!text) {
-    return null;
+    return { value: null, state: "missing" };
   }
   const parsed = Number(text);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  return Number.isFinite(parsed) && parsed > 0
+    ? { value: parsed, state: "valid" }
+    : { value: null, state: "invalid" };
 }
 
 export async function createValuation(
@@ -55,8 +60,10 @@ export async function createValuation(
   const propertyType = String(formData.get("property_type") ?? "").trim();
   const unitPosition = String(formData.get("unit_position") ?? "").trim();
   const tenure = String(formData.get("tenure") ?? "").trim() || null;
-  const landSqm = optionalNumber(formData.get("land_sqm"));
-  const floorSqm = optionalNumber(formData.get("floor_sqm"));
+  const land = parseArea(formData.get("land_sqm"));
+  const floor = parseArea(formData.get("floor_sqm"));
+  const landSqm = land.value;
+  const floorSqm = floor.value;
 
   if (!scheme || !propertyType) {
     return { error: "Choose a road and a house type first." };
@@ -70,16 +77,23 @@ export async function createValuation(
   }
   // Only an intermediate unit on a known road can have its sizes filled in
   // from the catalog; everything else has to supply them.
-  if (unitPosition !== "intermediate" && (!landSqm || !floorSqm)) {
-    return { error: "Enter both the land area and the built-up area." };
+  const sizesRequired = unitPosition !== "intermediate" || !roadNorm;
+  if (land.state === "invalid") {
+    return { error: "Enter a valid land area greater than 0." };
   }
-  if (unitPosition === "intermediate" && !roadNorm && (!landSqm || !floorSqm)) {
+  if (floor.state === "invalid") {
+    return { error: "Enter a valid built-up area greater than 0." };
+  }
+  if (sizesRequired && land.state === "missing") {
     return {
-      error:
-        "Searching by township cannot fill in the usual sizes. Enter the land and built-up area.",
+      error: "Enter the land area.",
     };
   }
-
+  if (sizesRequired && floor.state === "missing") {
+    return {
+      error: "Enter the built-up area.",
+    };
+  }
   let id: string;
   try {
     const result = await valuate({

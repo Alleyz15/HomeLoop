@@ -166,7 +166,7 @@ body:has([data-auth-page]) { background: #f7f7ef; }
 body:has([data-auth-page]) .site-nav { padding-top: 22px; padding-bottom: 22px; }
 body:has([data-auth-page]) .site-header [data-slot="separator"], body:has([data-auth-page]) .site-footer [data-slot="separator"] { background: #dfe3d5; }
 body:has([data-auth-page]) .site-footer { color: #5e6e56; }
-.site-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 600; letter-spacing: -.8px; margin-right: auto; }
+.site-brand { display: inline-flex; align-items: center; gap: 8px; color: #203e32; font-size: 20px; font-weight: 600; letter-spacing: -.8px; margin-right: auto; text-decoration: none; }
 .site-brand-mark { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 50%; background: #e5ebd9; color: #36553d; }
 .brand-period { color: #7a9656; margin-left: -8px; }
 .site-sign-in { display: inline-flex; align-items: center; gap: 18px; font-size: 11px; color: #263f30; border: 1px solid #c6ceba; border-radius: 6px; padding: 9px 14px; }

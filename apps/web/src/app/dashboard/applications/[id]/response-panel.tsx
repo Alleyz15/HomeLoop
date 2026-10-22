@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, CheckCircle2, FileImage, Loader2, LockKeyhole, Paperclip, RefreshCw, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { ACTION_LABELS, applicationRevision, detailView, type ApplicationDetail, type DetailActionState, type OwnerAction } from "@/lib/application-detail-model";
+import { ACTION_LABELS, applicationRevision, detailView, ownerActionSubmitLabel, resolveOwnerAction, showOwnerActionChoices, type ApplicationDetail, type DetailActionState, type OwnerAction } from "@/lib/application-detail-model";
 import { APPLICATION_PHOTO_BUCKET, MAX_APPLICATION_PHOTOS, photoSignatureMatches, validatePhotoMetadata } from "@/lib/application-photo-policy";
 import { reserveDetailPhoto, removeDetailPhoto, respondToApplication, viewDetailPhoto } from "./actions";
 import type { ApplicationPhoto } from "@/lib/application-photos";
@@ -51,12 +51,13 @@ export function PrivatePhoto({ applicationId, photo }: { applicationId: string; 
 export function ResponsePanel({ detail }: { detail: ApplicationDetail }) {
   const router = useRouter(), view = detailView(detail), app = detail.application;
   const [selected, setSelected] = useState<OwnerAction | null>(null);
+  const activeAction = resolveOwnerAction(view.actions, selected);
   const [state, send, sending] = useActionState<DetailActionState, FormData>(respondToApplication, {});
   const [photos, setPhotos] = useState<ApplicationPhoto[]>([]), [removed, setRemoved] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false), [photoError, setPhotoError] = useState("");
   const input = useRef<HTMLInputElement>(null), form = useRef<HTMLFormElement>(null);
-  const canReply = selected === "reply" || selected === "review";
-  const purpose = selected === "review" ? "offer_review" : "info_response";
+  const canReply = activeAction === "reply" || activeAction === "review";
+  const purpose = activeAction === "review" ? "offer_review" : "info_response";
   const revision = applicationRevision(detail);
   const busy = sending || uploading || !!state.success;
   const unsubmitted = detail.photos.filter(photo => photo.state === "pending" && !removed.includes(photo.id)
@@ -125,15 +126,15 @@ export function ResponsePanel({ detail }: { detail: ApplicationDetail }) {
     {!view.actions.length && !view.closed && <div className={styles.waiting}><span className={styles.waitingIcon}><Check size={20} aria-hidden="true" /></span><div><strong>No response needed right now</strong><small>The team updates the record as your case moves forward. Refresh to check for a new update.</small></div></div>}
     {state.success && <p role="status" className={styles.success}><CheckCircle2 size={17} aria-hidden="true" />{state.success}</p>}
     {state.error && <div className={styles.error} role="alert">{state.error}{state.reload && <button type="button" onClick={() => { router.refresh(); setSelected(null); }} className={styles.textButton}>Reload latest details</button>}</div>}
-    <div className={styles.choices}>{view.actions.map(action => <button key={action} type="button" data-selected={selected === action} aria-pressed={selected === action} disabled={busy}
+    {showOwnerActionChoices(view.actions) && <div className={styles.choices}>{view.actions.map(action => <button key={action} type="button" data-selected={selected === action} aria-pressed={selected === action} disabled={busy}
       className={action === "withdraw" || action === "decline" ? styles.quietButton : styles.choiceButton}
-      onClick={() => { setSelected(action); setPhotoError(""); form.current?.reset(); }}>{ACTION_LABELS[action]}<ArrowRight size={14} aria-hidden="true" /></button>)}</div>
-    {selected && view.actions.includes(selected) && !state.success && <form ref={form} action={send} className={styles.responseForm} key={selected}>
-      <input type="hidden" name="application_id" value={app.id} /><input type="hidden" name="action" value={selected} />
+      onClick={() => { setSelected(action); setPhotoError(""); form.current?.reset(); }}>{ACTION_LABELS[action]}<ArrowRight size={14} aria-hidden="true" /></button>)}</div>}
+    {activeAction && !state.success && <form ref={form} action={send} className={styles.responseForm} key={activeAction}>
+      <input type="hidden" name="application_id" value={app.id} /><input type="hidden" name="action" value={activeAction} />
       <input type="hidden" name="revision" value={revision} /><input type="hidden" name="context_id" value={view.contextEventId ?? ""} />
-      <h3>{ACTION_LABELS[selected]}</h3><p>{explanation[selected]}</p>
+      <h3>{ACTION_LABELS[activeAction]}</h3><p>{explanation[activeAction]}</p>
       <fieldset disabled={busy}>
-        {(canReply || selected === "withdraw" || selected === "decline") && <div className={styles.field}><label htmlFor="owner-message">{canReply ? selected === "review" ? "What would you like the team to review?" : "Your reply to the team" : "Reason (optional)"}</label><textarea id="owner-message" name="message" rows={4} required={canReply} maxLength={4000} placeholder={canReply ? "Explain in your own words…" : "Tell us why, if you would like to."} /><small>Up to 4,000 characters. Do not include passwords or banking credentials.</small></div>}
+        {(canReply || activeAction === "withdraw" || activeAction === "decline") && <div className={styles.field}><label htmlFor="owner-message">{canReply ? activeAction === "review" ? "What would you like the team to review?" : "Your reply to the team" : "Reason (optional)"}</label><textarea id="owner-message" name="message" rows={4} required={canReply} maxLength={4000} placeholder={canReply ? "Explain in your own words…" : "Tell us why, if you would like to."} /><small>Up to 4,000 characters. Do not include passwords or banking credentials.</small></div>}
         {canReply && <div className={styles.uploadArea}>
           <div><Paperclip size={17} aria-hidden="true" /><strong>Supporting photos <span>(optional)</span></strong></div>
           <p>JPEG, PNG or WebP · up to 5 MB each · five photos maximum. Photos are private to your case and cannot be removed once submitted.</p>
@@ -143,8 +144,8 @@ export function ResponsePanel({ detail }: { detail: ApplicationDetail }) {
         </div>}
         {uploading && <p className={styles.uploadStatus} role="status"><Loader2 size={15} className={styles.spinner} aria-hidden="true" />Updating private photos… Please wait before sending.</p>}
         {photoError && <p className={styles.errorText} role="alert">{photoError}</p>}
-        <label className={styles.confirm}><input type="checkbox" name="confirmed" required /><span>{selected === "signed" ? "I confirm I have signed the new-home e-SPA outside HomeLoop." : "I have read the explanation and confirm this response."}</span></label>
-        <div className={styles.formActions}><button type="submit" className={styles.primaryButton}>{sending ? <><Loader2 className={styles.spinner} size={16} />Sending…</> : <>{ACTION_LABELS[selected]}<ArrowRight size={16} aria-hidden="true" /></>}</button><button type="button" className={styles.textButton} onClick={() => setSelected(null)}>Cancel</button></div>
+        <label className={styles.confirm}><input type="checkbox" name="confirmed" required /><span>{activeAction === "signed" ? "I confirm I have signed the new-home e-SPA outside HomeLoop." : "I have read the explanation and confirm this response."}</span></label>
+        <div className={styles.formActions}><button type="submit" className={styles.primaryButton}>{sending ? <><Loader2 className={styles.spinner} size={16} />Sending…</> : <>{ownerActionSubmitLabel(activeAction)}<ArrowRight size={16} aria-hidden="true" /></>}</button>{showOwnerActionChoices(view.actions) && <button type="button" className={styles.textButton} onClick={() => setSelected(null)}>Cancel</button>}</div>
       </fieldset>
     </form>}
     <button type="button" className={styles.refresh} onClick={() => router.refresh()} disabled={busy}><RefreshCw size={13} aria-hidden="true" />Refresh latest status</button>

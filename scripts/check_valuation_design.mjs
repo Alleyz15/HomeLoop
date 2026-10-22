@@ -13,7 +13,7 @@ const web = path.join(root, "apps/web");
 const base = `http://127.0.0.1:${process.env.VALUATION_QA_PORT ?? 3107}`;
 const artifacts = process.env.VALUATION_ARTIFACT_DIR ?? path.join(web, ".next/valuation-qa");
 const owner = { id: "10000000-0000-4000-8000-000000000002", email: "owner@valuation.test", aud: "authenticated", role: "authenticated", app_metadata: { provider: "email", providers: ["email"] }, user_metadata: {}, identities: [], created_at: "2026-01-01T00:00:00Z" };
-const road = { road_norm: "JLN BIRAI U8/69", scheme: "BUKIT JELUTONG", district: "Petaling", is_sdp: true, property_types: [{ property_type: "2-storey terraced", typical_land_sqm: 178, typical_floor_sqm: 190, typical_share: .75, n_recent_3y: 12 }] };
+const road = { road_norm: "JLN BIRAI U8/69", scheme: "BUKIT JELUTONG", district: "Petaling", is_sdp: true, property_types: [{ property_type: "2-storey terraced", typical_land_sqm: 178, typical_floor_sqm: 190, max_land_sqm: 295, max_floor_sqm: 260, typical_share: .75, n_recent_3y: 12 }] };
 let apiUrl, server, browser, log = "", changedBuild = false;
 const errors = [], valuations = [];
 function token() {
@@ -117,9 +117,20 @@ try {
   assert.equal(await page.getByRole("button", { name: "Intermediate", exact: false }).getAttribute("aria-pressed"), "true");
   await page.getByRole("button", { name: "Corner or end lot", exact: false }).click();
   await singleStep("sizes");
-  await page.getByLabel("Land area", { exact: true }).fill("178"); await page.getByLabel("Built-up area", { exact: true }).fill("190");
+  const landArea = page.getByLabel("Land area", { exact: true });
+  const floorArea = page.getByLabel("Built-up area", { exact: true });
+  await landArea.fill("letters");
+  await page.getByText("Enter a valid land area greater than 0.", { exact: true }).waitFor();
+  assert.ok(await page.getByRole("button", { name: "Get my free valuation", exact: false }).isDisabled());
+  await landArea.fill("0");
+  await page.getByText("Enter a valid land area greater than 0.", { exact: true }).waitFor();
+  await landArea.fill("396");
+  await page.getByText(/Land area must not exceed 395 m²/).waitFor();
+  await landArea.fill("395"); await floorArea.fill("190");
+  assert.equal(await page.getByText(/Land area must not exceed/).count(), 0);
   await page.getByRole("button", { name: "sq ft", exact: true }).click();
-  assert.ok(Number(await page.getByLabel("Land area", { exact: true }).inputValue()) > 1900);
+  assert.ok(Number(await landArea.inputValue()) > 4200);
+  await page.getByText("Maximum: 4,252 sq ft", { exact: true }).waitFor();
   await page.getByRole("button", { name: "m²", exact: true }).click();
   await page.getByRole("button", { name: "Leasehold", exact: true }).click();
   assert.equal(await page.locator('input[name="tenure"]').inputValue(), "Leasehold");
@@ -171,8 +182,14 @@ try {
   await page.keyboard.press("Tab");
   await page.keyboard.press("Shift+Tab");
   assert.notEqual(await page.getByRole("button", { name: "Search", exact: true }).evaluate(element => getComputedStyle(element).outlineStyle), "none");
+  const missing = await page.goto(base + "/does-not-exist");
+  assert.equal(missing.status(), 404);
+  await page.getByRole("heading", { name: "This page has moved on." }).waitFor();
+  const brand = page.locator(".site-brand");
+  assert.ok(await brand.isVisible());
+  assert.notEqual(await brand.evaluate(element => getComputedStyle(element).color), "rgb(255, 255, 255)");
   assert.deepEqual(errors, []);
-  console.log("PASS exactly one form step at a time; auto-advance and heading focus; Back navigation and preserved values; upstream changes reset dependent choices; all four steps at 1440/768/390/320; search/loading/empty/error; area conversion, tenure and submission payload; reduced motion and keyboard focus. No hosted writes.");
+  console.log("PASS exactly one form step at a time; auto-advance and heading focus; Back navigation and preserved values; upstream changes reset dependent choices; all four steps at 1440/768/390/320; search/loading/empty/error; dynamic area caps and precise validation; area conversion, tenure and submission payload; custom readable 404; reduced motion and keyboard focus. No hosted writes.");
   console.log(`Screenshots: ${artifacts}`);
 } catch (error) {
   console.error("Valuation design QA failed:", error, "\nNext:", log, "\nBrowser:", errors);
