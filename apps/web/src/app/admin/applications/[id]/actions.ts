@@ -156,6 +156,7 @@ export async function generateAdminAssistance(id: string): Promise<{ assistance?
       road_typical_sizes: { land_sqm: meta?.typical_land_sqm ?? null, floor_sqm: meta?.typical_floor_sqm ?? null },
       entered_sizes: { land_sqm: positive(sizes.land_sqm) ?? saved?.land_sqm ?? null, floor_sqm: positive(sizes.floor_sqm) ?? saved?.floor_sqm ?? null },
       unit_type: app.unit_type, confidence: snapshot.confidence as Confidence, confirmed_value: positive(app.confirmed_value),
+      condition: app.condition, value_adjust_reason: app.value_adjust_reason,
       events: (evidence.audit ?? []).slice(-10).map(event => ({ action: event.action, to_status: event.to_status, created_at: event.created_at })), flags: [],
     });
     if (!assistance || !["llm", "template"].includes(assistance.source) || typeof assistance.summary !== "string" || typeof assistance.draft_message !== "string"

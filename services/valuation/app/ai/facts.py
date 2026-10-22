@@ -222,6 +222,39 @@ def admin_stage_context(status: str | None) -> dict[str, object]:
     }
 
 
+def admin_condition_context(request: AdminAssistRequest) -> dict[str, object] | None:
+    if request.condition is None:
+        return None
+    labels = {
+        "good": "Good",
+        "fair": "Fair",
+        "needs_repair": "Needs repair",
+    }
+    guidance = {
+        "good": (
+            "The visit recorded the home condition as good. Do not imply repair "
+            "work, a condition deduction, or a price decision."
+        ),
+        "fair": (
+            "The visit recorded the home condition as fair. Explain only that the "
+            "recorded condition was considered; do not invent defects, costs, or "
+            "a discount."
+        ),
+        "needs_repair": (
+            "The visit recorded that the home needs repairs. Explain only that the "
+            "recorded condition was considered; do not invent repair items, costs, "
+            "or a discount."
+        ),
+    }
+    explanation = (request.value_adjust_reason or "").strip() or None
+    return {
+        "condition": request.condition,
+        "display_label": labels[request.condition],
+        "guidance": guidance[request.condition],
+        "owner_visible_value_explanation": explanation,
+    }
+
+
 def _finite_number(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
         return None
@@ -420,6 +453,7 @@ def build_admin_facts(
         "plan": request.plan,
         "status": request.status,
         "stage_context": admin_stage_context(request.status),
+        "condition_context": admin_condition_context(request),
         "unit_type": request.unit_type,
         "confidence": request.confidence,
         "valuation": {
