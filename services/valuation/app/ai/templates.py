@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.ai.facts import build_explanation_facts
+from app.ai.facts import admin_stage_context, build_explanation_facts
 from app.schemas import AdminAssistRequest, ExplainValuationRequest
 
 
@@ -35,25 +35,31 @@ def explain_valuation_template(request: ExplainValuationRequest) -> str:
 def admin_assist_template(
     request: AdminAssistRequest, mismatches: list[str]
 ) -> dict[str, object]:
-    stage = request.status or "current"
+    context = admin_stage_context(request.status)
     if mismatches:
-        summary = (
-            f"This Plan {request.plan} application is at the {stage} stage. "
-            "The deterministic checks below need an administrator's review before the case proceeds."
-        )
-        owner_detail = "We need to review a few differences in the submitted information."
+        checks = " The listed inconsistencies need an administrator's review."
     else:
-        summary = (
-            f"This Plan {request.plan} application is at the {stage} stage. "
-            "The deterministic checks found no size, confidence, or valuation mismatch to highlight."
+        checks = " The supplied checks raised no inconsistency for review."
+
+    summary = (
+        f"This Plan {request.plan} application is at {context['label']}. "
+        f"{context['what_happened']} {context['team_next_action']}"
+        f"{checks}"
+    )
+    if context["terminal"]:
+        draft = (
+            "Draft for admin review: "
+            f"{context['what_happened']} "
+            f"{context['owner_next_action']}"
         )
-        owner_detail = "We are reviewing the information already provided."
+    else:
+        draft = (
+            "Draft for admin review: Here is the latest update on your HomeLoop application. "
+            f"{context['what_happened']} {context['owner_next_action']}"
+        )
 
     return {
         "summary": summary,
         "mismatches": mismatches,
-        "draft_message": (
-            "Draft for admin review: Thank you for your HomeLoop application. "
-            f"{owner_detail} An administrator will review the case before this message is sent."
-        ),
+        "draft_message": draft,
     }

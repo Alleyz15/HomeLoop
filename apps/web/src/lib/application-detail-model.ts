@@ -77,6 +77,19 @@ export const ACTION_LABELS: Record<OwnerAction, string> = {
   switch_manual: "Continue with Plan B", signed: "I have signed the e-SPA",
 };
 
+export function resolveOwnerAction(actions: OwnerAction[], selected: OwnerAction | null) {
+  if (actions.length === 1) return actions[0];
+  return selected && actions.includes(selected) ? selected : null;
+}
+
+export function showOwnerActionChoices(actions: OwnerAction[]) {
+  return actions.length > 1;
+}
+
+export function ownerActionSubmitLabel(action: OwnerAction) {
+  return action === "reply" ? "Confirm and send information" : ACTION_LABELS[action];
+}
+
 export const EVENT_LABELS: Record<string, string> = {
   submit: "Application submitted", proceed: "You chose to continue", withdraw: "Application withdrawn", expire: "Offer response period ended",
   submit_application: "Application submitted", start_review: "Team review started", request_info: "More information requested",
