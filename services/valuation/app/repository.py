@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -14,6 +15,7 @@ CATALOG_COLUMNS = (
     "typical_floor_sqm,typical_share,n_recent_3y,n_total"
 )
 TRANSACTION_COLUMNS = "id,land_sqm,floor_sqm,price,ym,likely_primary"
+TRANSACTION_SIZE_COLUMNS = "road,scheme,ptype,land_sqm,floor_sqm"
 LAUNCH_COLUMNS = "id,tier,project,price_from_rm"
 BACKTEST_COLUMNS = "id,township,scheme,ptype,actual_price,predicted_price,ratio"
 
@@ -37,7 +39,44 @@ def _optional_float(value: object) -> float | None:
     return None if value is None else float(value)
 
 
-def group_road_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+AreaKey = tuple[str, str, str]
+AreaMaxima = dict[AreaKey, dict[str, float | None]]
+
+
+def _positive_float(value: object) -> float | None:
+    if value is None:
+        return None
+    parsed = float(value)
+    return parsed if math.isfinite(parsed) and parsed > 0 else None
+
+
+def area_maxima_from_rows(rows: Iterable[Mapping[str, Any]]) -> AreaMaxima:
+    maxima: AreaMaxima = {}
+    for row in rows:
+        road = str(row.get("road") or "").strip()
+        scheme = str(row.get("scheme") or "").strip()
+        property_type = str(row.get("ptype") or "").strip()
+        if not road or not scheme or not property_type:
+            continue
+        key = (normalize_road(road), scheme, property_type)
+        current = maxima.setdefault(
+            key, {"max_land_sqm": None, "max_floor_sqm": None}
+        )
+        for source, target in (
+            ("land_sqm", "max_land_sqm"),
+            ("floor_sqm", "max_floor_sqm"),
+        ):
+            value = _positive_float(row.get(source))
+            previous = current[target]
+            if value is not None and (previous is None or value > previous):
+                current[target] = value
+    return maxima
+
+
+def group_road_rows(
+    rows: Iterable[Mapping[str, Any]],
+    maxima: AreaMaxima | None = None,
+) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
         key = (str(row["road_norm"]), str(row["scheme"]))
@@ -49,11 +88,15 @@ def group_road_rows(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
                 "is_sdp": bool(row.get("is_sdp")),
                 "property_types": [],
             }
+        area_key = (key[0], key[1], str(row["ptype"]))
+        recorded = (maxima or {}).get(area_key, {})
         grouped[key]["property_types"].append(
             {
                 "property_type": str(row["ptype"]),
                 "typical_land_sqm": _optional_float(row.get("typical_land_sqm")),
                 "typical_floor_sqm": _optional_float(row.get("typical_floor_sqm")),
+                "max_land_sqm": recorded.get("max_land_sqm"),
+                "max_floor_sqm": recorded.get("max_floor_sqm"),
                 "typical_share": _optional_float(row.get("typical_share")),
                 "n_recent_3y": int(row.get("n_recent_3y") or 0),
             }
@@ -111,13 +154,54 @@ class ValuationRepository:
         if not keys:
             return []
 
+        catalog_rows = self._catalog_rows_for_roads(road for road, _ in keys)
+        targets = {
+            (str(row["road_norm"]), str(row["scheme"]), str(row["ptype"]))
+            for row in catalog_rows
+            if (str(row["road_norm"]), str(row["scheme"])) in keys
+        }
+        maxima = self._area_maxima_for_targets(targets)
         grouped = {
             (group["road_norm"], group["scheme"]): group
-            for group in group_road_rows(
-                self._catalog_rows_for_roads(road for road, _ in keys)
-            )
+            for group in group_road_rows(catalog_rows, maxima)
         }
         return [grouped[key] for key in keys if key in grouped]
+
+    def _area_maxima_for_targets(self, targets: set[AreaKey]) -> AreaMaxima:
+        if not targets:
+            return {}
+        rows: list[dict[str, Any]] = []
+        page_size = 1000
+        schemes = sorted({scheme for _, scheme, _ in targets})
+        property_types = sorted({property_type for _, _, property_type in targets})
+        offset = 0
+        while True:
+            response = (
+                self.client.table("transactions")
+                .select(TRANSACTION_SIZE_COLUMNS)
+                .in_("scheme", schemes)
+                .in_("ptype", property_types)
+                .eq("likely_primary", False)
+                .order("id")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            page = response.data or []
+            rows.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
+
+        maxima = area_maxima_from_rows(rows)
+        return {key: value for key, value in maxima.items() if key in targets}
+
+    def maximum_sizes_for_road(
+        self, road_norm: str, scheme: str, property_type: str
+    ) -> dict[str, float | None]:
+        key = (normalize_road(road_norm), scheme, property_type)
+        return self._area_maxima_for_targets({key}).get(
+            key, {"max_land_sqm": None, "max_floor_sqm": None}
+        )
 
     def catalog_for_road(
         self,
