@@ -90,6 +90,19 @@ test("a single owner action opens directly without a duplicate choice button", (
   assert.equal(model.showOwnerActionChoices(["reply"]), false);
   assert.equal(model.ownerActionSubmitLabel("reply"), "Confirm and send information");
 });
+test("final submission labels are distinct from every action-choice label", () => {
+  const expected = {
+    proceed: "Confirm and continue", proceed_manual: "Confirm registered valuation",
+    withdraw: "Confirm withdrawal", reply: "Confirm and send information",
+    review: "Submit review request", accept: "Confirm acceptance",
+    decline: "Confirm decline", switch: "Confirm plan switch",
+    switch_manual: "Confirm and continue with Plan B", signed: "Confirm e-SPA signing",
+  };
+  for (const [action, label] of Object.entries(expected)) {
+    assert.equal(model.ownerActionSubmitLabel(action), label, action);
+    assert.notEqual(label, model.ACTION_LABELS[action], action);
+  }
+});
 test("multiple owner actions still require an explicit choice", () => {
   const available = ["accept", "decline", "review", "switch"];
   assert.equal(model.resolveOwnerAction(available, null), null);

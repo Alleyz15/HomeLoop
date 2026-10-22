@@ -109,6 +109,10 @@ def admin_payload() -> dict[str, object]:
         "unit_type": "custom",
         "confidence": "low",
         "confirmed_value": 680_000,
+        "condition": "needs_repair",
+        "value_adjust_reason": (
+            "The confirmed value reflects repairs identified during the visit."
+        ),
         "events": [{"action": "record_inspection", "to_status": "inspected"}],
         "flags": ["manual_review"],
     }
@@ -186,6 +190,18 @@ def test_admin_facts_format_numbers_and_remove_model_mechanics() -> None:
         "land": "164 m²",
         "floor": "180 m²",
     }
+    assert facts["condition_context"] == {
+        "condition": "needs_repair",
+        "display_label": "Needs repair",
+        "guidance": (
+            "The visit recorded that the home needs repairs. Explain only that the "
+            "recorded condition was considered; do not invent repair items, costs, "
+            "or a discount."
+        ),
+        "owner_visible_value_explanation": (
+            "The confirmed value reflects repairs identified during the visit."
+        ),
+    }
     serialized = json.dumps(facts).casefold()
     assert "distance" not in serialized
     assert "price_per_sqm" not in serialized
@@ -235,6 +251,35 @@ def test_admin_template_describes_the_real_inspected_next_step() -> None:
     assert "formal offer" in str(result["draft_message"]).casefold()
 
 
+@pytest.mark.parametrize(
+    ("condition", "expected", "forbidden"),
+    [
+        ("good", "condition was recorded as good", "needs repair"),
+        ("fair", "condition was recorded as fair", "needs repair"),
+        ("needs_repair", "condition was recorded as needing repairs", None),
+    ],
+)
+def test_admin_template_explains_the_recorded_condition_without_inventing_repairs(
+    condition: str,
+    expected: str,
+    forbidden: str | None,
+) -> None:
+    payload = admin_payload()
+    payload["condition"] = condition
+    payload["value_adjust_reason"] = (
+        "The confirmed value reflects the recorded condition observed at the visit."
+    )
+    request = AdminAssistRequest.model_validate(payload)
+
+    result = admin_assist_template(request, [])
+    draft = str(result["draft_message"]).casefold()
+
+    assert expected in draft
+    assert "the confirmed value reflects the recorded condition observed at the visit" in draft
+    if forbidden is not None:
+        assert forbidden not in draft
+
+
 def test_number_guard_accepts_formatted_explanation_facts() -> None:
     facts = ai_service_module.build_explanation_facts(
         ExplainValuationRequest.model_validate(explain_payload())
@@ -260,6 +305,7 @@ def test_admin_prompt_is_stage_aware_and_does_not_seed_the_generic_draft() -> No
     ).read_text(encoding="utf-8").casefold()
 
     assert "stage_context" in prompt
+    assert "condition_context" in prompt
     assert "update you on the next step" not in prompt
     assert "reviewing the information already provided" not in prompt
 

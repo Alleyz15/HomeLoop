@@ -147,6 +147,8 @@ class AdminAssistRequest(BaseModel):
     unit_type: str
     confidence: Confidence
     confirmed_value: float | None = Field(default=None, gt=0)
+    condition: Literal["good", "fair", "needs_repair"] | None = None
+    value_adjust_reason: str | None = Field(default=None, max_length=4000)
     events: list[dict[str, object]] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
 

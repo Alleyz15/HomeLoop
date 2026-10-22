@@ -87,7 +87,19 @@ export function showOwnerActionChoices(actions: OwnerAction[]) {
 }
 
 export function ownerActionSubmitLabel(action: OwnerAction) {
-  return action === "reply" ? "Confirm and send information" : ACTION_LABELS[action];
+  const labels: Record<OwnerAction, string> = {
+    proceed: "Confirm and continue",
+    proceed_manual: "Confirm registered valuation",
+    withdraw: "Confirm withdrawal",
+    reply: "Confirm and send information",
+    review: "Submit review request",
+    accept: "Confirm acceptance",
+    decline: "Confirm decline",
+    switch: "Confirm plan switch",
+    switch_manual: "Confirm and continue with Plan B",
+    signed: "Confirm e-SPA signing",
+  };
+  return labels[action];
 }
 
 export const EVENT_LABELS: Record<string, string> = {
