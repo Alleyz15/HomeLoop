@@ -60,6 +60,8 @@ class RoadPropertyType(BaseModel):
     property_type: str
     typical_land_sqm: float | None
     typical_floor_sqm: float | None
+    max_land_sqm: float | None
+    max_floor_sqm: float | None
     typical_share: float | None
     n_recent_3y: int
 

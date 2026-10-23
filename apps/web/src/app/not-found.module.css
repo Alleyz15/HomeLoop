@@ -1,0 +1,94 @@
+.page {
+  position: relative;
+  align-self: center;
+  width: min(100%, 720px);
+  overflow: hidden;
+  margin: 24px auto;
+  padding: clamp(38px, 7vw, 76px);
+  border: 1px solid #d9e1cc;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 92% 12%, #dfe8cf 0 70px, transparent 71px),
+    linear-gradient(135deg, #fffef9, #f6f8ee);
+  box-shadow: 0 22px 45px -34px #203e3266;
+  color: #203e32;
+}
+
+.code {
+  position: absolute;
+  top: -18px;
+  right: 22px;
+  color: #78905d14;
+  font: 400 clamp(100px, 21vw, 190px)/1 Georgia, serif;
+  pointer-events: none;
+}
+
+.eyebrow {
+  position: relative;
+  margin: 0 0 14px;
+  color: #71845e;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+}
+
+.page h1 {
+  position: relative;
+  max-width: 500px;
+  margin: 0;
+  font: 400 clamp(38px, 7vw, 60px)/1.1 Georgia, serif;
+  letter-spacing: -1.6px;
+}
+
+.copy {
+  position: relative;
+  max-width: 510px;
+  margin: 22px 0 0;
+  color: #6f8064;
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 11px;
+  margin-top: 30px;
+}
+
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 43px;
+  padding: 10px 15px;
+  border-radius: 7px;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.primary {
+  border: 1px solid #284d38;
+  background: #274b38;
+  color: #faffef;
+}
+
+.secondary {
+  border: 1px solid #cad5bd;
+  background: #fbfcf5;
+  color: #4f6848;
+}
+
+.primary:focus-visible,
+.secondary:focus-visible {
+  outline: 2px solid #78964f;
+  outline-offset: 4px;
+}
+
+@media (max-width: 480px) {
+  .page { margin: 0 auto; padding: 34px 24px; }
+  .actions { flex-direction: column; }
+  .primary, .secondary { justify-content: center; }
+}

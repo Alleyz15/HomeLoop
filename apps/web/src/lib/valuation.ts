@@ -126,6 +126,8 @@ export type RoadPropertyType = {
   property_type: string;
   typical_land_sqm: number | null;
   typical_floor_sqm: number | null;
+  max_land_sqm: number | null;
+  max_floor_sqm: number | null;
   typical_share: number | null;
   n_recent_3y: number;
 };
